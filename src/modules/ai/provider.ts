@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../../config.js";
-import { buildPersonalityPrompt } from "./personality.js";
+import { buildPersonalityPrompt, limitReplyWords } from "./personality.js";
 import { addUsage, monthlyCostBrl, type HistoryItem, type UserSettings } from "./store.js";
 
 const client = config.openAiKey ? new OpenAI({ apiKey: config.openAiKey, baseURL: config.openAiBaseUrl, timeout: 15_000, maxRetries: 1 }) : null;
@@ -21,7 +21,7 @@ export async function generateReply(discordId: string, settings: UserSettings, h
   const usage = response.usage; const inputTokens = usage?.input_tokens ?? 0; const outputTokens = usage?.output_tokens ?? 0;
   const usd = inputTokens / 1_000_000 * config.prismaAi.inputPriceUsdPerMillion + outputTokens / 1_000_000 * config.prismaAi.outputPriceUsdPerMillion;
   await addUsage({ discordId, model: config.prismaAi.model, inputTokens, outputTokens, totalTokens: usage?.total_tokens ?? inputTokens + outputTokens, estimatedCostUsd: usd, estimatedCostBrl: usd * config.prismaAi.usdBrlReference, createdAt: new Date().toISOString() });
-  const output = response.output_text.replace(/@(everyone|here)|<@&\d+>/gi, "[menção removida]").slice(0, 1800).trim();
+  const output = limitReplyWords(response.output_text.replace(/@(everyone|here)|<@&\d+>/gi, "[menção removida]").trim(), 60);
   if (!output) {
     const incompleteReason = response.incomplete_details?.reason ?? "sem motivo informado";
     throw new Error(`Resposta vazia (status=${response.status}, incompleta=${incompleteReason}, output_tokens=${outputTokens}).`);
