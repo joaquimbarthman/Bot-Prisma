@@ -5,14 +5,14 @@ import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
-import { handleAiInteraction, handleAiMessage, startAiCleanup } from "./modules/ai/index.js";
+import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
 
 validateConfig();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences],
   partials: [Partials.Channel],
 });
 
@@ -47,6 +47,10 @@ client.once(Events.ClientReady, async (ready) => {
 
 client.on(Events.ChannelCreate, async (channel) => {
   await handleNewPunishmentChannel(channel).catch((error) => console.error("[CASTIGO] Falha ao proteger novo canal:", error));
+});
+
+client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
+  await handleAiPresenceUpdate(client, oldPresence, newPresence);
 });
 
 client.on(Events.MessageCreate, async (message) => {
