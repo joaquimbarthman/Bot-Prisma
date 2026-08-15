@@ -1,0 +1,356 @@
+{
+  "schema_version": "1.0.0",
+  "locale": "pt-BR",
+  "descricao": "Lista inicial para detectar discurso de odio, discriminacao e propaganda nazista em um bot do Discord.",
+  "politica_de_correspondencia": {
+    "ignorar_maiusculas_minusculas": true,
+    "remover_acentos_antes_de_comparar": true,
+    "remover_caracteres_invisiveis": true,
+    "reduzir_repeticoes_exageradas": true,
+    "normalizar_leetspeak": true,
+    "leetspeak": {
+      "0": "o",
+      "1": "i",
+      "3": "e",
+      "4": "a",
+      "5": "s",
+      "7": "t",
+      "@": "a",
+      "$": "s"
+    },
+    "prioridade": [
+      "bloqueio_imediato",
+      "revisao_contextual",
+      "excecoes"
+    ],
+    "observacao": "Uma excecao impede punicao somente quando for o unico termo detectado. Se a mensagem tambem corresponder a uma regra de odio, ameaca ou nazismo, a regra mais grave prevalece."
+  },
+  "excecoes": {
+    "tipo": "palavra_exata",
+    "palavras": [
+      "viado",
+      "merda",
+      "cu",
+      "vsf",
+      "lixo"
+    ]
+  },
+  "acoes": {
+    "nivel_1": {
+      "acao": "registrar_e_alertar_moderacao",
+      "apagar_mensagem": false,
+      "timeout_minutos": 0
+    },
+    "nivel_2": {
+      "acao": "apagar_alertar_e_advertir",
+      "apagar_mensagem": true,
+      "timeout_minutos": 0
+    },
+    "nivel_3": {
+      "acao": "apagar_alertar_e_timeout",
+      "apagar_mensagem": true,
+      "timeout_minutos": 60
+    },
+    "nivel_apoio": {
+      "acao": "alertar_e_oferecer_apoio",
+      "apagar_mensagem": false,
+      "timeout_minutos": 0,
+      "punir_usuario": false
+    }
+  },
+  "bloqueio_imediato": {
+    "racismo": {
+      "nivel": 3,
+      "frases": [
+        "preto imundo",
+        "preta imunda",
+        "negro imundo",
+        "negra imunda",
+        "macaco imundo",
+        "macaca imunda",
+        "volta pra senzala",
+        "volte pra senzala",
+        "lugar de negro e na senzala",
+        "servico de preto",
+        "negro e raca inferior",
+        "negros sao inferiores",
+        "branco e raca superior",
+        "brancos sao superiores",
+        "morte aos negros",
+        "matem os negros",
+        "tem que matar negro",
+        "tem que matar preto",
+        "limpeza racial",
+        "pureza racial"
+      ]
+    },
+    "lgbtfobia": {
+      "nivel": 3,
+      "frases": [
+        "gay e doenca",
+        "homossexualidade e doenca",
+        "cura gay",
+        "gay e aberracao",
+        "lesbica e aberracao",
+        "trans e aberracao",
+        "pessoa trans e aberracao",
+        "gay tem que morrer",
+        "lesbica tem que morrer",
+        "trans tem que morrer",
+        "morte aos gays",
+        "morte as lesbicas",
+        "morte aos trans",
+        "matem os gays",
+        "matem as lesbicas",
+        "matem os trans",
+        "nao merece viver por ser gay",
+        "nao merece viver por ser trans",
+        "homossexual nao e gente",
+        "trans nao e gente"
+      ]
+    },
+    "antissemitismo": {
+      "nivel": 3,
+      "frases": [
+        "judeu imundo",
+        "judia imunda",
+        "judeus sao inferiores",
+        "judeus controlam o mundo",
+        "judeus controlam os bancos",
+        "morte aos judeus",
+        "matem os judeus",
+        "tem que matar judeu",
+        "judeus merecem morrer",
+        "o holocausto foi merecido",
+        "o holocausto deveria voltar",
+        "campos de concentracao deveriam voltar",
+        "hitler deveria ter terminado o trabalho"
+      ]
+    },
+    "xenofobia": {
+      "nivel": 3,
+      "frases": [
+        "nordestino e raca inferior",
+        "nordestinos sao inferiores",
+        "morte aos nordestinos",
+        "matem os nordestinos",
+        "imigrante e praga",
+        "imigrantes sao pragas",
+        "imigrante nao e gente",
+        "morte aos imigrantes",
+        "matem os imigrantes",
+        "estrangeiro e raca inferior",
+        "volta para o seu pais",
+        "voltem para o pais de voces"
+      ]
+    },
+    "odio_religioso": {
+      "nivel": 3,
+      "frases": [
+        "muculmano imundo",
+        "muculmana imunda",
+        "todo muculmano e terrorista",
+        "morte aos muculmanos",
+        "matem os muculmanos",
+        "cristao imundo",
+        "crista imunda",
+        "morte aos cristaos",
+        "matem os cristaos",
+        "umbandista tem que morrer",
+        "candomblecista tem que morrer",
+        "morte aos umbandistas",
+        "morte aos candomblecistas",
+        "religiao africana e coisa de macaco"
+      ]
+    },
+    "capacitismo": {
+      "nivel": 2,
+      "frases": [
+        "deficiente nao e gente",
+        "deficiente e inutil",
+        "autista nao e gente",
+        "autista e aberracao",
+        "pessoa com deficiencia deveria morrer",
+        "morte aos deficientes"
+      ]
+    },
+    "nazismo_e_neonazismo": {
+      "nivel": 3,
+      "frases": [
+        "heil hitler",
+        "sieg heil",
+        "white power",
+        "poder branco",
+        "supremacia branca",
+        "viva a supremacia branca",
+        "hitler estava certo",
+        "hitler tinha razao",
+        "viva hitler",
+        "viva o nazismo",
+        "nazismo e certo",
+        "nazismo deveria voltar",
+        "quero ser nazista",
+        "sou nazista com orgulho",
+        "orgulho nazista",
+        "orgulho ariano",
+        "raca ariana superior",
+        "arianos sao superiores",
+        "estado etnico branco",
+        "blood and honour",
+        "sangue e honra",
+        "gas the jews",
+        "jews to the gas",
+        "seis milhoes nao foram suficientes",
+        "o holocausto e mentira",
+        "o holocausto nao aconteceu"
+      ]
+    },
+    "ameaca_por_identidade": {
+      "nivel": 3,
+      "frases": [
+        "vou te matar por ser gay",
+        "vou te matar por ser trans",
+        "vou te matar por ser negro",
+        "vou te matar por ser judeu",
+        "vou te matar por ser muculmano",
+        "vou te bater por ser gay",
+        "vou te bater por ser trans",
+        "merece morrer por ser gay",
+        "merece morrer por ser trans",
+        "merece morrer por ser negro",
+        "merece morrer por ser judeu"
+      ]
+    },
+    "incentivo_a_suicidio_e_automutilacao": {
+      "nivel": 3,
+      "frases": [
+        "se mata",
+        "vai se matar",
+        "va se matar",
+        "por que voce nao se mata",
+        "porque voce nao se mata",
+        "seria melhor se voce se matasse",
+        "voce deveria se matar",
+        "ninguem sentiria sua falta",
+        "o mundo seria melhor sem voce",
+        "acaba com a sua vida",
+        "tira a sua vida",
+        "corta os pulsos",
+        "corte os pulsos",
+        "vai se cortar",
+        "va se cortar",
+        "se corta",
+        "se mutile",
+        "vai se mutilar",
+        "pula da ponte",
+        "pule da ponte",
+        "se joga da ponte",
+        "se jogue da ponte",
+        "pula da janela",
+        "pule da janela",
+        "toma todos os remedios",
+        "engole todos os remedios",
+        "faz um favor e morre",
+        "faz um favor e se mata",
+        "merece se cortar",
+        "merece se mutilar",
+        "merece morrer"
+      ]
+    }
+  },
+  "sinais_de_risco_pessoal": {
+    "nivel": "apoio",
+    "acao": "nao_punir_alertar_moderacao_e_oferecer_ajuda",
+    "observacao": "Estas frases podem indicar sofrimento da propria pessoa. Nao aplique advertencia, timeout ou banimento automatico.",
+    "frases": [
+      "quero me matar",
+      "vou me matar",
+      "estou pensando em me matar",
+      "penso em me matar",
+      "nao quero mais viver",
+      "quero morrer",
+      "vou tirar minha vida",
+      "quero tirar minha vida",
+      "vou acabar com a minha vida",
+      "quero acabar com a minha vida",
+      "quero me cortar",
+      "vou me cortar",
+      "estou pensando em me cortar",
+      "quero me mutilar",
+      "vou me mutilar",
+      "eu nao aguento mais",
+      "seria melhor sem mim",
+      "ninguem sentiria minha falta"
+    ]
+  },
+  "contextos_protetivos": {
+    "acao": "nao_punir_e_enviar_para_revisao",
+    "observacao": "Estas expressoes podem ser apoio, prevencao, citacao ou denuncia. Elas nao devem anular uma ameaca grave detectada em outra parte da mensagem.",
+    "frases": [
+      "nao se mata",
+      "nao se machuque",
+      "nao faca isso",
+      "procure ajuda",
+      "estou aqui com voce",
+      "voce nao esta sozinho",
+      "voce nao esta sozinha",
+      "ele disse para eu me matar",
+      "ela disse para eu me matar",
+      "mandaram eu me matar",
+      "denunciar incentivo ao suicidio"
+    ]
+  },
+  "revisao_contextual": {
+    "nivel": 1,
+    "acao": "nao_apagar_automaticamente",
+    "observacao": "Estes termos podem aparecer em historia, noticias, educacao, denuncias, nomes, numeros ou simbolos religiosos. Envie para revisao humana e considere o contexto.",
+    "termos": [
+      "nazista",
+      "nazismo",
+      "neonazista",
+      "hitler",
+      "gestapo",
+      "terceiro reich",
+      "ss",
+      "1488",
+      "14/88",
+      "88",
+      "卐",
+      "卍",
+      "suastica",
+      "crioulo",
+      "macaco",
+      "traveco",
+      "baitola",
+      "sapatao",
+      "retardado",
+      "mongoloide"
+    ]
+  },
+  "regex_para_revisao": [
+    {
+      "nome": "heil_hitler_ofuscado",
+      "padrao": "\\bh+[e3]+[i1]+l+[^a-z0-9]*h+[i1]+t+l+[e3]+r+\\b",
+      "nivel": 3
+    },
+    {
+      "nome": "codigo_1488",
+      "padrao": "\\b1\\s*4\\s*[/\\- ]?\\s*8\\s*8\\b",
+      "nivel": 1
+    },
+    {
+      "nome": "morte_a_grupo",
+      "padrao": "\\b(morte|matem|exterminem)\\s+(aos|as|os|todos os|todas as)\\s+[a-zá-úç ]{2,40}\\b",
+      "nivel": 3
+    }
+  ],
+  "recomendacoes": [
+    "Nao aplique banimento permanente apenas por uma correspondencia automatica.",
+    "Registre a mensagem, o autor, o canal e o horario para revisao da moderacao.",
+    "Nao use palavras de identidade como gay, trans, negro, judeu, muculmano, autista ou deficiente como bloqueios isolados.",
+    "Termos historicos, simbolos e codigos devem exigir contexto.",
+    "Diferencie incentivo contra outra pessoa de uma pessoa relatando risco proprio.",
+    "Mensagens de risco pessoal devem receber acolhimento e alerta humano, nunca punicao automatica.",
+    "Permita recurso ao usuario quando houver falso positivo."
+  ]
+}
