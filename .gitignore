@@ -4,4 +4,5 @@ dist/
 data/*.json
 !ai-module.json
 !data/filtro_discurso_odio_nazismo_ptBR.json
+!data/prisma-personality.json
 !.gitkeep
