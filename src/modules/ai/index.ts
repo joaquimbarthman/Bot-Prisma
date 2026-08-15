@@ -110,7 +110,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     if (botInsult) request += "\nO usuário acabou de provocar ou insultar você de forma leve. Responda com bastante deboche, confiança e uma tirada curta e inteligente. Não use preconceito, ameaça, humilhação pesada nem ataque características protegidas.";
     if (needsChannelContext(message, client)) {
       const channelContext = await recentChannelContext(message);
-      if (channelContext) request += `\nContexto recente do canal, com falas de pessoas diferentes:\n${channelContext}\nUse os nomes para identificar corretamente quem disse cada coisa.`;
+      if (channelContext) request += `\nContexto silencioso da conversa recente, com falas de pessoas diferentes:\n${channelContext}\nUse isso apenas para entender a referência e identificar quem falou. Responda como participante natural da conversa. Não recite, enumere, organize ou resuma o histórico; não diga que recebeu contexto e não liste pessoas ou falas, salvo se o usuário pedir explicitamente uma lista ou resumo.`;
     }
     if (settings.memoryEnabled) { const socialContext = await socialMemoryContext(message.author.id); if (socialContext) request += `\n${socialContext}`; }
     const answer = await generateReply(message.author.id, settings, history, request);
