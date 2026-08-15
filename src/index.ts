@@ -5,7 +5,7 @@ import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
-import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
+import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, shouldPrioritizeAiMessage, startAiCleanup } from "./modules/ai/index.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
 
@@ -58,6 +58,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
+    if (await shouldPrioritizeAiMessage(message, client) && await handleAiMessage(client, message)) return;
     if (await handleModerationMessage(client, message)) return;
     await handleAiMessage(client, message);
   } catch (error) {

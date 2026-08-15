@@ -20,10 +20,30 @@ async function isReplyToBot(message: Message, client: Client): Promise<boolean> 
   return referenced?.author.id === client.user?.id;
 }
 
+function normalized(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function asksAboutActivity(content: string): boolean {
+  return /\b(?:o que|oq|que)\s+(?:eu\s+)?(?:estou|to)\s+(?:fazendo|jogando|ouvindo|escutando)|\bqual\s+(?:jogo|musica)\b/.test(normalized(content));
+}
+
+function containsMildInsult(content: string): boolean {
+  return /\b(?:burro|burra|idiota|inutil|lerdo|lerda|lixo|otario|otaria|fracassado|fracassada|chato|chata|horrivel|ruim|bosta)\b/.test(normalized(content));
+}
+
+async function isDirectedAtBot(message: Message, client: Client): Promise<boolean> {
+  return !!client.user && (message.mentions.users.has(client.user.id) || /\bprisma\b/i.test(message.content) || await isReplyToBot(message, client));
+}
+
+export async function shouldPrioritizeAiMessage(message: Message, client: Client): Promise<boolean> {
+  return message.channelId === config.prismaAi.generalChannelId && containsMildInsult(message.content) && await isDirectedAtBot(message, client);
+}
+
 export async function handleAiMessage(client: Client, message: Message): Promise<boolean> {
   if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || message.channelId !== config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content) return false;
   const level = accessLevel(message.member);
-  const direct = !!client.user && (message.mentions.users.has(client.user.id) || await isReplyToBot(message, client));
+  const direct = asksAboutActivity(message.content) || await isDirectedAtBot(message, client);
   if (level === "none") { if (direct) await message.reply({ content: "A Prisma IA é exclusiva para Boosters e Amigos do Chefe.", allowedMentions: { repliedUser: false } }); return direct; }
 
   const settings = await getSettings(message.author.id);
@@ -42,7 +62,11 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     await message.channel.sendTyping();
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
-    const answer = await generateReply(message.author.id, settings, history, spontaneous ? `Inicie uma conversa breve relacionada a esta mensagem do usuário: ${content}` : content);
+    const currentActivity = message.member.presence ? publicActivity(message.member.presence) : null;
+    let request = spontaneous ? `Inicie uma conversa breve relacionada a esta mensagem do usuário: ${content}` : content;
+    if (asksAboutActivity(content)) request = `${content}\nContexto confiável da presença pública do Discord: ${currentActivity ? `o usuário está ${currentActivity.description}` : "nenhuma atividade está visível agora"}. Responda diretamente com base neste contexto e não invente atividade.`;
+    if (direct && containsMildInsult(content)) request = `${content}\nO usuário acabou de provocar ou insultar você de forma leve. Responda com bastante deboche, confiança e uma tirada curta e inteligente. Não use preconceito, ameaça, humilhação pesada nem ataque características protegidas.`;
+    const answer = await generateReply(message.author.id, settings, history, request);
     if (!answer) throw new Error("Resposta vazia.");
     const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";
     await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [message.author.id] : [], repliedUser: false } });
