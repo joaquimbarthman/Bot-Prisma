@@ -3,6 +3,7 @@ import { commands } from "./commands.js";
 import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
+import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, startAiCleanup } from "./modules/ai/index.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
@@ -76,4 +77,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.Error, console.error);
+const healthServer = startHealthServer(client);
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => {
+  console.log(`[SISTEMA] ${signal} recebido; encerrando conexões.`);
+  client.destroy();
+  healthServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5_000).unref();
+});
 client.login(config.token);
