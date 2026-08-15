@@ -2,5 +2,6 @@ node_modules/
 dist/
 .env
 data/*.json
+!ai-module.json
 !data/filtro_discurso_odio_nazismo_ptBR.json
 !.gitkeep
