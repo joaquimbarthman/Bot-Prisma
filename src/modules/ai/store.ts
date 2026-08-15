@@ -8,7 +8,9 @@ export type UserSettings = { nickname: string; personality: Personality; humorLe
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 type SpontaneousEvent = { discordId: string; createdAt: string };
-type Database = { settings: Record<string, UserSettings>; history: HistoryItem[]; usage: UsageItem[]; spontaneous: SpontaneousEvent[] };
+export type SocialSignalType = "insult" | "apology" | "kindness" | "affection" | "gratitude" | "humor" | "vulnerability";
+type SocialSignal = { discordId: string; type: SocialSignalType; createdAt: string };
+type Database = { settings: Record<string, UserSettings>; history: HistoryItem[]; usage: UsageItem[]; spontaneous: SpontaneousEvent[]; social: SocialSignal[] };
 
 const defaults: UserSettings = { nickname: "", personality: "prisma_default", humorLevel: 1, allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
 const file = path.resolve("data", "ai-module.json");
@@ -23,7 +25,7 @@ function fromSettings(row: Record<string, unknown> | null): UserSettings { retur
 function toSettings(id: string, value: UserSettings) { return { discord_id: id, nickname: value.nickname, personality: value.personality, humor_level: value.humorLevel, allow_mentions: value.allowMentions, memory_enabled: value.memoryEnabled, spontaneous_interactions: value.spontaneousInteractions, updated_at: new Date().toISOString() }; }
 function fromHistory(row: Record<string, unknown>): HistoryItem { return { discordId: row.discord_id as string, channelId: row.channel_id as string, role: row.role as "user" | "assistant", content: row.content as string, createdAt: row.created_at as string }; }
 
-async function readLocal(): Promise<Database> { try { return JSON.parse(await readFile(file, "utf8")) as Database; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { settings: {}, history: [], usage: [], spontaneous: [] }; throw error; } }
+async function readLocal(): Promise<Database> { try { const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Database>; return { settings: parsed.settings ?? {}, history: parsed.history ?? [], usage: parsed.usage ?? [], spontaneous: parsed.spontaneous ?? [], social: parsed.social ?? [] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { settings: {}, history: [], usage: [], spontaneous: [], social: [] }; throw error; } }
 async function saveLocal(db: Database): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); const temp = `${file}.tmp`; await writeFile(temp, JSON.stringify(db, null, 2), "utf8"); await rename(temp, file); }
 
 export function isSupabaseConfigured(): boolean { return !!supabase; }
@@ -78,9 +80,22 @@ async function spontaneousEvents(id: string): Promise<SpontaneousEvent[]> {
 export async function spontaneousCountToday(id: string, timezone: string): Promise<number> { const today = new Date().toLocaleDateString("en-CA", { timeZone: timezone }); return (await spontaneousEvents(id)).filter((x) => new Date(x.createdAt).toLocaleDateString("en-CA", { timeZone: timezone }) === today).length; }
 export async function lastSpontaneousAt(id: string): Promise<number> { const item = (await spontaneousEvents(id)).at(-1); return item ? Date.parse(item.createdAt) : 0; }
 export async function addSpontaneous(id: string): Promise<void> { const createdAt = new Date().toISOString(); if (supabase) { const { error } = await supabase.from("ai_events").insert({ discord_id: id, interaction_type: "spontaneous", created_at: createdAt }); if (!error) return; remoteFailure("salvar evento", error.message); } queue = queue.then(async () => { const db = await readLocal(); db.spontaneous.push({ discordId: id, createdAt }); await saveLocal(db); }); await queue; }
+export async function addSocialSignal(id: string, type: SocialSignalType): Promise<void> { const createdAt = new Date().toISOString(); if (supabase) { const { error } = await supabase.from("ai_events").insert({ discord_id: id, interaction_type: `social:${type}`, created_at: createdAt }); if (!error) return; remoteFailure("salvar memória social", error.message); } queue = queue.then(async () => { const db = await readLocal(); db.social.push({ discordId: id, type, createdAt }); await saveLocal(db); }); await queue; }
+export async function socialMemoryContext(id: string): Promise<string> {
+  const cutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString(); let signals: SocialSignal[];
+  if (supabase) { const { data, error } = await supabase.from("ai_events").select("discord_id,interaction_type,created_at").eq("discord_id", id).like("interaction_type", "social:%").gte("created_at", cutoff).order("created_at"); if (!error) signals = (data ?? []).map((item) => ({ discordId: item.discord_id, type: String(item.interaction_type).replace("social:", "") as SocialSignalType, createdAt: item.created_at })); else { remoteFailure("ler memória social", error.message); await queue; signals = (await readLocal()).social.filter((item) => item.discordId === id && item.createdAt >= cutoff); } }
+  else { await queue; signals = (await readLocal()).social.filter((item) => item.discordId === id && item.createdAt >= cutoff); }
+  const count = (type: SocialSignalType) => signals.filter((item) => item.type === type).length;
+  const annoyance = Math.min(3, Math.max(0, count("insult") - count("apology") * 2 - count("kindness")));
+  const affection = Math.min(3, count("affection") + count("kindness") + count("gratitude") + count("apology"));
+  const playfulness = Math.min(3, count("humor")); const care = Math.min(3, count("vulnerability"));
+  if (!annoyance && !affection && !playfulness && !care) return "";
+  return `Memória relacional temporária e individual deste usuário (48h): carinho ${affection}/3, implicância ${annoyance}/3, cumplicidade ${playfulness}/3, cuidado ${care}/3. Deixe esses tons aparecerem de modo sutil e natural, mantendo a personalidade-base. Implicância significa deboche leve, nunca hostilidade, preconceito ou perseguição. Cuidado pede acolhimento sem diagnosticar a pessoa.`;
+}
+export async function clearUserSocialSignals(id: string): Promise<void> { if (supabase) { const { error } = await supabase.from("ai_events").delete().eq("discord_id", id).like("interaction_type", "social:%"); if (!error) return; remoteFailure("apagar memória social", error.message); } queue = queue.then(async () => { const db = await readLocal(); db.social = db.social.filter((item) => item.discordId !== id); await saveLocal(db); }); await queue; }
 export async function clearUserHistory(id: string): Promise<void> { if (supabase) { const { error } = await supabase.from("conversation_history").delete().eq("discord_id", id); if (!error) return; remoteFailure("apagar histórico", error.message); } queue = queue.then(async () => { const db = await readLocal(); db.history = db.history.filter((x) => x.discordId !== id); await saveLocal(db); }); await queue; }
 export async function cleanupExpired(): Promise<void> {
   const historyCutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString(); const usageCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString();
   if (supabase) { const results = await Promise.all([supabase.from("conversation_history").delete().lt("created_at", historyCutoff), supabase.from("ai_events").delete().lt("created_at", historyCutoff), supabase.from("ai_usage").delete().lt("created_at", usageCutoff)]); if (results.every((x) => !x.error)) return; remoteFailure("limpeza automática", results.find((x) => x.error)?.error?.message); }
-  queue = queue.then(async () => { const db = await readLocal(); db.history = db.history.filter((x) => x.createdAt >= historyCutoff); db.spontaneous = db.spontaneous.filter((x) => x.createdAt >= historyCutoff); db.usage = db.usage.filter((x) => x.createdAt >= usageCutoff); await saveLocal(db); }); await queue;
+  queue = queue.then(async () => { const db = await readLocal(); db.history = db.history.filter((x) => x.createdAt >= historyCutoff); db.spontaneous = db.spontaneous.filter((x) => x.createdAt >= historyCutoff); db.social = db.social.filter((x) => x.createdAt >= historyCutoff); db.usage = db.usage.filter((x) => x.createdAt >= usageCutoff); await saveLocal(db); }); await queue;
 }

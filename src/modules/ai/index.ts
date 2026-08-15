@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction } from "./panel.js";
 import { generateReply } from "./provider.js";
-import { addHistory, addSpontaneous, checkSupabaseConnection, cleanupExpired, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday } from "./store.js";
+import { addHistory, addSocialSignal, addSpontaneous, checkSupabaseConnection, cleanupExpired, getSettings, lastSpontaneousAt, recentHistory, socialMemoryContext, spontaneousCountToday, updateSettings, type SocialSignalType } from "./store.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -32,21 +32,59 @@ function containsMildInsult(content: string): boolean {
   return /\b(?:burro|burra|idiota|inutil|lerdo|lerda|lixo|otario|otaria|fracassado|fracassada|chato|chata|horrivel|ruim|bosta)\b/.test(normalized(content));
 }
 
+function isDirectBotInsult(content: string, botId?: string): boolean {
+  let value = normalized(content).replace(botId ? new RegExp(`<@!?${botId}>`, "g") : /$^/, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const insult = "(?:burro|burra|idiota|inutil|lerdo|lerda|lixo|otario|otaria|fracassado|fracassada|chato|chata|horrivel|ruim|bosta)";
+  return new RegExp(`^(?:seu|sua)?\\s*${insult}$|\\b(?:prisma|voce|vc|tu)\\s+(?:(?:e|eh|ta)\\s+)?(?:um|uma)?\\s*(?:seu|sua)?\\s*${insult}\\b`).test(value);
+}
+
+function socialSignal(content: string, directedAtBot: boolean): SocialSignalType | null {
+  const value = normalized(content);
+  if (directedAtBot && containsMildInsult(content)) return "insult";
+  if (/\b(?:desculpa|desculpe|foi mal|perdao|me perdoa)\b/.test(value)) return "apology";
+  if (/\b(?:obrigad[oa]|valeu prisma|agradeco)\b/.test(value)) return "gratitude";
+  if (/\b(?:gosto de voce|amo voce|te adoro|voce e linda|voce e maravilhoso|voce e maravilhosa)\b/.test(value)) return "affection";
+  if (/\b(?:voce e (?:legal|incrivel|inteligente)|mandou bem|boa prisma)\b/.test(value)) return "kindness";
+  if (/(?:\bkkk+k*\b|\bhah+a+\b|\brsrs+\b|😂|🤣)/u.test(value)) return "humor";
+  if (/\b(?:to triste|estou triste|to mal|estou mal|chatead[oa]|preciso desabafar|dia dificil)\b/.test(value)) return "vulnerability";
+  return null;
+}
+
+function requestedNickname(content: string): string | null {
+  const match = content.match(/(?:quero\s+(?:que\s+)?(?:você|voce|vc)\s+me\s+cham(?:e|ando)\s+de|me\s+cham(?:a|e)\s+de)\s+["']?([^\n.!?]{2,32})["']?/i);
+  const nickname = match?.[1]?.trim();
+  return nickname && !/@(?:everyone|here)|<@|https?:\/\//i.test(nickname) ? nickname : null;
+}
+
+function needsChannelContext(message: Message, client: Client): boolean {
+  const mentionsAnotherPerson = message.mentions.users.some((user) => user.id !== client.user?.id && user.id !== message.author.id);
+  return mentionsAnotherPerson || /\b(?:o que .{0,40} falou|que (?:ele|ela) disse|sobre (?:isso|aquilo)|mensagem (?:dele|dela)|conversa de antes)\b/i.test(normalized(message.content));
+}
+
+async function recentChannelContext(message: Message): Promise<string> {
+  const messages = await message.channel.messages.fetch({ limit: 12, before: message.id }).catch(() => null);
+  if (!messages) return "";
+  const lines = [...messages.values()].reverse().filter((item) => item.content.trim()).map((item) => `${item.member?.displayName ?? item.author.username}: ${item.cleanContent.replace(/\s+/g, " ").slice(0, 280)}`);
+  while (lines.join("\n").length > 1_800) lines.shift();
+  return lines.join("\n");
+}
+
 async function isDirectedAtBot(message: Message, client: Client): Promise<boolean> {
   return !!client.user && (message.mentions.users.has(client.user.id) || /\bprisma\b/i.test(message.content) || await isReplyToBot(message, client));
 }
 
 export async function shouldPrioritizeAiMessage(message: Message, client: Client): Promise<boolean> {
-  return message.channelId === config.prismaAi.generalChannelId && containsMildInsult(message.content) && await isDirectedAtBot(message, client);
+  return message.channelId === config.prismaAi.generalChannelId && isDirectBotInsult(message.content, client.user?.id) && await isDirectedAtBot(message, client);
 }
 
 export async function handleAiMessage(client: Client, message: Message): Promise<boolean> {
   if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || message.channelId !== config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content) return false;
   const level = accessLevel(message.member);
   const direct = asksAboutActivity(message.content) || await isDirectedAtBot(message, client);
+  const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
   if (level === "none") { if (direct) await message.reply({ content: "A Prisma IA é exclusiva para Boosters e Amigos do Chefe.", allowedMentions: { repliedUser: false } }); return direct; }
 
-  const settings = await getSettings(message.author.id);
+  let settings = await getSettings(message.author.id);
   let spontaneous = false;
   if (!direct) {
     if (!settings.spontaneousInteractions || Math.random() * 100 >= config.prismaAi.spontaneousChancePercent) return false;
@@ -60,12 +98,21 @@ export async function handleAiMessage(client: Client, message: Message): Promise
 
   try {
     await message.channel.sendTyping();
+    const preferredNickname = requestedNickname(message.content);
+    if (preferredNickname && preferredNickname !== settings.nickname) settings = await updateSettings(message.author.id, { nickname: preferredNickname });
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
     const currentActivity = message.member.presence ? publicActivity(message.member.presence) : null;
     let request = spontaneous ? `Inicie uma conversa breve relacionada a esta mensagem do usuário: ${content}` : content;
-    if (asksAboutActivity(content)) request = `${content}\nContexto confiável da presença pública do Discord: ${currentActivity ? `o usuário está ${currentActivity.description}` : "nenhuma atividade está visível agora"}. Responda diretamente com base neste contexto e não invente atividade.`;
-    if (direct && containsMildInsult(content)) request = `${content}\nO usuário acabou de provocar ou insultar você de forma leve. Responda com bastante deboche, confiança e uma tirada curta e inteligente. Não use preconceito, ameaça, humilhação pesada nem ataque características protegidas.`;
+    if (asksAboutActivity(content)) request += `\nContexto confiável da presença pública do Discord: ${currentActivity ? `o usuário está ${currentActivity.description}` : "nenhuma atividade está visível agora"}. Responda diretamente com base neste contexto e não invente atividade.`;
+    const signal = socialSignal(content, botInsult);
+    if (settings.memoryEnabled && signal) await addSocialSignal(message.author.id, signal);
+    if (botInsult) request += "\nO usuário acabou de provocar ou insultar você de forma leve. Responda com bastante deboche, confiança e uma tirada curta e inteligente. Não use preconceito, ameaça, humilhação pesada nem ataque características protegidas.";
+    if (needsChannelContext(message, client)) {
+      const channelContext = await recentChannelContext(message);
+      if (channelContext) request += `\nContexto recente do canal, com falas de pessoas diferentes:\n${channelContext}\nUse os nomes para identificar corretamente quem disse cada coisa.`;
+    }
+    if (settings.memoryEnabled) { const socialContext = await socialMemoryContext(message.author.id); if (socialContext) request += `\n${socialContext}`; }
     const answer = await generateReply(message.author.id, settings, history, request);
     if (!answer) throw new Error("Resposta vazia.");
     const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";

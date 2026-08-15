@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel, hasPersonalityAccess } from "./permissions.js";
 import { personalityOptions, type Personality } from "./personality.js";
-import { clearUserHistory, getSettings, updateSettings } from "./store.js";
+import { clearUserHistory, clearUserSocialSignals, getSettings, updateSettings } from "./store.js";
 
 export function panelComponents() {
   return [
@@ -57,11 +57,11 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     const nickname = interaction.fields.getTextInputValue("nickname").trim(); await updateSettings(interaction.user.id, { nickname }); await interaction.reply({ content: `Apelido salvo: **${nickname}**.`, ephemeral: true }); return true;
   }
   const settings = await getSettings(interaction.user.id);
-  if (action === "memory") { const value = !settings.memoryEnabled; await updateSettings(interaction.user.id, { memoryEnabled: value }); if (!value) await clearUserHistory(interaction.user.id); await interaction.reply({ content: `Memória temporária: **${value ? "ativada" : "desativada"}**.`, ephemeral: true }); }
+  if (action === "memory") { const value = !settings.memoryEnabled; await updateSettings(interaction.user.id, { memoryEnabled: value }); if (!value) { await clearUserHistory(interaction.user.id); await clearUserSocialSignals(interaction.user.id); } await interaction.reply({ content: `Memória temporária: **${value ? "ativada" : "desativada"}**.`, ephemeral: true }); }
   else if (action === "mentions") { const value = !settings.allowMentions; await updateSettings(interaction.user.id, { allowMentions: value }); await interaction.reply({ content: `Menções: **${value ? "ativadas" : "desativadas"}**.`, ephemeral: true }); }
   else if (action === "spontaneous") { const value = !settings.spontaneousInteractions; await updateSettings(interaction.user.id, { spontaneousInteractions: value }); await interaction.reply({ content: `Interações espontâneas: **${value ? "ativadas" : "desativadas"}**.`, ephemeral: true }); }
   else if (action === "humor") { const value = settings.humorLevel >= 5 ? 1 : settings.humorLevel + 1; await updateSettings(interaction.user.id, { humorLevel: value }); await interaction.reply({ content: `Nível de humor: **${value}/5**.`, ephemeral: true }); }
   else if (action === "personality" && interaction.isStringSelectMenu()) { if (!hasPersonalityAccess(member)) await interaction.reply({ content: "Personalidade individual é exclusiva para quem possui o cargo Prisma AI.", ephemeral: true }); else { const value = interaction.values[0] as Personality; await updateSettings(interaction.user.id, { personality: value }); await interaction.reply({ content: `Personalidade definida como **${value}**.`, ephemeral: true }); } }
-  else if (action === "clear-history") { await clearUserHistory(interaction.user.id); await interaction.reply({ content: "Seu histórico temporário foi apagado.", ephemeral: true }); }
+  else if (action === "clear-history") { await clearUserHistory(interaction.user.id); await clearUserSocialSignals(interaction.user.id); await interaction.reply({ content: "Seu histórico e sua memória social temporária foram apagados.", ephemeral: true }); }
   return true;
 }
