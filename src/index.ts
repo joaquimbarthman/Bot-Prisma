@@ -7,6 +7,7 @@ import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, shouldPrioritizeAiMessage, startAiCleanup } from "./modules/ai/index.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
+import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
 
 validateConfig();
@@ -25,6 +26,7 @@ client.once(Events.ClientReady, async (ready) => {
   await setupCustomEmojis(ready);
   await refreshGalleryButtons(ready);
   await startVerificationModule(ready);
+  await startReportModule(ready);
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) await syncPunishmentPermissions(guild).catch((error) => console.error("[CASTIGO] Falha ao sincronizar permissões:", error));
   startAiCleanup();
@@ -68,6 +70,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (await handleReportInteraction(interaction)) return;
     if (await handleVerificationInteraction(interaction)) return;
     if (await handleAiInteraction(interaction)) return;
     if (interaction.isButton()) {

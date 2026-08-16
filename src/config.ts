@@ -43,7 +43,12 @@ export const config = {
     verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim(),
     categoryId: process.env.VERIFICATION_CATEGORY_ID?.trim(),
     logChannelId: process.env.VERIFICATION_LOG_CHANNEL_ID?.trim(),
-    deleteDelayMinutes: integer("VERIFICATION_DELETE_DELAY_MINUTES", 2),
+    deleteDelaySeconds: integer("VERIFICATION_DELETE_DELAY_SECONDS", 10),
+  },
+  reports: {
+    panelChannelId: process.env.REPORT_PANEL_CHANNEL_ID?.trim() || "1538296088459608087",
+    staffRoleId: process.env.REPORT_STAFF_ROLE_ID?.trim() || "1537991738801659904",
+    logChannelId: process.env.REPORT_LOG_CHANNEL_ID?.trim() || "1538276823786455050",
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),

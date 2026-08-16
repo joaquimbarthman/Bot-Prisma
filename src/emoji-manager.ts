@@ -14,6 +14,10 @@ export function verificationBlockEmoji(): string | undefined {
   return moderationEmojis.block;
 }
 
+export function reportWarningEmoji(): string | undefined {
+  return galleryEmojis.warning;
+}
+
 export async function setupCustomEmojis(client: Client): Promise<void> {
   if (!config.guildId) {
     console.warn("[EMOJIS] DISCORD_GUILD_ID não definido; usando símbolos padrão.");
