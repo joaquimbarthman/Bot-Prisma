@@ -3,13 +3,13 @@ import { commands } from "./commands.js";
 import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
-import { handleForumDefaultImage } from "./forum-feature.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
 import { grantAccessRoleToBooster, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
+import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
 
 validateConfig();
@@ -29,12 +29,14 @@ client.once(Events.ClientReady, async (ready) => {
   await refreshGalleryButtons(ready);
   await startVerificationModule(ready);
   await startReportModule(ready);
+  await startLfgModule(ready);
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) {
     await syncBoosterAccessRoles(guild).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
     await syncPunishmentPermissions(guild).catch((error) => console.error("[CASTIGO] Falha ao sincronizar permissões:", error));
   }
   startAiCleanup(ready);
+  startLfgCleanup(ready);
   console.log(`Prisma conectado como ${ready.user.tag}. IA: ${config.openAiKey ? "ativa" : "desativada"}.`);
   console.log(`[MONITOR] Canais: ${config.monitoredChannelIds.size ? [...config.monitoredChannelIds].join(", ") : "todos os canais de texto"}.`);
   for (const channelId of config.monitoredChannelIds) {
@@ -75,7 +77,6 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
-    await handleForumDefaultImage(message);
     if (await handleModerationMessage(client, message)) return;
     await handleAiMessage(client, message);
   } catch (error) {
@@ -85,6 +86,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (await handleLfgInteraction(interaction)) return;
     if (await handleReportInteraction(interaction)) return;
     if (await handleVerificationInteraction(interaction)) return;
     if (await handleAiInteraction(interaction)) return;

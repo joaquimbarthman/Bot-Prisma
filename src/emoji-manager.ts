@@ -4,6 +4,7 @@ import { config } from "./config.js";
 
 const galleryEmojis: { empty?: string; full?: string; details?: string; trash?: string; warning?: string } = {};
 const moderationEmojis: { block?: string; check?: string } = {};
+const lfgEmojis: { check?: string; close?: string; sound?: string; trash?: string; warning?: string; gamepad?: string } = {};
 export const aiPanelEmojis: { user?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string; reset?: string; close?: string } = {};
 
 export function verificationCheckEmoji(): string | undefined {
@@ -18,6 +19,30 @@ export function reportWarningEmoji(): string | undefined {
   return galleryEmojis.warning;
 }
 
+export function lfgCloseEmoji(): string | undefined {
+  return lfgEmojis.close;
+}
+
+export function lfgCheckEmoji(): string | undefined {
+  return lfgEmojis.check;
+}
+
+export function lfgSoundEmoji(): string | undefined {
+  return lfgEmojis.sound;
+}
+
+export function lfgTrashEmoji(): string | undefined {
+  return lfgEmojis.trash;
+}
+
+export function lfgWarningEmoji(): string | undefined {
+  return lfgEmojis.warning;
+}
+
+export function lfgGamepadEmoji(): string | undefined {
+  return lfgEmojis.gamepad;
+}
+
 export async function setupCustomEmojis(client: Client): Promise<void> {
   if (!config.guildId) {
     console.warn("[EMOJIS] DISCORD_GUILD_ID não definido; usando símbolos padrão.");
@@ -30,7 +55,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       emojis.find((emoji) => emoji.name === name)
       ?? guild.emojis.create({ attachment: path.resolve("assets", file), name, reason });
 
-    const [empty, full, details, trash, warning, block, check, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose] = await Promise.all([
+    const [empty, full, details, trash, warning, block, check, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose, lfgSound, lfgGamepad] = await Promise.all([
       ensure("coracao_vazio_branco", "heart.png", "Ícone branco da galeria"),
       ensure("coracao_cheio_branco", "heart-fill.png", "Ícone branco da galeria"),
       ensure("icone_detalhes_branco", "line.png", "Ícone branco da galeria"),
@@ -45,9 +70,12 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       ensure("prisma_ai_humor", "humor.png", "Ícone do painel Prisma IA"),
       ensure("prisma_ai_recarregar", "recarregar.png", "Ícone de reiniciar relação da Prisma IA"),
       ensure("prisma_ai_fechar", "close.png", "Ícone de remover apelido da Prisma IA"),
+      ensure("lfg_som_musical", "som-musical.png", "Ícone do botão de lobby LFG"),
+      ensure("lfg_controle", "controle-de-video-game.png", "Ícone do botão de criar grupo LFG"),
     ]);
     Object.assign(galleryEmojis, { empty: empty.id, full: full.id, details: details.id, trash: trash.id, warning: warning.id });
     Object.assign(moderationEmojis, { block: block.id, check: check.id });
+    Object.assign(lfgEmojis, { check: check.id, close: aiClose.id, sound: lfgSound.id, trash: trash.id, warning: warning.id, gamepad: lfgGamepad.id });
     Object.assign(aiPanelEmojis, { user: aiUser.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id, reset: aiReset.id, close: aiClose.id });
     console.log("[EMOJIS] Ícones personalizados carregados.");
   } catch (error) {

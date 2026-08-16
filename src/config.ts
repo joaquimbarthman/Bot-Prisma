@@ -36,7 +36,6 @@ export const config = {
   punishmentCategoryId: process.env.PUNISHMENT_CATEGORY_ID?.trim() || "1538026559913328690",
   filterJsonPath: process.env.FILTER_JSON_PATH?.trim(),
   galleryChannelId: process.env.GALLERY_CHANNEL_ID?.trim() || "1538026764260085821",
-  forumDefaultImageChannelId: process.env.FORUM_DEFAULT_IMAGE_CHANNEL_ID?.trim() || "1538373109097300008",
   verification: {
     panelChannelId: process.env.VERIFICATION_PANEL_CHANNEL_ID?.trim() || "1538200208679239720",
     staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1537991738801659904",
@@ -49,6 +48,15 @@ export const config = {
     panelChannelId: process.env.REPORT_PANEL_CHANNEL_ID?.trim() || "1538296088459608087",
     staffRoleId: process.env.REPORT_STAFF_ROLE_ID?.trim() || "1537991738801659904",
     logChannelId: process.env.REPORT_LOG_CHANNEL_ID?.trim() || "1538276823786455050",
+  },
+  lfg: {
+    panelChannelId: process.env.LFG_PANEL_CHANNEL_ID?.trim() || "1538659348631519303",
+    staffRoleId: process.env.LFG_STAFF_ROLE_ID?.trim(),
+    maxOpenPerUser: integer("LFG_MAX_OPEN_PER_USER", 2),
+    createCooldownSeconds: integer("LFG_CREATE_COOLDOWN_SECONDS", 30),
+    nowExpiryMinutes: integer("LFG_NOW_EXPIRY_MINUTES", 120),
+    scheduledGraceMinutes: integer("LFG_SCHEDULED_GRACE_MINUTES", 60),
+    voiceEmptyGraceMinutes: integer("LFG_VOICE_EMPTY_GRACE_MINUTES", 60),
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),
