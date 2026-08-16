@@ -3,6 +3,7 @@ import { commands } from "./commands.js";
 import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
+import { handleForumDefaultImage } from "./forum-feature.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
@@ -74,6 +75,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
+    await handleForumDefaultImage(message);
     if (await handleModerationMessage(client, message)) return;
     await handleAiMessage(client, message);
   } catch (error) {

@@ -36,6 +36,7 @@ export const config = {
   punishmentCategoryId: process.env.PUNISHMENT_CATEGORY_ID?.trim() || "1538026559913328690",
   filterJsonPath: process.env.FILTER_JSON_PATH?.trim(),
   galleryChannelId: process.env.GALLERY_CHANNEL_ID?.trim() || "1538026764260085821",
+  forumDefaultImageChannelId: process.env.FORUM_DEFAULT_IMAGE_CHANNEL_ID?.trim() || "1538373109097300008",
   verification: {
     panelChannelId: process.env.VERIFICATION_PANEL_CHANNEL_ID?.trim() || "1538200208679239720",
     staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1537991738801659904",
