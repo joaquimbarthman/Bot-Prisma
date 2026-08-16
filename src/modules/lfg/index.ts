@@ -34,7 +34,7 @@ function embed(session: LfgSession): EmbedBuilder {
       { name: "📌 Status", value: label(status), inline: true },
       { name: "🤝 Participantes", value: session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum", inline: false },
     ).setDescription(session.note ? `> **Observação**\n> ${session.note}` : "Monte seu grupo e entre no lobby quando estiver pronto.").setFooter({ text: `ID do LFG: ${session.id}` }).setTimestamp(new Date(session.updatedAt));
-  if (botAvatarUrl) result.setThumbnail(botAvatarUrl);
+  result.setThumbnail(game.img);
   return result;
 }
 function controls(session: LfgSession): ActionRowBuilder<ButtonBuilder> {
