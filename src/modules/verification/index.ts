@@ -28,13 +28,12 @@ type State = { userId: string; status: Status; createdAt: string; staffId?: stri
 type CollectedData = { name?: string; birthDate?: string };
 
 function enabled(): boolean {
-  return !!(verification.verifiedRoleId && verification.categoryId && verification.logChannelId);
+  return !!(verification.verifiedRoleId && verification.logChannelId);
 }
 
 function missingConfiguration(): string[] {
   return [
     !verification.verifiedRoleId && "VERIFIED_ROLE_ID",
-    !verification.categoryId && "VERIFICATION_CATEGORY_ID",
     !verification.logChannelId && "VERIFICATION_LOG_CHANNEL_ID",
   ].filter(Boolean) as string[];
 }
@@ -95,7 +94,7 @@ async function memberIsStaff(guild: Guild, userId: string): Promise<boolean> {
 
 async function findVerificationChannel(guild: Guild, userId: string): Promise<TextChannel | null> {
   await guild.channels.fetch();
-  return guild.channels.cache.find((channel) => channel.parentId === verification.categoryId && channel.type === ChannelType.GuildText && channel.permissionOverwrites.cache.has(userId)) as TextChannel | undefined ?? null;
+  return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && channel.name.startsWith("verificacao-") && channel.permissionOverwrites.cache.has(userId)) as TextChannel | undefined ?? null;
 }
 
 async function findStaffPanel(channel: TextChannel): Promise<Message | null> {
@@ -240,7 +239,7 @@ export async function startVerificationModule(client: Client): Promise<void> {
   if (!guild) { console.error("[VERIFICACAO] Servidor não encontrado."); return; }
   try {
     await guild.channels.fetch(); await configureChannelPermissions(guild); await ensurePublicPanel(client, guild);
-    const channels = guild.channels.cache.filter((channel) => channel.parentId === verification.categoryId && channel.type === ChannelType.GuildText);
+    const channels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText && channel.name.startsWith("verificacao-"));
     for (const channel of channels.values()) {
       const textChannel = channel as TextChannel; const legacy = decodeState(textChannel.topic);
       if (legacy) await textChannel.setTopic(null).catch(console.error);
@@ -270,7 +269,7 @@ export async function handleVerificationMessage(message: Message): Promise<boole
     }
   }
 
-  if (message.channel.type !== ChannelType.GuildText || message.channel.parentId !== verification.categoryId) return false;
+  if (message.channel.type !== ChannelType.GuildText || !message.channel.name.startsWith("verificacao-")) return false;
   const channel = message.channel; const state = await readChannelState(channel);
   if (!state || message.author.id !== state.userId || !["awaiting_name", "awaiting_birth"].includes(state.step ?? "idle")) return false;
   try { await message.delete(); } catch (error) { console.error("[VERIFICACAO] Não foi possível apagar a resposta privada:", error); return true; }
@@ -354,7 +353,7 @@ async function handleStart(interaction: ButtonInteraction): Promise<true> {
   if (existing) { await interaction.editReply(`Você já possui uma verificação aberta: <#${existing.id}>.`); return true; }
   const createdAt = new Date().toISOString(); const botId = interaction.client.user.id;
   const channel = await interaction.guild!.channels.create({
-    name: `verificacao-${channelNickname(member)}`, type: ChannelType.GuildText, parent: verification.categoryId,
+    name: `verificacao-${channelNickname(member)}`, type: ChannelType.GuildText,
     permissionOverwrites: [
       { id: interaction.guild!.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },

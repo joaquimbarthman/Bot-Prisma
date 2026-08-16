@@ -28,7 +28,7 @@ export const config = {
     (process.env.MONITORED_CHANNEL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
   ),
   logMonitoredMessages: boolean("LOG_MONITORED_MESSAGES", true),
-  logMessageContent: boolean("LOG_MESSAGE_CONTENT", true),
+  logMessageContent: boolean("LOG_MESSAGE_CONTENT", false),
   ignoreAdministrators: boolean("IGNORE_ADMINISTRATORS", false),
   punishmentRoleName: process.env.PUNISHMENT_ROLE_NAME?.trim() || "Mutado",
   punishmentRoleId: process.env.PUNISHMENT_ROLE_ID?.trim(),
@@ -41,7 +41,6 @@ export const config = {
     staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1537991738801659904",
     verifiedChatChannelId: process.env.VERIFIED_CHAT_CHANNEL_ID?.trim() || "138026764260085821",
     verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim(),
-    categoryId: process.env.VERIFICATION_CATEGORY_ID?.trim(),
     logChannelId: process.env.VERIFICATION_LOG_CHANNEL_ID?.trim(),
     deleteDelaySeconds: integer("VERIFICATION_DELETE_DELAY_SECONDS", 10),
   },
@@ -56,9 +55,7 @@ export const config = {
     enabled: boolean("PRISMA_AI_ENABLED", false),
     generalChannelId: process.env.AI_GENERAL_CHANNEL_ID?.trim(),
     panelChannelId: process.env.AI_PANEL_CHANNEL_ID?.trim(),
-    friendsRoleId: process.env.AI_FRIENDS_ROLE_ID?.trim(),
-    boosterRoleId: process.env.AI_BOOSTER_ROLE_ID?.trim(),
-    personalityRoleId: process.env.AI_PERSONALITY_ROLE_ID?.trim(),
+    accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
     personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/prisma-personality.json",
     reasoningEffort: process.env.AI_REASONING_EFFORT?.trim() || "minimal",
@@ -86,4 +83,6 @@ export const config = {
 export function validateConfig(): void {
   const missing = [!config.token && "DISCORD_TOKEN", !config.clientId && "DISCORD_CLIENT_ID"].filter(Boolean);
   if (missing.length) throw new Error(`Preencha no .env: ${missing.join(", ")}`);
+  if (!!config.supabaseUrl !== !!config.supabaseSecretKey) throw new Error("Configure SUPABASE_URL e SUPABASE_SECRET_KEY juntas, ou remova ambas para usar o modo local.");
+  if (config.prismaAi.enabled && !config.openAiKey) throw new Error("PRISMA_AI_ENABLED exige OPENAI_API_KEY.");
 }

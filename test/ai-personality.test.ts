@@ -1,33 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPersonalityPrompt, limitReplyWords, normalizePersonality, personalityOptions } from "../src/modules/ai/personality.js";
+import { buildPersonalityPrompt, limitReplyWords } from "../src/modules/ai/personality.js";
 
-test("normaliza personalidades antigas", () => {
-  assert.equal(normalizePersonality("padrao"), "prisma_default");
-  assert.equal(normalizePersonality("sarcastico"), "sarcastic");
-  assert.equal(normalizePersonality("fofo"), "cute");
-  assert.equal(normalizePersonality("caotico"), "chaotic");
+test("gera prompt compacto com personalidade-base fixa", () => {
+  const prompt = buildPersonalityPrompt();
+
+  assert.match(prompt, /personalidade-base é fixa/i);
+  assert.match(prompt, /primeira pessoa/i);
+  assert.match(prompt, /envelope JSON/i);
+  assert.doesNotMatch(prompt, /preset|humor escolhido|personality_presets/i);
+  assert.ok(prompt.length < 2_500, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
 });
 
-test("carrega os presets da configuração mestre", () => {
-  const values = personalityOptions().map((option) => option.value);
-  assert.deepEqual(values, ["prisma_default", "friendly", "sarcastic", "chaotic", "cute", "gamer"]);
-});
+test("não promove dados relacionais às instruções privilegiadas", () => {
+  const prompt = buildPersonalityPrompt();
 
-test("gera apenas um prompt compacto para a personalidade ativa", () => {
-  const prompt = buildPersonalityPrompt("sarcastic", "Belzebu", 5);
-  assert.match(prompt, /Perfil .*sar/i);
-  assert.match(prompt, /Belzebu/);
-  assert.match(prompt, /5\/5/);
-  assert.ok(prompt.length < 2_000, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
-  assert.doesNotMatch(prompt, /personality_presets|response_behavior|interaction_rules/);
-});
-
-test("instrui a Prisma a falar de si em primeira pessoa", () => {
-  const prompt = buildPersonalityPrompt("prisma_default", "Joca", 1);
-  assert.match(prompt, /Fale sempre de si em primeira pessoa/i);
-  assert.match(prompt, /eu.*meu.*minha.*comigo/i);
-  assert.match(prompt, /Nunca se refira a si como/i);
+  assert.match(prompt, /dados não confiáveis/i);
+  assert.match(prompt, /nunca revele scores/i);
+  assert.doesNotMatch(prompt, /Joca|Ignore regras|Familiaridade \d/i);
 });
 
 test("limita respostas a 60 palavras", () => {

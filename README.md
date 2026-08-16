@@ -4,7 +4,7 @@ Monitora mensagens, remove conteúdo ofensivo, aplica avisos progressivos e regi
 
 ## Instalação
 
-1. Rode `npm install`.
+1. Instale Node.js 22 ou superior e rode `npm install`.
 2. Copie `.env.example` para `.env` e preencha `DISCORD_TOKEN` e `DISCORD_CLIENT_ID`.
 3. No [Discord Developer Portal](https://discord.com/developers/applications), ative **Message Content Intent** e **Server Members Intent** em Bot → Privileged Gateway Intents.
 4. Convide o bot com os escopos `bot` e `applications.commands`. Dê as permissões **View Channels**, **Send Messages**, **Manage Messages** e **Moderate Members**.
@@ -25,11 +25,15 @@ Preencha `OPENAI_API_KEY` para ativar a análise de assédio, ameaças e discurs
 - A galeria usa os ícones personalizados de `assets/` (`coracao`, `linha` e `lixo`) em botões sem texto. O bot precisa da permissão **Criar expressões** no servidor; se não tiver, usa símbolos Unicode.
 - Defina `MOD_LOG_CHANNEL_ID` para manter revisão humana das decisões.
 - Defina `MONITORED_CHANNEL_IDS` para limitar o monitoramento a canais específicos.
-- `LOG_MONITORED_MESSAGES=true` exibe no terminal cada mensagem verificada e o resultado. Use `LOG_MESSAGE_CONTENT=false` para ocultar o texto e manter apenas servidor, canal e usuário.
+- `LOG_MONITORED_MESSAGES=true` exibe no terminal cada mensagem verificada e o resultado. O texto fica oculto por padrão; mantenha `LOG_MESSAGE_CONTENT=false` em produção.
 - Avisos ficam em `data/warnings.json`. Para vários servidores ou alta escala, migre para SQLite/PostgreSQL.
 
 ## Prisma IA
 
-O módulo isolado fica em `src/modules/ai/`. Somente Boosters e membros com o cargo configurado em `AI_FRIENDS_ROLE_ID` podem gerar chamadas. Configure `AI_GENERAL_CHANNEL_ID` e `AI_PANEL_CHANNEL_ID`, reinicie o bot e use `/configurar-prisma` para publicar o painel único.
+O módulo isolado fica em `src/modules/ai/`. Somente membros com o cargo definido em `AI_ACCESS_ROLE_ID` podem gerar chamadas. Boosters recebem esse cargo automaticamente; o bot precisa de **Gerenciar cargos** e seu cargo deve ficar acima do cargo de acesso na hierarquia. Configure `AI_GENERAL_CHANNEL_ID` e `AI_PANEL_CHANNEL_ID`, reinicie o bot e use `/configurar-prisma` para publicar o painel único.
 
-Com `SUPABASE_URL` e `SUPABASE_SECRET_KEY`, preferências, histórico temporário, métricas e interações espontâneas usam o Supabase. Execute `supabase/schema.sql` uma vez no SQL Editor. Se o banco estiver indisponível, o módulo usa `data/ai-module.json` como fallback sem derrubar o bot. O contexto enviado é limitado por quantidade de mensagens e caracteres. Custos são estimados com os preços e cotação definidos no `.env`, e novas chamadas são bloqueadas ao atingir `AI_MONTHLY_BUDGET_BRL`.
+Com `SUPABASE_URL` e `SUPABASE_SECRET_KEY`, preferências, relacionamento adaptativo, temperamento, histórico temporário, métricas e interações espontâneas usam o Supabase. Em instalações novas, execute `supabase/schema.sql`; em bancos existentes, execute as migrations pendentes de `supabase/migrations/` no SQL Editor antes de publicar o novo código.
+
+A personalidade-base da Prisma é fixa. Usuários não escolhem presets nem scores emocionais: familiaridade, calor, paciência, brincadeira, confiança e temperamento evoluem gradualmente a partir das conversas. O texto do histórico expira em 48 horas, enquanto a forma da relação persiste. O painel permite apagar o histórico, remover o apelido ou reiniciar a relação, inclusive depois de perder o acesso à IA.
+
+Sem as duas variáveis do Supabase, o módulo usa `data/ai-module.json` em modo local explícito. Com Supabase configurado, uma falha remota não recorre a cópias locais antigas: histórico, preferências e limites falham de forma conservadora. O arquivo local contém dados de usuários, usa permissão restrita e nunca deve ser versionado. O contexto enviado é limitado por 48 horas, quantidade de mensagens e caracteres. Custos são estimados com os preços e cotação definidos no `.env`, e novas chamadas são bloqueadas ao atingir `AI_MONTHLY_BUDGET_BRL`.

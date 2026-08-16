@@ -4,7 +4,7 @@ import { config } from "./config.js";
 
 const galleryEmojis: { empty?: string; full?: string; details?: string; trash?: string; warning?: string } = {};
 const moderationEmojis: { block?: string; check?: string } = {};
-export const aiPanelEmojis: { user?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string } = {};
+export const aiPanelEmojis: { user?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string; reset?: string; close?: string } = {};
 
 export function verificationCheckEmoji(): string | undefined {
   return moderationEmojis.check;
@@ -30,7 +30,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       emojis.find((emoji) => emoji.name === name)
       ?? guild.emojis.create({ attachment: path.resolve("assets", file), name, reason });
 
-    const [empty, full, details, trash, warning, block, check, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor] = await Promise.all([
+    const [empty, full, details, trash, warning, block, check, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose] = await Promise.all([
       ensure("coracao_vazio_branco", "heart.png", "Ícone branco da galeria"),
       ensure("coracao_cheio_branco", "heart-fill.png", "Ícone branco da galeria"),
       ensure("icone_detalhes_branco", "line.png", "Ícone branco da galeria"),
@@ -43,10 +43,12 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       ensure("prisma_ai_mencao", "em.png", "Ícone do painel Prisma IA"),
       ensure("prisma_ai_espontanea", "simbolo-flash.png", "Ícone do painel Prisma IA"),
       ensure("prisma_ai_humor", "humor.png", "Ícone do painel Prisma IA"),
+      ensure("prisma_ai_recarregar", "recarregar.png", "Ícone de reiniciar relação da Prisma IA"),
+      ensure("prisma_ai_fechar", "close.png", "Ícone de remover apelido da Prisma IA"),
     ]);
     Object.assign(galleryEmojis, { empty: empty.id, full: full.id, details: details.id, trash: trash.id, warning: warning.id });
     Object.assign(moderationEmojis, { block: block.id, check: check.id });
-    Object.assign(aiPanelEmojis, { user: aiUser.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id });
+    Object.assign(aiPanelEmojis, { user: aiUser.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id, reset: aiReset.id, close: aiClose.id });
     console.log("[EMOJIS] Ícones personalizados carregados.");
   } catch (error) {
     console.error("[EMOJIS] Falha ao carregar ícones; usando símbolos padrão:", error);

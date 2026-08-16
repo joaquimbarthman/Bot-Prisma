@@ -1,12 +1,33 @@
-import type { GuildMember } from "discord.js";
+import type { Guild, GuildMember } from "discord.js";
 import { config } from "../../config.js";
-export type AccessLevel = "none" | "booster" | "friend";
+
+export type AccessLevel = "none" | "member";
+
 export function accessLevel(member: GuildMember): AccessLevel {
-  if (config.prismaAi.friendsRoleId && member.roles.cache.has(config.prismaAi.friendsRoleId)) return "friend";
-  if ((config.prismaAi.boosterRoleId && member.roles.cache.has(config.prismaAi.boosterRoleId)) || member.premiumSinceTimestamp) return "booster";
-  return "none";
+  return member.roles.cache.has(config.prismaAi.accessRoleId) ? "member" : "none";
 }
 
-export function hasPersonalityAccess(member: GuildMember): boolean {
-  return !!config.prismaAi.personalityRoleId && member.roles.cache.has(config.prismaAi.personalityRoleId);
+export function shouldGrantAccessRole(member: GuildMember): boolean {
+  return member.premiumSinceTimestamp !== null && !member.roles.cache.has(config.prismaAi.accessRoleId);
+}
+
+export async function grantAccessRoleToBooster(member: GuildMember): Promise<boolean> {
+  if (!shouldGrantAccessRole(member)) return false;
+  const role = member.guild.roles.cache.get(config.prismaAi.accessRoleId)
+    ?? await member.guild.roles.fetch(config.prismaAi.accessRoleId).catch(() => null);
+  if (!role) {
+    console.error(`[PRISMA-IA] Cargo de acesso ${config.prismaAi.accessRoleId} não encontrado.`);
+    return false;
+  }
+  await member.roles.add(role, "Acesso Prisma IA concedido automaticamente por Booster");
+  console.log(`[PRISMA-IA] Cargo de acesso concedido ao Booster ${member.user.tag} (${member.id}).`);
+  return true;
+}
+
+export async function syncBoosterAccessRoles(guild: Guild): Promise<void> {
+  const members = await guild.members.fetch();
+  const boosters = members.filter(shouldGrantAccessRole);
+  const results = await Promise.allSettled(boosters.map((member) => grantAccessRoleToBooster(member)));
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length) console.error(`[PRISMA-IA] Falha ao conceder o cargo de acesso a ${failures.length} Booster(s). Verifique a hierarquia e a permissão Gerenciar cargos.`);
 }

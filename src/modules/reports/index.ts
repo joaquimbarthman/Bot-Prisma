@@ -27,7 +27,7 @@ export function reportChannelName(displayName: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80) || "usuario";
-  return `denuncia-${nickname}`;
+  return `atendimento-${nickname}`;
 }
 
 function reportUserId(channel: TextChannel): string | null {
@@ -49,7 +49,7 @@ function statusFromInteraction(interaction: ButtonInteraction): ReportStatus {
 
 function openButton(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:open").setLabel("・ Abrir denúncia").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("report:open").setLabel("・ Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
   );
 }
 
@@ -58,7 +58,7 @@ function staffButtons(status: ReportStatus): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("report:resolved").setLabel("・ Resolvido").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(finished),
     new ButtonBuilder().setCustomId("report:unresolved").setLabel("・ Não resolvido").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(finished),
-    new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar denúncia").setStyle(ButtonStyle.Secondary).setDisabled(finished),
+    new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar atendimento").setStyle(ButtonStyle.Secondary).setDisabled(finished),
   );
 }
 
@@ -72,15 +72,26 @@ function statusLabel(status: ReportStatus): string {
 function reportEmbed(userId: string, status: ReportStatus): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : status === "closed" ? 0x99aab5 : 0xfee75c)
-    .setTitle("Atendimento de denúncia")
-    .setDescription(`Olá, <@${userId}>. Descreva a denúncia com o máximo de detalhes possível e envie provas, se houver.`)
+    .setTitle("Atendimento privado")
+    .setDescription(`Olá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.`)
     .addFields({ name: "Status", value: statusLabel(status) })
-    .setFooter({ text: "Somente o denunciante e a equipe responsável podem acessar este canal." });
+    .setFooter({ text: "Somente você e a equipe responsável podem acessar este canal." });
+}
+
+function publicPanelEmbed(): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0xed4245)
+    .setTitle("Central de atendimentos")
+    .setDescription("Use o botão abaixo para abrir um atendimento privado com a equipe. Explique o ocorrido e envie provas no canal criado.");
+}
+
+function isReportChannelName(name: string): boolean {
+  return name.startsWith("atendimento-") || name.startsWith("denuncia-");
 }
 
 async function findOpenReport(guild: Guild, userId: string): Promise<TextChannel | null> {
   await guild.channels.fetch();
-  return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && channel.name.startsWith("denuncia-") && reportUserId(channel) === userId) as TextChannel | undefined ?? null;
+  return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && isReportChannelName(channel.name) && reportUserId(channel) === userId) as TextChannel | undefined ?? null;
 }
 
 function isStaff(member: GuildMember): boolean {
@@ -89,59 +100,57 @@ function isStaff(member: GuildMember): boolean {
 
 async function ensurePanel(client: Client, guild: Guild): Promise<void> {
   const channel = await guild.channels.fetch(config.reports.panelChannelId).catch(() => null);
-  if (!channel?.isTextBased() || channel.isDMBased()) throw new Error(`Canal do painel de denúncias ${config.reports.panelChannelId} não encontrado.`);
+  if (!channel?.isTextBased() || channel.isDMBased()) throw new Error(`Canal do painel de atendimentos ${config.reports.panelChannelId} não encontrado.`);
   const recent = await channel.messages.fetch({ limit: 50 });
   const existing = recent.find((message) => message.author.id === client.user?.id && message.components.some((row) => "components" in row && row.components.some((component) => "customId" in component && component.customId === "report:open")));
-  if (existing) { await existing.edit({ components: [openButton()] }); return; }
+  if (existing) { await existing.edit({ embeds: [publicPanelEmbed()], components: [openButton()] }); return; }
   await channel.send({
-    embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("Central de denúncias").setDescription("Use o botão abaixo para abrir uma denúncia privada com a equipe. Explique o ocorrido e envie provas no canal criado.")],
+    embeds: [publicPanelEmbed()],
     components: [openButton()],
   });
 }
 
 async function migrateTechnicalTopics(guild: Guild): Promise<void> {
   await guild.channels.fetch();
-  const channels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText && channel.name.startsWith("denuncia-"));
+  const channels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText && isReportChannelName(channel.name));
   for (const channel of channels.values()) {
     if (channel.type !== ChannelType.GuildText) continue;
     const userId = reportUserId(channel);
     if (!userId) continue;
     if (channel.topic?.startsWith("prisma-report:user=")) {
       const user = await guild.client.users.fetch(userId).catch(() => null);
-      if (user) await channel.setTopic(user.username).catch((error) => console.error(`[DENUNCIAS] Falha ao atualizar assunto de ${channel.id}:`, error));
+      if (user) await channel.setTopic(user.username).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar assunto de ${channel.id}:`, error));
     }
     const user = await guild.client.users.fetch(userId).catch(() => null);
     const expectedName = user ? reportChannelName(user.username) : null;
     if (expectedName && channel.name !== expectedName) {
-      await channel.setName(expectedName).catch((error) => console.error(`[DENUNCIAS] Falha ao atualizar nome de ${channel.id}:`, error));
+      await channel.setName(expectedName).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar nome de ${channel.id}:`, error));
     }
     const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
     const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((row) => "components" in row && row.components.some((component) => "customId" in component && component.customId === "report:resolved")));
     if (panel) {
       const status = statusFromValue(panel.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
-      await panel.edit({ components: [staffButtons(status)] }).catch((error) => console.error(`[DENUNCIAS] Falha ao atualizar painel de ${channel.id}:`, error));
+      await panel.edit({ embeds: [reportEmbed(userId, status)], components: [staffButtons(status)] }).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar painel de ${channel.id}:`, error));
     }
   }
 }
 
 export async function startReportModule(client: Client): Promise<void> {
   const guild = config.guildId ? await client.guilds.fetch(config.guildId).catch(() => null) : client.guilds.cache.first() ?? null;
-  if (!guild) { console.error("[DENUNCIAS] Servidor não encontrado."); return; }
+  if (!guild) { console.error("[ATENDIMENTOS] Servidor não encontrado."); return; }
   await migrateTechnicalTopics(guild);
-  await ensurePanel(client, guild).catch((error) => console.error("[DENUNCIAS] Falha ao publicar painel:", error));
+  await ensurePanel(client, guild).catch((error) => console.error("[ATENDIMENTOS] Falha ao publicar painel:", error));
 }
 
 async function openReport(interaction: ButtonInteraction): Promise<void> {
   if (!interaction.inGuild() || !interaction.guild) return;
   await interaction.deferReply({ ephemeral: true });
   const existing = await findOpenReport(interaction.guild, interaction.user.id);
-  if (existing) { await interaction.editReply(`Você já possui uma denúncia aberta em <#${existing.id}>.`); return; }
-  const panel = await interaction.guild.channels.fetch(config.reports.panelChannelId).catch(() => null);
+  if (existing) { await interaction.editReply(`Você já possui um atendimento aberto em <#${existing.id}>.`); return; }
   const botId = interaction.client.user.id;
   const channel = await interaction.guild.channels.create({
     name: reportChannelName(interaction.user.username),
     type: ChannelType.GuildText,
-    parent: panel && "parentId" in panel ? panel.parentId ?? undefined : undefined,
     topic: interaction.user.username.slice(0, 1024),
     permissionOverwrites: [
       { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -156,7 +165,7 @@ async function openReport(interaction: ButtonInteraction): Promise<void> {
     components: [staffButtons("pending")],
     allowedMentions: { users: [interaction.user.id], roles: [config.reports.staffRoleId] },
   });
-  await interaction.editReply(`Sua denúncia foi aberta em <#${channel.id}>.`);
+  await interaction.editReply(`Seu atendimento foi aberto em <#${channel.id}>.`);
 }
 
 async function handleStaffAction(interaction: ButtonInteraction, action: string): Promise<void> {
@@ -164,14 +173,14 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   if (!isStaff(interaction.member as GuildMember)) { await interaction.reply({ content: "Apenas a equipe responsável pode usar este painel.", ephemeral: true }); return; }
   const channel = interaction.channel as TextChannel;
   const userId = reportUserId(channel);
-  if (!userId || !channel.name.startsWith("denuncia-")) { await interaction.reply({ content: "Este canal não possui uma denúncia válida.", ephemeral: true }); return; }
+  if (!userId || !isReportChannelName(channel.name)) { await interaction.reply({ content: "Este canal não possui um atendimento válido.", ephemeral: true }); return; }
   if (!(action === "resolved" || action === "unresolved" || action === "close")) return;
   const state: ReportState = { userId, status: statusFromInteraction(interaction) };
   const finalStatus: ReportStatus = action === "close" ? "closed" : action;
   await interaction.update({ embeds: [reportEmbed(state.userId, finalStatus)], components: [staffButtons(finalStatus)] });
   const log = await interaction.guild!.channels.fetch(config.reports.logChannelId).catch(() => null);
   if (!log?.isSendable()) {
-    await interaction.followUp({ content: "Não encontrei o canal de relatórios. O canal não será apagado.", ephemeral: true });
+    await interaction.followUp({ content: "Não encontrei o canal de registros de atendimento. Este canal não será apagado.", ephemeral: true });
     await interaction.message.edit({ embeds: [reportEmbed(state.userId, "pending")], components: [staffButtons("pending")] });
     return;
   }
@@ -179,9 +188,9 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   await log.send({
     embeds: [new EmbedBuilder()
       .setColor(finalStatus === "resolved" ? 0x57f287 : finalStatus === "unresolved" ? 0xed4245 : 0x99aab5)
-      .setTitle("Denúncia encerrada")
+      .setTitle("Atendimento encerrado")
       .addFields(
-        { name: "Denunciante", value: `<@${state.userId}>`, inline: true },
+        { name: "Solicitante", value: `<@${state.userId}>`, inline: true },
         { name: "Status", value: statusLabel(finalStatus), inline: true },
         { name: "Encerrada por", value: `<@${interaction.user.id}>`, inline: true },
         { name: "Aberta em", value: `<t:${createdAt}:F>` },
@@ -189,8 +198,8 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
       .setTimestamp()],
     allowedMentions: { parse: [] },
   });
-  await interaction.followUp({ content: "Relatório enviado. Este canal será excluído em 10 segundos.", ephemeral: true });
-  setTimeout(() => channel.delete(`Denúncia ${finalStatus} encerrada por ${interaction.user.tag}`).catch((error) => console.error("[DENUNCIAS] Falha ao excluir canal:", error)), 10_000).unref();
+  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 10 segundos.", ephemeral: true });
+  setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), 10_000).unref();
 }
 
 export async function handleReportInteraction(interaction: import("discord.js").Interaction): Promise<boolean> {
