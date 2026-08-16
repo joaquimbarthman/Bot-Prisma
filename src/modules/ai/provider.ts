@@ -12,6 +12,7 @@ export type ReplyContext = {
   trustedFacts?: string[];
   socialMemory?: string;
   channelExcerpt?: string;
+  allowedMentionUserIds?: string[];
 };
 
 function buildRuntimePrompt(context: ReplyContext): string {
@@ -43,13 +44,19 @@ function buildRuntimePrompt(context: ReplyContext): string {
     lines.push(`<discord_excerpt>\n${context.channelExcerpt.slice(0, 1_800)}\n</discord_excerpt>`);
   }
 
+  if (context.allowedMentionUserIds?.length) {
+    lines.push(`Você pode mencionar diretamente estes usuários, quando isso for pedido: ${context.allowedMentionUserIds.map((id) => `<@${id}>`).join(", ")}. Preserve exatamente o formato <@ID>. Não mencione outros IDs, cargos, canais, @everyone ou @here.`);
+  }
+
   return lines.join("\n");
 }
 
-function sanitizeOutput(content: string): string {
+export function sanitizeOutput(content: string, allowedMentionUserIds: string[] = []): string {
+  const allowedUsers = new Set(allowedMentionUserIds);
   return content
     .replace(/@(everyone|here)/gi, "[menção removida]")
-    .replace(/<@!?\d+>|<@&\d+>|<#\d+>/g, "[menção removida]")
+    .replace(/<@!?(\d+)>/g, (mention, userId: string) => allowedUsers.has(userId) ? mention : "[menção removida]")
+    .replace(/<@&\d+>|<#\d+>/g, "[menção removida]")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .trim();
 }
@@ -78,7 +85,7 @@ export async function generateReply(
   const usage = response.usage; const inputTokens = usage?.input_tokens ?? 0; const outputTokens = usage?.output_tokens ?? 0;
   const usd = inputTokens / 1_000_000 * config.prismaAi.inputPriceUsdPerMillion + outputTokens / 1_000_000 * config.prismaAi.outputPriceUsdPerMillion;
   await addUsage({ discordId, model: config.prismaAi.model, inputTokens, outputTokens, totalTokens: usage?.total_tokens ?? inputTokens + outputTokens, estimatedCostUsd: usd, estimatedCostBrl: usd * config.prismaAi.usdBrlReference, createdAt: new Date().toISOString() });
-  const output = limitReplyWords(sanitizeOutput(response.output_text), 60);
+  const output = limitReplyWords(sanitizeOutput(response.output_text, context.allowedMentionUserIds), 60);
   if (!output) {
     const incompleteReason = response.incomplete_details?.reason ?? "sem motivo informado";
     throw new Error(`Resposta vazia (status=${response.status}, incompleta=${incompleteReason}, output_tokens=${outputTokens}).`);

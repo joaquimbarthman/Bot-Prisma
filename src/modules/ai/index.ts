@@ -106,6 +106,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
     };
+    const allowedMentionUserIds = settings.allowMentions
+      ? [...message.mentions.users.keys()].filter((userId) => userId !== client.user?.id)
+      : [];
+    if (allowedMentionUserIds.length) replyContext.allowedMentionUserIds = allowedMentionUserIds;
     if (asksAboutActivity(content)) {
       replyContext.trustedFacts = [currentActivity
         ? `A atividade pública atual do usuário mostra que ele está ${currentActivity.description}.`
@@ -124,7 +128,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const answer = await generateReply(message.author.id, settings, history, content, replyContext);
     if (!answer) throw new Error("Resposta vazia.");
     const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";
-    await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [message.author.id] : [], repliedUser: false } });
+    const replyMentionUserIds = settings.allowMentions
+      ? [...new Set([message.author.id, ...allowedMentionUserIds])]
+      : [];
+    await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
     if (settings.memoryEnabled) { const now = new Date().toISOString(); await addHistory({ discordId: message.author.id, channelId: message.channelId, role: "user", content, createdAt: now }); await addHistory({ discordId: message.author.id, channelId: message.channelId, role: "assistant", content: answer, createdAt: now }); }
     if (spontaneous) await addSpontaneous(message.author.id);
   } catch (error) { console.error("[PRISMA-IA] Falha controlada:", error); if (direct) await message.reply({ content: "Não consegui responder agora. Tente novamente mais tarde.", allowedMentions: { repliedUser: false } }); }
