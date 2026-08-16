@@ -9,6 +9,7 @@ import { LFG_GAMES, LFG_VOICE_CATEGORY_ID, type LfgGameKey } from "./config.js";
 import { mutate, sessions, type LfgSession } from "./store.js";
 
 const PREFIX = "lfg:";
+const PUBLICATION_RETENTION_MS = 3 * 24 * 60 * 60 * 1000;
 const createdCooldowns = new Map<string, number>();
 let botAvatarUrl: string | undefined;
 type Draft = { game: LfgGameKey; maxPlayers: number; scheduledMinutes: number; autoVoiceEnabled: boolean; note: string; expiresAt: number };
@@ -119,6 +120,16 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
 export function startLfgCleanup(client: Client): void {
   const emptySince = new Map<string, number>();
   setInterval(async () => { for (const session of await sessions()) {
+    if (session.messageId && Date.now() - Date.parse(session.createdAt) >= PUBLICATION_RETENTION_MS) {
+      const channel = await client.channels.fetch(session.channelId).catch(() => null);
+      const deleted = channel?.isTextBased()
+        ? await channel.messages.fetch(session.messageId).then((message) => message.delete()).then(() => true).catch(() => false)
+        : false;
+      if (deleted) await mutate((db) => {
+        const current = db.sessions.find((item) => item.id === session.id);
+        if (current) { current.messageId = null; current.updatedAt = new Date().toISOString(); }
+      });
+    }
     if ((session.status === "open" || session.status === "completed") && Date.parse(session.expiresAt) <= Date.now()) { const saved = await mutate((db) => { const value = db.sessions.find((item) => item.id === session.id)!; value.status = "expired"; value.updatedAt = new Date().toISOString(); return value; }); await updateMessage(client, saved); }
     if (!session.voiceChannelId) continue;
     const voice = await client.channels.fetch(session.voiceChannelId).catch(() => null);
