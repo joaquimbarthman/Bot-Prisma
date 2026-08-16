@@ -2,7 +2,7 @@ import { ActivityType, type Client, type Interaction, type Message, type Presenc
 import { config } from "../../config.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction } from "./panel.js";
-import { generateReply } from "./provider.js";
+import { generateReply, type ReplyContext } from "./provider.js";
 import { addHistory, addSocialSignal, addSpontaneous, checkSupabaseConnection, cleanupExpired, getSettings, lastSpontaneousAt, recentHistory, socialMemoryContext, spontaneousCountToday, updateSettings, type SocialSignalType } from "./store.js";
 
 const cooldowns = new Map<string, number>();
@@ -103,17 +103,25 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
     const currentActivity = message.member.presence ? publicActivity(message.member.presence) : null;
-    let request = spontaneous ? `Inicie uma conversa breve relacionada a esta mensagem do usuário: ${content}` : content;
-    if (asksAboutActivity(content)) request += `\nContexto confiável da presença pública do Discord: ${currentActivity ? `o usuário está ${currentActivity.description}` : "nenhuma atividade está visível agora"}. Responda diretamente com base neste contexto e não invente atividade.`;
-    const signal = socialSignal(content, botInsult);
+    const replyContext: ReplyContext = {
+      mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
+    };
+    if (asksAboutActivity(content)) {
+      replyContext.trustedFacts = [currentActivity
+        ? `A atividade pública atual do usuário mostra que ele está ${currentActivity.description}.`
+        : "Nenhuma atividade pública do usuário está visível agora."];
+    }
+    const signal = socialSignal(content, direct);
     if (settings.memoryEnabled && signal) await addSocialSignal(message.author.id, signal);
-    if (botInsult) request += "\nO usuário acabou de provocar ou insultar você de forma leve. Responda com bastante deboche, confiança e uma tirada curta e inteligente. Não use preconceito, ameaça, humilhação pesada nem ataque características protegidas.";
     if (needsChannelContext(message, client)) {
       const channelContext = await recentChannelContext(message);
-      if (channelContext) request += `\nContexto silencioso da conversa recente, com falas de pessoas diferentes:\n${channelContext}\nUse isso apenas para entender a referência e identificar quem falou. Responda como participante natural da conversa. Não recite, enumere, organize ou resuma o histórico; não diga que recebeu contexto e não liste pessoas ou falas, salvo se o usuário pedir explicitamente uma lista ou resumo.`;
+      if (channelContext) replyContext.channelExcerpt = channelContext;
     }
-    if (settings.memoryEnabled) { const socialContext = await socialMemoryContext(message.author.id); if (socialContext) request += `\n${socialContext}`; }
-    const answer = await generateReply(message.author.id, settings, history, request);
+    if (settings.memoryEnabled) {
+      const socialContext = await socialMemoryContext(message.author.id);
+      if (socialContext) replyContext.socialMemory = socialContext;
+    }
+    const answer = await generateReply(message.author.id, settings, history, content, replyContext);
     if (!answer) throw new Error("Resposta vazia.");
     const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";
     await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [message.author.id] : [], repliedUser: false } });
@@ -154,7 +162,18 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     const channel = await client.channels.fetch(config.prismaAi.generalChannelId).catch(() => null);
     if (!channel?.isSendable()) return;
     const history = settings.memoryEnabled ? await recentHistory(newPresence.userId, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
-    const answer = await generateReply(newPresence.userId, settings, history, `A atividade pública do Discord mostra que o usuário está ${activity.description}. Faça um comentário espontâneo, natural e simpático sobre isso, sem dizer que está monitorando a pessoa e sem ultrapassar 50 palavras.`);
+    const socialContext = settings.memoryEnabled ? await socialMemoryContext(newPresence.userId) : "";
+    const answer = await generateReply(
+      newPresence.userId,
+      settings,
+      history,
+      "Comente sobre minha atividade atual.",
+      {
+        mode: "activity",
+        trustedFacts: [`A atividade pública atual do usuário mostra que ele está ${activity.description}.`],
+        socialMemory: socialContext || undefined,
+      },
+    );
     const prefix = settings.allowMentions ? `<@${newPresence.userId}> ` : "";
     await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [newPresence.userId] : [] } });
     await addSpontaneous(newPresence.userId);

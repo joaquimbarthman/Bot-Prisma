@@ -23,6 +23,13 @@ test("gera apenas um prompt compacto para a personalidade ativa", () => {
   assert.doesNotMatch(prompt, /personality_presets|response_behavior|interaction_rules/);
 });
 
+test("instrui a Prisma a falar de si em primeira pessoa", () => {
+  const prompt = buildPersonalityPrompt("prisma_default", "Joca", 1);
+  assert.match(prompt, /Fale sempre de si em primeira pessoa/i);
+  assert.match(prompt, /eu.*meu.*minha.*comigo/i);
+  assert.match(prompt, /Nunca se refira a si como/i);
+});
+
 test("limita respostas a 60 palavras", () => {
   const longReply = Array.from({ length: 75 }, (_, index) => `palavra${index + 1}`).join(" ");
   const limited = limitReplyWords(longReply);

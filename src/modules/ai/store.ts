@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "../../config.js";
-import { normalizePersonality, type Personality } from "./personality.js";
+import { normalizePersonality, sanitizeNickname, type Personality } from "./personality.js";
 
 export type UserSettings = { nickname: string; personality: Personality; humorLevel: number; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
@@ -12,7 +12,7 @@ export type SocialSignalType = "insult" | "apology" | "kindness" | "affection" |
 type SocialSignal = { discordId: string; type: SocialSignalType; createdAt: string };
 type Database = { settings: Record<string, UserSettings>; history: HistoryItem[]; usage: UsageItem[]; spontaneous: SpontaneousEvent[]; social: SocialSignal[] };
 
-const defaults: UserSettings = { nickname: "", personality: "prisma_default", humorLevel: 1, allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
+const defaults: UserSettings = { nickname: "", personality: "prisma_default", humorLevel: 3, allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
 const file = path.resolve("data", "ai-module.json");
 const supabase = config.supabaseUrl && config.supabaseSecretKey
   ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
@@ -21,7 +21,28 @@ let queue = Promise.resolve();
 
 function remoteFailure(operation: string, error: unknown): void { console.error(`[SUPABASE] ${operation} falhou; usando armazenamento local:`, error); }
 function normalizeHumorLevel(value: unknown): number { return Math.max(1, Math.min(5, Number(value) || defaults.humorLevel)); }
-function fromSettings(row: Record<string, unknown> | null): UserSettings { return { ...defaults, ...(row ? { nickname: row.nickname as string, personality: normalizePersonality(String(row.personality ?? "")), humorLevel: normalizeHumorLevel(row.humor_level), allowMentions: row.allow_mentions as boolean, memoryEnabled: row.memory_enabled as boolean, spontaneousInteractions: row.spontaneous_interactions as boolean } : {}) }; }
+function booleanOrDefault(value: unknown, fallback: boolean): boolean { return typeof value === "boolean" ? value : fallback; }
+function normalizeSettings(value: Partial<UserSettings>): UserSettings {
+  return {
+    nickname: sanitizeNickname(value.nickname),
+    personality: normalizePersonality(String(value.personality ?? defaults.personality)),
+    humorLevel: normalizeHumorLevel(value.humorLevel),
+    allowMentions: booleanOrDefault(value.allowMentions, defaults.allowMentions),
+    memoryEnabled: booleanOrDefault(value.memoryEnabled, defaults.memoryEnabled),
+    spontaneousInteractions: booleanOrDefault(value.spontaneousInteractions, defaults.spontaneousInteractions),
+  };
+}
+function fromSettings(row: Record<string, unknown> | null): UserSettings {
+  if (!row) return { ...defaults };
+  return normalizeSettings({
+    nickname: row.nickname as string,
+    personality: String(row.personality ?? defaults.personality) as Personality,
+    humorLevel: row.humor_level as number,
+    allowMentions: row.allow_mentions as boolean,
+    memoryEnabled: row.memory_enabled as boolean,
+    spontaneousInteractions: row.spontaneous_interactions as boolean,
+  });
+}
 function toSettings(id: string, value: UserSettings) { return { discord_id: id, nickname: value.nickname, personality: value.personality, humor_level: value.humorLevel, allow_mentions: value.allowMentions, memory_enabled: value.memoryEnabled, spontaneous_interactions: value.spontaneousInteractions, updated_at: new Date().toISOString() }; }
 function fromHistory(row: Record<string, unknown>): HistoryItem { return { discordId: row.discord_id as string, channelId: row.channel_id as string, role: row.role as "user" | "assistant", content: row.content as string, createdAt: row.created_at as string }; }
 
@@ -45,10 +66,10 @@ export async function checkSupabaseConnection(): Promise<boolean> {
 
 export async function getSettings(id: string): Promise<UserSettings> {
   if (supabase) { const { data, error } = await supabase.from("user_settings").select("*").eq("discord_id", id).maybeSingle(); if (!error) return fromSettings(data); remoteFailure("ler preferências", error.message); }
-  await queue; const stored = (await readLocal()).settings[id]; return stored ? { ...defaults, ...stored, personality: normalizePersonality(stored.personality), humorLevel: normalizeHumorLevel(stored.humorLevel) } : { ...defaults };
+  await queue; const stored = (await readLocal()).settings[id]; return stored ? normalizeSettings(stored) : { ...defaults };
 }
 export async function updateSettings(id: string, patch: Partial<UserSettings>): Promise<UserSettings> {
-  const result = { ...(await getSettings(id)), ...patch };
+  const result = normalizeSettings({ ...(await getSettings(id)), ...patch });
   if (supabase) { const { error } = await supabase.from("user_settings").upsert(toSettings(id, result), { onConflict: "discord_id" }); if (!error) return result; remoteFailure("salvar preferências", error.message); }
   queue = queue.then(async () => { const db = await readLocal(); db.settings[id] = result; await saveLocal(db); }); await queue; return result;
 }
