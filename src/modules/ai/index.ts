@@ -61,7 +61,17 @@ function needsChannelContext(message: Message): boolean {
 }
 
 function requestsDirectMention(content: string): boolean {
-  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide)\b/i.test(normalized(content));
+  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva)\b/i.test(normalized(content));
+}
+
+export function explicitlyRequestedMentionUserIds(
+  content: string,
+  mentionedUserIds: Iterable<string>,
+  botId?: string,
+  authorId?: string,
+): string[] {
+  if (!requestsDirectMention(content)) return [];
+  return [...mentionedUserIds].filter((userId) => userId !== botId && userId !== authorId).slice(0, 3);
 }
 
 async function recentChannelContext(message: Message): Promise<string> {
@@ -121,9 +131,12 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
     };
-    const allowedMentionUserIds = settings.allowMentions && requestsDirectMention(content)
-      ? [...message.mentions.users.keys()].filter((userId) => userId !== client.user?.id && userId !== message.author.id).slice(0, 3)
-      : [];
+    const allowedMentionUserIds = explicitlyRequestedMentionUserIds(
+      content,
+      message.mentions.users.keys(),
+      client.user?.id,
+      message.author.id,
+    );
     if (allowedMentionUserIds.length) replyContext.allowedMentionUserIds = allowedMentionUserIds;
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
@@ -141,9 +154,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       answer = "Não vou seguir por esse caminho. Vamos manter a conversa de boa.";
     }
     const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";
-    const replyMentionUserIds = settings.allowMentions
-      ? [...new Set([message.author.id, ...allowedMentionUserIds])]
-      : [];
+    const replyMentionUserIds = [...new Set([
+      ...(settings.allowMentions ? [message.author.id] : []),
+      ...allowedMentionUserIds,
+    ])];
     await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
     try {
       if (!spontaneous) await applyPrismaStateUpdate(message.author.id, prismaState, unsafeOutput ? {} : generated.stateUpdate);
