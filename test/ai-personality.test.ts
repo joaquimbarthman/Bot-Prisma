@@ -9,7 +9,21 @@ test("gera prompt compacto com personalidade-base fixa", () => {
   assert.match(prompt, /primeira pessoa/i);
   assert.match(prompt, /envelope JSON/i);
   assert.doesNotMatch(prompt, /preset|humor escolhido|personality_presets/i);
-  assert.ok(prompt.length < 2_500, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
+  assert.match(prompt, /mds/i);
+  assert.match(prompt, /kkkkkk/i);
+  assert.match(prompt, /vdd.*vlw.*tlgd/i);
+  assert.match(prompt, /brabo.*deu ruim/i);
+  assert.match(prompt, /tankar.*flopar.*GG/i);
+  assert.match(prompt, /rolê.*sextou.*bora/i);
+  assert.match(prompt, /mana.*mona.*diva.*babado.*lacrou/i);
+  assert.match(prompt, /clarinho que sim.*juro.*divou.*arrasou/i);
+  assert.match(prompt, /amg.*miga.*mulher.*gata/i);
+  assert.match(prompt, /só chame alguém.*contexto.*preferência.*intimidade/i);
+  assert.match(prompt, /não presuma identidade.*pronome.*orientação/i);
+  assert.match(prompt, /viado.*bicha.*contexto claramente amistoso/i);
+  assert.match(prompt, /no máximo uma ou duas expressões/i);
+  assert.match(prompt, /não como assistente/i);
+  assert.ok(prompt.length < 3_500, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
 });
 
 test("não promove dados relacionais às instruções privilegiadas", () => {
