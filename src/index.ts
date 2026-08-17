@@ -6,7 +6,7 @@ import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
-import { grantAccessRoleToBooster, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
+import { grantAccessRoleToBooster, grantVerifiedRoleToBooster, syncBoosterAccessRoles, syncBoosterVerifiedRoles } from "./modules/ai/permissions.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
@@ -33,6 +33,7 @@ client.once(Events.ClientReady, async (ready) => {
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) {
     await syncBoosterAccessRoles(guild).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
+    await syncBoosterVerifiedRoles(guild).catch((error) => console.error("[BOOSTER] Falha ao sincronizar cargos de verificado:", error));
     await syncPunishmentPermissions(guild).catch((error) => console.error("[CASTIGO] Falha ao sincronizar permissões:", error));
   }
   startAiCleanup(ready);
@@ -65,11 +66,13 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
 client.on(Events.GuildMemberUpdate, async (_oldMember, newMember) => {
   if (config.guildId && newMember.guild.id !== config.guildId) return;
   await grantAccessRoleToBooster(newMember).catch((error) => console.error(`[PRISMA-IA] Falha ao conceder cargo ao Booster ${newMember.id}:`, error));
+  await grantVerifiedRoleToBooster(newMember).catch((error) => console.error(`[BOOSTER] Falha ao conceder cargo de verificado ao Booster ${newMember.id}:`, error));
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
   if (config.guildId && member.guild.id !== config.guildId) return;
   await grantAccessRoleToBooster(member).catch((error) => console.error(`[PRISMA-IA] Falha ao verificar cargo do novo membro ${member.id}:`, error));
+  await grantVerifiedRoleToBooster(member).catch((error) => console.error(`[BOOSTER] Falha ao verificar cargo de verificado do novo membro ${member.id}:`, error));
 });
 
 client.on(Events.MessageCreate, async (message) => {

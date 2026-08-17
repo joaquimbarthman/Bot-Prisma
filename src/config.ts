@@ -40,7 +40,7 @@ export const config = {
     panelChannelId: process.env.VERIFICATION_PANEL_CHANNEL_ID?.trim() || "1538200208679239720",
     staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1537991738801659904",
     verifiedChatChannelId: process.env.VERIFIED_CHAT_CHANNEL_ID?.trim() || "138026764260085821",
-    verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim(),
+    verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim() || "1538272377111318649",
     logChannelId: process.env.VERIFICATION_LOG_CHANNEL_ID?.trim(),
     deleteDelaySeconds: integer("VERIFICATION_DELETE_DELAY_SECONDS", 10),
   },
