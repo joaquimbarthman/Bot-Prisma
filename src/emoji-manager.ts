@@ -15,6 +15,18 @@ export function verificationBlockEmoji(): string | undefined {
   return moderationEmojis.block;
 }
 
+export function verificationTakeEmoji(): string | undefined {
+  return aiPanelEmojis.user;
+}
+
+export function verificationWaitingEmoji(): string | undefined {
+  return lfgEmojis.sound;
+}
+
+export function verificationCloseEmoji(): string | undefined {
+  return aiPanelEmojis.close;
+}
+
 export function reportWarningEmoji(): string | undefined {
   return galleryEmojis.warning;
 }

@@ -5,7 +5,7 @@ import type { LfgGameKey } from "./config.js";
 export type LfgStatus = "open" | "completed" | "closed" | "expired" | "deleted";
 export type LfgSession = {
   id: string; guildId: string; channelId: string; messageId: string | null; roleMentionMessageId: string | null; creatorId: string;
-  game: LfgGameKey; maxPlayers: number; participants: string[]; scheduledFor: string | null;
+  game: LfgGameKey; maxPlayers: number; participants: string[];
   note: string; autoVoiceEnabled: boolean; voiceChannelId: string | null; temporaryRoleId: string | null; status: LfgStatus;
   createdAt: string; updatedAt: string; expiresAt: string; deleteVoiceWhenEmpty: boolean;
 };

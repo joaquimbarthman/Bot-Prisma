@@ -21,13 +21,13 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationBlockEmoji, verificationCheckEmoji } from "../../emoji-manager.js";
+import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationTakeEmoji, verificationWaitingEmoji } from "../../emoji-manager.js";
 
 const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
 type Status = "solicitada" | "em_atendimento" | "aguardando_chamada" | "aprovada" | "recusada" | "encerrada";
 type CollectionStep = "idle" | "awaiting_name" | "awaiting_birth" | "ready";
-type State = { userId: string; status: Status; createdAt: string; username?: string; staffId?: string; staffUsername?: string; name?: string; birthDate?: string; reason?: string; deleteAt?: string; step?: CollectionStep; promptId?: string };
+type State = { userId: string; status: Status; createdAt: string; username?: string; avatarUrl?: string; staffId?: string; staffUsername?: string; name?: string; birthDate?: string; reason?: string; deleteAt?: string; step?: CollectionStep; promptId?: string };
 type CollectedData = { name?: string; birthDate?: string };
 
 function enabled(): boolean {
@@ -72,13 +72,13 @@ function startButton(): ActionRowBuilder<ButtonBuilder> {
 function staffButtons(reviewReady = false): ActionRowBuilder<ButtonBuilder>[] {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("verification:take").setLabel("Assumir atendimento").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("verification:waiting").setLabel("Aguardando chamada").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("verification:take").setLabel("Assumir atendimento").setEmoji(verificationTakeEmoji() ?? "👤").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("verification:waiting").setLabel("Aguardando chamada").setEmoji(verificationWaitingEmoji() ?? "🔊").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("verification:approve").setLabel("Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady),
       new ButtonBuilder().setCustomId("verification:reject").setLabel("Recusar").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(!reviewReady),
-      new ButtonBuilder().setCustomId("verification:close").setLabel("Encerrar atendimento").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("verification:close").setLabel("Encerrar atendimento").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
@@ -92,17 +92,40 @@ function statusDisplay(state: State): string {
   return state.step === "ready" ? "Pronto para análise" : "Aguardando staff";
 }
 
+function requestedAtDisplay(value: string): string {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("day")}/${part("month")}/${part("year")} ・ ${part("hour")}:${part("minute")}`;
+}
+
 function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
   const details = [
-    `**Usuário**\n<@${state.userId}> — ${safePrivateValue(state.username ?? "usuário")}`,
-    `**Status**\n${statusDisplay(state)}`,
-    `**Solicitado em**\n<t:${Math.floor(Date.parse(state.createdAt) / 1000)}:F>`,
+    `**Solicitado em**　　　　　 **Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
   ];
-  if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> — ${safePrivateValue(state.staffUsername ?? "staff")}`);
+  if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
   if (state.name) details.push(`**Nome informado**\n${state.name}`);
   if (state.birthDate) details.push(`**Data de nascimento**\n${state.birthDate}`);
   const components: APIContainerComponent["components"] = [
-    { type: ComponentType.TextDisplay, content: `<@${state.userId}> <@&${verification.staffRoleId}>\n## Atendimento de verificação\nAguarde uma staff assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.` },
+    {
+      type: ComponentType.Section,
+      components: [{
+        type: ComponentType.TextDisplay,
+        content: `## Atendimento de verificação\n**Solicitante:** <@${state.userId}> ・ ${safePrivateValue(state.username ?? "usuário")}\n\nAguarde uma pessoa da equipe assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.\n\n-# <@&${verification.staffRoleId}> novo atendimento aguardando análise.`,
+      }],
+      accessory: {
+        type: ComponentType.Thumbnail,
+        media: { url: state.avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
+        description: `Avatar de ${safePrivateValue(state.username ?? "usuário")}`,
+      },
+    },
     { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
     { type: ComponentType.TextDisplay, content: details.join("\n\n") },
   ];
@@ -115,9 +138,29 @@ function staffPanelComponents(state: State, showButtons = true): APIContainerCom
 
 function confirmationButtons(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("verification:approve-confirm").setLabel("Confirmar aprovação").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("verification:approve-cancel").setLabel("Cancelar").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("verification:approve-confirm").setLabel("Confirmar aprovação").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("verification:approve-cancel").setLabel("Cancelar").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
   );
+}
+
+function approvalConfirmationComponents(userId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {
+  const content = result === "confirmed"
+    ? `## Aprovação confirmada\n<@${userId}> foi aprovado e recebeu o cargo de verificado.`
+    : result === "cancelled"
+      ? "## Aprovação cancelada\nNenhuma alteração foi realizada."
+      : `## Confirmar aprovação\nDeseja aprovar <@${userId}>? O cargo de verificado será entregue imediatamente.`;
+  const components: APIContainerComponent["components"] = [
+    { type: ComponentType.TextDisplay, content },
+  ];
+  if (!result) components.push(
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    confirmationButtons().toJSON(),
+  );
+  return [{
+    type: ComponentType.Container,
+    accent_color: result === "confirmed" ? 0x57f287 : result === "cancelled" ? 0x99aab5 : 0x5865f2,
+    components,
+  }];
 }
 
 async function memberIsStaff(guild: Guild, userId: string): Promise<boolean> {
@@ -139,6 +182,29 @@ function componentText(message: Message): string {
   return JSON.stringify(message.components.map((component) => component.toJSON()));
 }
 
+function componentThumbnailUrl(message: Message): string | undefined {
+  const findThumbnail = (value: unknown): string | undefined => {
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        const childUrl = findThumbnail(child);
+        if (childUrl) return childUrl;
+      }
+      return undefined;
+    }
+    if (!value || typeof value !== "object") return undefined;
+    const component = value as { type?: unknown; media?: { url?: unknown }; components?: unknown[]; accessory?: unknown };
+    if (component.type === ComponentType.Thumbnail && typeof component.media?.url === "string") return component.media.url;
+    const accessoryUrl = findThumbnail(component.accessory);
+    if (accessoryUrl) return accessoryUrl;
+    for (const child of component.components ?? []) {
+      const childUrl = findThumbnail(child);
+      if (childUrl) return childUrl;
+    }
+    return undefined;
+  };
+  return findThumbnail(message.components.map((component) => component.toJSON()));
+}
+
 function statusFromText(value: string): Status {
   const text = value.toLowerCase();
   if (text.includes("aprovad")) return "aprovada";
@@ -154,18 +220,24 @@ async function readChannelState(channel: TextChannel): Promise<State | null> {
   const panel = await findStaffPanel(channel); if (!panel) return null;
   if (!panel.embeds[0]) {
     const text = componentText(panel).replace(/\\n/g, "\n");
-    const userId = text.match(/\*\*Usuário\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
+    const userId = text.match(/\*\*(?:Usuário|Solicitante):?\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
     if (!userId) return null;
     const value = (label: string) => text.match(new RegExp(`\\*\\*${label}\\*\\*\\n([^\\n"}]+)`))?.[1];
     const requestedUnix = text.match(/\*\*Solicitado em\*\*[\s\S]*?<t:(\d+)/)?.[1];
+    const requestedText = text.match(/(\d{2})\/(\d{2})\/(\d{4}) ・ (\d{2}):(\d{2})/);
+    const requestedAt = requestedUnix
+      ? new Date(Number(requestedUnix) * 1000).toISOString()
+      : requestedText
+        ? new Date(`${requestedText[3]}-${requestedText[2]}-${requestedText[1]}T${requestedText[4]}:${requestedText[5]}:00-03:00`).toISOString()
+        : panel.createdAt.toISOString();
     const staffId = text.match(/\*\*Staff responsável\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
-    const statusText = value("Status") ?? "Aguardando staff";
+    const statusText = text.match(/(?:### Status do atendimento|\*\*Status do atendimento\*\*[^\n]*|\*\*Solicitado em\*\*[^\n]*\*\*Status do atendimento\*\*)\n([^\n"}]+)/)?.[1]?.trim() ?? value("Status") ?? "Aguardando staff";
     const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-    const prompt = recent?.find((message) => message.author.id === channel.client.user.id && message.content.includes("Sua resposta será apagada automaticamente"));
+    const prompt = recent?.find((message) => message.author.id === channel.client.user.id && /nome completo|data.*formato/i.test(message.content));
     const name = value("Nome informado"); const birthDate = value("Data de nascimento");
     const step: CollectionStep = name && birthDate ? "ready" : name ? "awaiting_birth" : prompt?.content.includes("nome completo") ? "awaiting_name" : "idle";
     const status = statusFromText(statusText);
-    return { userId, username: text.match(new RegExp(`<@${userId}> — ([^\\n"}]+)`))?.[1], status, createdAt: requestedUnix ? new Date(Number(requestedUnix) * 1000).toISOString() : panel.createdAt.toISOString(), staffId, staffUsername: staffId ? text.match(new RegExp(`<@${staffId}> — ([^\\n"}]+)`))?.[1] : undefined, name, birthDate, step, promptId: prompt?.id, deleteAt: ["aprovada", "recusada", "encerrada"].includes(status) ? new Date(panel.editedTimestamp! + verification.deleteDelaySeconds * 1_000).toISOString() : undefined };
+    return { userId, username: text.match(new RegExp(`<@${userId}> — ([^\\n"}]+)`))?.[1], avatarUrl: componentThumbnailUrl(panel), status, createdAt: requestedAt, staffId, staffUsername: staffId ? text.match(new RegExp(`<@${staffId}> — ([^\\n"}]+)`))?.[1] : undefined, name, birthDate, step, promptId: prompt?.id, deleteAt: ["aprovada", "recusada", "encerrada"].includes(status) ? new Date(panel.editedTimestamp! + verification.deleteDelaySeconds * 1_000).toISOString() : undefined };
   }
   const fields = panel.embeds[0].fields; const userField = fields.find((field) => field.name.includes("Usuário"));
   const userId = userField?.value.match(/\d{17,20}/)?.[0]; if (!userId) return null;
@@ -174,7 +246,7 @@ async function readChannelState(channel: TextChannel): Promise<State | null> {
   const requestedUnix = fields.find((field) => field.name.includes("Solicitado"))?.value.match(/<t:(\d+)/)?.[1];
   const hasName = fields.some((field) => field.name === "Nome informado"); const hasBirth = fields.some((field) => field.name === "Data de nascimento");
   const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-  const prompt = recent?.find((message) => message.author.id === channel.client.user.id && message.content.includes("Sua resposta será apagada automaticamente"));
+  const prompt = recent?.find((message) => message.author.id === channel.client.user.id && /nome completo|data.*formato/i.test(message.content));
   const step: CollectionStep = hasName && hasBirth ? "ready" : hasName ? "awaiting_birth" : prompt?.content.includes("nome completo") ? "awaiting_name" : "idle";
   const status = statusFromText(statusText); const decisionTime = panel.embeds[0].timestamp ? Date.parse(panel.embeds[0].timestamp) : panel.createdTimestamp;
   return {
@@ -218,7 +290,7 @@ async function removeCollectionPrompt(channel: TextChannel, state: State): Promi
 }
 
 async function sendCollectionPrompt(channel: TextChannel, userId: string, step: "awaiting_name" | "awaiting_birth", content: string): Promise<void> {
-  const prompt = await channel.send({ content: `<@${userId}>, ${content}\n\n*Sua resposta será apagada automaticamente após ser recebida.*`, allowedMentions: { users: [userId] } });
+  const prompt = await channel.send({ content: `<@${userId}>, ${content}`, allowedMentions: { users: [userId] } });
   await setChannelState(channel, { step, promptId: prompt.id });
 }
 
@@ -311,7 +383,7 @@ export async function startVerificationModule(client: Client): Promise<void> {
         if (member) await textChannel.setName(`verificacao-${channelNickname(member)}`).catch(console.error);
         const staffPanel = await findStaffPanel(textChannel);
         if (staffPanel?.embeds.length) {
-          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username }), flags: ["IsComponentsV2"] }).catch(console.error);
+          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username, avatarUrl: state.avatarUrl ?? member?.displayAvatarURL({ size: 256 }) }), flags: ["IsComponentsV2"] }).catch(console.error);
         }
       }
       if (!state?.deleteAt) continue;
@@ -390,8 +462,8 @@ export async function handleVerificationInteraction(interaction: Interaction): P
     await setChannelState(channel, { status: "aguardando_chamada", staffId: staff.id });
     await interaction.message.edit({ components: staffPanelComponents({ ...state, status: "aguardando_chamada", staffId: staff.id, staffUsername: staff.user.username }) }); return true;
   }
-  if (action === "approve" && interaction.isButton()) { if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", ephemeral: true }); return true; } await interaction.reply({ content: `Confirma a aprovação de <@${state.userId}>? O cargo de verificado será entregue.`, components: [confirmationButtons()], ephemeral: true }); return true; }
-  if (action === "approve-cancel" && interaction.isButton()) { await interaction.editReply({ content: "Aprovação cancelada.", components: [] }); return true; }
+  if (action === "approve" && interaction.isButton()) { if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", ephemeral: true }); return true; } await interaction.reply({ components: approvalConfirmationComponents(state.userId), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+  if (action === "approve-cancel" && interaction.isButton()) { await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "cancelled") }); return true; }
   if (action === "approve-confirm" && interaction.isButton()) return approve(interaction, channel, state, staff);
   if (action === "reject" && interaction.isButton()) {
     if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", ephemeral: true }); return true; }
@@ -424,7 +496,7 @@ async function handleStart(interaction: ButtonInteraction): Promise<true> {
       { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MentionEveryone] },
     ],
   });
-  const state: State = { userId: interaction.user.id, username: member.user.username, status: "solicitada", createdAt, step: "idle" };
+  const state: State = { userId: interaction.user.id, username: member.user.username, avatarUrl: member.displayAvatarURL({ size: 256 }), status: "solicitada", createdAt, step: "idle" };
   await channel.send({ components: staffPanelComponents(state), flags: ["IsComponentsV2"], allowedMentions: { users: [interaction.user.id], roles: [verification.staffRoleId] } });
   await interaction.editReply(`Seu canal privado foi criado: <#${channel.id}>.`); return true;
 }
@@ -438,7 +510,7 @@ async function approve(interaction: ButtonInteraction, channel: TextChannel, sta
   await channel.send(`<@${state.userId}>, sua verificação foi **aprovada** e o cargo foi entregue. Este canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   await member.send("Sua verificação no servidor foi aprovada. Você já recebeu o cargo de verificado.").catch(() => undefined);
   if (next) await sendLog(interaction.client, next, staff, channel.id, "Aprovada", undefined, { name: state.name, birthDate: state.birthDate }); await scheduleDeletion(channel);
-  await interaction.followUp({ content: "Verificação aprovada e cargo entregue.", ephemeral: true }); return true;
+  await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "confirmed") }); return true;
 }
 
 async function reject(interaction: ModalSubmitInteraction, channel: TextChannel, state: State, staff: GuildMember): Promise<true> {

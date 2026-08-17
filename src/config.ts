@@ -55,7 +55,6 @@ export const config = {
     maxOpenPerUser: integer("LFG_MAX_OPEN_PER_USER", 2),
     createCooldownSeconds: integer("LFG_CREATE_COOLDOWN_SECONDS", 30),
     nowExpiryMinutes: integer("LFG_NOW_EXPIRY_MINUTES", 120),
-    scheduledGraceMinutes: integer("LFG_SCHEDULED_GRACE_MINUTES", 60),
     voiceEmptyGraceMinutes: integer("LFG_VOICE_EMPTY_GRACE_MINUTES", 60),
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),

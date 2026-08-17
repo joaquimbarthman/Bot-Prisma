@@ -40,4 +40,4 @@ Sem as duas variáveis do Supabase, o módulo usa `data/ai-module.json` em modo 
 
 ## LFG
 
-O painel LFG é publicado como uma mensagem no chat `1538659348631519303`, sem uso de fórum. Use `LFG_PANEL_CHANNEL_ID` apenas se precisar substituir esse canal. As calls temporárias são sempre criadas na categoria configurada pela especificação. O nome segue `🕹️・call-<criador>`, por exemplo `🕹️・call-dscjoaquim`. O módulo persiste sessões em `data/lfg-module.json`; configure opcionalmente `LFG_STAFF_ROLE_ID`, `LFG_MAX_OPEN_PER_USER`, `LFG_CREATE_COOLDOWN_SECONDS`, `LFG_NOW_EXPIRY_MINUTES`, `LFG_SCHEDULED_GRACE_MINUTES` e `LFG_VOICE_EMPTY_GRACE_MINUTES`.
+O painel LFG é publicado como uma mensagem no chat `1538659348631519303`, sem uso de fórum. Use `LFG_PANEL_CHANNEL_ID` apenas se precisar substituir esse canal. As calls temporárias são sempre criadas na categoria configurada pela especificação. O nome segue `🕹️・call-<criador>`, por exemplo `🕹️・call-dscjoaquim`. O módulo persiste sessões em `data/lfg-module.json`; configure opcionalmente `LFG_STAFF_ROLE_ID`, `LFG_MAX_OPEN_PER_USER`, `LFG_CREATE_COOLDOWN_SECONDS`, `LFG_NOW_EXPIRY_MINUTES` e `LFG_VOICE_EMPTY_GRACE_MINUTES`.
