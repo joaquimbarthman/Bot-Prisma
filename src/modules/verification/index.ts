@@ -3,12 +3,15 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
+  ComponentType,
   EmbedBuilder,
   ModalBuilder,
   PermissionFlagsBits,
+  SeparatorSpacingSize,
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
+  type APIContainerComponent,
   type Client,
   type Guild,
   type GuildMember,
@@ -24,7 +27,7 @@ const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
 type Status = "solicitada" | "em_atendimento" | "aguardando_chamada" | "aprovada" | "recusada" | "encerrada";
 type CollectionStep = "idle" | "awaiting_name" | "awaiting_birth" | "ready";
-type State = { userId: string; status: Status; createdAt: string; staffId?: string; deleteAt?: string; step?: CollectionStep; promptId?: string };
+type State = { userId: string; status: Status; createdAt: string; username?: string; staffId?: string; staffUsername?: string; name?: string; birthDate?: string; reason?: string; deleteAt?: string; step?: CollectionStep; promptId?: string };
 type CollectedData = { name?: string; birthDate?: string };
 
 function enabled(): boolean {
@@ -73,11 +76,41 @@ function staffButtons(reviewReady = false): ActionRowBuilder<ButtonBuilder>[] {
       new ButtonBuilder().setCustomId("verification:waiting").setLabel("Aguardando chamada").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("verification:approve").setLabel("・ Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady),
-      new ButtonBuilder().setCustomId("verification:reject").setLabel("・ Recusar").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(!reviewReady),
+      new ButtonBuilder().setCustomId("verification:approve").setLabel("Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady),
+      new ButtonBuilder().setCustomId("verification:reject").setLabel("Recusar").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(!reviewReady),
       new ButtonBuilder().setCustomId("verification:close").setLabel("Encerrar atendimento").setStyle(ButtonStyle.Secondary),
     ),
   ];
+}
+
+function statusDisplay(state: State): string {
+  if (state.status === "em_atendimento") return "Em atendimento";
+  if (state.status === "aguardando_chamada") return "Aguardando chamada";
+  if (state.status === "aprovada") return "✅ Verificação aprovada";
+  if (state.status === "recusada") return `🚫 Verificação recusada${state.reason ? `\nMotivo: ${state.reason}` : ""}`;
+  if (state.status === "encerrada") return "⚪ Atendimento encerrado";
+  return state.step === "ready" ? "Pronto para análise" : "Aguardando staff";
+}
+
+function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
+  const details = [
+    `**Usuário**\n<@${state.userId}> — ${safePrivateValue(state.username ?? "usuário")}`,
+    `**Status**\n${statusDisplay(state)}`,
+    `**Solicitado em**\n<t:${Math.floor(Date.parse(state.createdAt) / 1000)}:F>`,
+  ];
+  if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> — ${safePrivateValue(state.staffUsername ?? "staff")}`);
+  if (state.name) details.push(`**Nome informado**\n${state.name}`);
+  if (state.birthDate) details.push(`**Data de nascimento**\n${state.birthDate}`);
+  const components: APIContainerComponent["components"] = [
+    { type: ComponentType.TextDisplay, content: `<@${state.userId}> <@&${verification.staffRoleId}>\n## Atendimento de verificação\nAguarde uma staff assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.` },
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    { type: ComponentType.TextDisplay, content: details.join("\n\n") },
+  ];
+  if (showButtons) components.push(
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    ...staffButtons(state.step === "ready").map((row) => row.toJSON()),
+  );
+  return [{ type: ComponentType.Container, accent_color: state.status === "aprovada" ? 0x57f287 : state.status === "recusada" ? 0xed4245 : state.status === "encerrada" ? 0x99aab5 : 0x5865f2, components }];
 }
 
 function confirmationButtons(): ActionRowBuilder<ButtonBuilder> {
@@ -99,7 +132,11 @@ async function findVerificationChannel(guild: Guild, userId: string): Promise<Te
 
 async function findStaffPanel(channel: TextChannel): Promise<Message | null> {
   const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-  return messages?.find((message) => message.author.id === channel.client.user.id && message.embeds[0]?.title === "Atendimento de verificação") ?? null;
+  return messages?.find((message) => message.author.id === channel.client.user.id && (message.embeds[0]?.title === "Atendimento de verificação" || componentText(message).includes("Atendimento de verificação"))) ?? null;
+}
+
+function componentText(message: Message): string {
+  return JSON.stringify(message.components.map((component) => component.toJSON()));
 }
 
 function statusFromText(value: string): Status {
@@ -114,7 +151,22 @@ function statusFromText(value: string): Status {
 
 async function readChannelState(channel: TextChannel): Promise<State | null> {
   const legacy = decodeState(channel.topic); if (legacy) return legacy;
-  const panel = await findStaffPanel(channel); if (!panel?.embeds[0]) return null;
+  const panel = await findStaffPanel(channel); if (!panel) return null;
+  if (!panel.embeds[0]) {
+    const text = componentText(panel).replace(/\\n/g, "\n");
+    const userId = text.match(/\*\*Usuário\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
+    if (!userId) return null;
+    const value = (label: string) => text.match(new RegExp(`\\*\\*${label}\\*\\*\\n([^\\n"}]+)`))?.[1];
+    const requestedUnix = text.match(/\*\*Solicitado em\*\*[\s\S]*?<t:(\d+)/)?.[1];
+    const staffId = text.match(/\*\*Staff responsável\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
+    const statusText = value("Status") ?? "Aguardando staff";
+    const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+    const prompt = recent?.find((message) => message.author.id === channel.client.user.id && message.content.includes("Sua resposta será apagada automaticamente"));
+    const name = value("Nome informado"); const birthDate = value("Data de nascimento");
+    const step: CollectionStep = name && birthDate ? "ready" : name ? "awaiting_birth" : prompt?.content.includes("nome completo") ? "awaiting_name" : "idle";
+    const status = statusFromText(statusText);
+    return { userId, username: text.match(new RegExp(`<@${userId}> — ([^\\n"}]+)`))?.[1], status, createdAt: requestedUnix ? new Date(Number(requestedUnix) * 1000).toISOString() : panel.createdAt.toISOString(), staffId, staffUsername: staffId ? text.match(new RegExp(`<@${staffId}> — ([^\\n"}]+)`))?.[1] : undefined, name, birthDate, step, promptId: prompt?.id, deleteAt: ["aprovada", "recusada", "encerrada"].includes(status) ? new Date(panel.editedTimestamp! + verification.deleteDelaySeconds * 1_000).toISOString() : undefined };
+  }
   const fields = panel.embeds[0].fields; const userField = fields.find((field) => field.name.includes("Usuário"));
   const userId = userField?.value.match(/\d{17,20}/)?.[0]; if (!userId) return null;
   const statusText = fields.find((field) => field.name.includes("Status"))?.value ?? "solicitada";
@@ -125,27 +177,19 @@ async function readChannelState(channel: TextChannel): Promise<State | null> {
   const prompt = recent?.find((message) => message.author.id === channel.client.user.id && message.content.includes("Sua resposta será apagada automaticamente"));
   const step: CollectionStep = hasName && hasBirth ? "ready" : hasName ? "awaiting_birth" : prompt?.content.includes("nome completo") ? "awaiting_name" : "idle";
   const status = statusFromText(statusText); const decisionTime = panel.embeds[0].timestamp ? Date.parse(panel.embeds[0].timestamp) : panel.createdTimestamp;
-  return { userId, status, createdAt: requestedUnix ? new Date(Number(requestedUnix) * 1000).toISOString() : panel.createdAt.toISOString(), staffId, step, promptId: prompt?.id, deleteAt: ["aprovada", "recusada", "encerrada"].includes(status) ? new Date(decisionTime + verification.deleteDelaySeconds * 1_000).toISOString() : undefined };
-}
-
-function replaceStatus(embed: EmbedBuilder, status: string, staff?: GuildMember): EmbedBuilder {
-  let fields = (embed.data.fields ?? []).map((field) => field.name.includes("Status") ? { ...field, value: status } : field);
-  if (staff) {
-    fields = fields.filter((field) => !field.name.includes("Staff responsável"));
-    fields.push({ name: "Staff responsável", value: `<@${staff.id}> • ${safePrivateValue(staff.user.username)}`, inline: true });
-  }
-  return embed.setFields(fields);
-}
-
-function upsertField(embed: EmbedBuilder, name: string, value: string, inline = false): EmbedBuilder {
-  const fields = [...(embed.data.fields ?? [])]; const index = fields.findIndex((field) => field.name === name);
-  const field = { name, value, inline }; if (index === -1) fields.push(field); else fields[index] = field;
-  return embed.setFields(fields);
-}
-
-function collectedData(embed: EmbedBuilder): CollectedData {
-  const fields = embed.data.fields ?? [];
-  return { name: fields.find((field) => field.name === "Nome informado")?.value, birthDate: fields.find((field) => field.name === "Data de nascimento")?.value };
+  return {
+    userId,
+    username: userField?.value.replace(/<@\d{17,20}>\s*[•—-]?\s*/, ""),
+    status,
+    createdAt: requestedUnix ? new Date(Number(requestedUnix) * 1000).toISOString() : panel.createdAt.toISOString(),
+    staffId,
+    staffUsername: fields.find((field) => field.name.includes("Staff responsável"))?.value.replace(/<@\d{17,20}>\s*[•—-]?\s*/, ""),
+    name: fields.find((field) => field.name === "Nome informado")?.value,
+    birthDate: fields.find((field) => field.name === "Data de nascimento")?.value,
+    step,
+    promptId: prompt?.id,
+    deleteAt: ["aprovada", "recusada", "encerrada"].includes(status) ? new Date(decisionTime + verification.deleteDelaySeconds * 1_000).toISOString() : undefined,
+  };
 }
 
 function safePrivateValue(value: string): string {
@@ -174,7 +218,7 @@ async function removeCollectionPrompt(channel: TextChannel, state: State): Promi
 }
 
 async function sendCollectionPrompt(channel: TextChannel, userId: string, step: "awaiting_name" | "awaiting_birth", content: string): Promise<void> {
-  const prompt = await channel.send({ content: `<@${userId}>, ${content}\n*Sua resposta será apagada automaticamente após ser recebida.*`, allowedMentions: { users: [userId] } });
+  const prompt = await channel.send({ content: `<@${userId}>, ${content}\n\n*Sua resposta será apagada automaticamente após ser recebida.*`, allowedMentions: { users: [userId] } });
   await setChannelState(channel, { step, promptId: prompt.id });
 }
 
@@ -265,6 +309,10 @@ export async function startVerificationModule(client: Client): Promise<void> {
       if (state) {
         const member = await guild.members.fetch(state.userId).catch(() => null);
         if (member) await textChannel.setName(`verificacao-${channelNickname(member)}`).catch(console.error);
+        const staffPanel = await findStaffPanel(textChannel);
+        if (staffPanel?.embeds.length) {
+          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username }), flags: ["IsComponentsV2"] }).catch(console.error);
+        }
       }
       if (!state?.deleteAt) continue;
       const remaining = Date.parse(state.deleteAt) - Date.now();
@@ -297,17 +345,14 @@ export async function handleVerificationMessage(message: Message): Promise<boole
   if (state.step === "awaiting_name") {
     const name = message.content.trim();
     if (name.length < 3 || normalizeBirthDate(name)) { await sendCollectionPrompt(channel, state.userId, "awaiting_name", "envie seu **nome completo**, não a data de nascimento."); return true; }
-    const embed = upsertField(EmbedBuilder.from(panel.embeds[0]), "Nome informado", safePrivateValue(name));
-    await panel.edit({ embeds: [embed], components: staffButtons(false) });
+    await panel.edit({ components: staffPanelComponents({ ...state, name: safePrivateValue(name), step: "awaiting_birth" }) });
     await sendCollectionPrompt(channel, state.userId, "awaiting_birth", "agora envie sua **data de nascimento** no formato `DD/MM/AAAA` ou `DDMMAAAA`.");
     return true;
   }
 
   const birthDate = normalizeBirthDate(message.content);
   if (!birthDate) { await sendCollectionPrompt(channel, state.userId, "awaiting_birth", "a data não é válida. Envie no formato `DD/MM/AAAA` ou `DDMMAAAA`."); return true; }
-  let embed = upsertField(EmbedBuilder.from(panel.embeds[0]), "Data de nascimento", birthDate);
-  embed = replaceStatus(embed, "Pronto para análise");
-  await panel.edit({ embeds: [embed], components: staffButtons(true) });
+  await panel.edit({ components: staffPanelComponents({ ...state, birthDate, step: "ready" }) });
   await setChannelState(channel, { step: "ready", promptId: undefined });
   const confirmation = await channel.send(`<@${state.userId}>, dados recebidos. Aguarde a decisão da staff.`);
   setTimeout(() => confirmation.delete().catch(() => undefined), 10_000);
@@ -337,13 +382,13 @@ export async function handleVerificationInteraction(interaction: Interaction): P
   }
   if (action === "take" && interaction.isButton()) {
     await setChannelState(channel, { status: "em_atendimento", staffId: staff.id });
-    await interaction.message.edit({ embeds: [replaceStatus(EmbedBuilder.from(interaction.message.embeds[0]), "Em atendimento", staff)], components: staffButtons(state.step === "ready") });
+    await interaction.message.edit({ components: staffPanelComponents({ ...state, status: "em_atendimento", staffId: staff.id, staffUsername: staff.user.username }) });
     if (!state.step || state.step === "idle") await sendCollectionPrompt(channel, state.userId, "awaiting_name", "envie seu **nome completo**.");
     return true;
   }
   if (action === "waiting" && interaction.isButton()) {
     await setChannelState(channel, { status: "aguardando_chamada", staffId: staff.id });
-    await interaction.message.edit({ embeds: [replaceStatus(EmbedBuilder.from(interaction.message.embeds[0]), "Aguardando chamada", staff)], components: staffButtons(state.step === "ready") }); return true;
+    await interaction.message.edit({ components: staffPanelComponents({ ...state, status: "aguardando_chamada", staffId: staff.id, staffUsername: staff.user.username }) }); return true;
   }
   if (action === "approve" && interaction.isButton()) { if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", ephemeral: true }); return true; } await interaction.reply({ content: `Confirma a aprovação de <@${state.userId}>? O cargo de verificado será entregue.`, components: [confirmationButtons()], ephemeral: true }); return true; }
   if (action === "approve-cancel" && interaction.isButton()) { await interaction.editReply({ content: "Aprovação cancelada.", components: [] }); return true; }
@@ -357,8 +402,8 @@ export async function handleVerificationInteraction(interaction: Interaction): P
   if (action === "reject-submit" && interaction.isModalSubmit()) return reject(interaction, channel, state, staff);
   if (action === "close" && interaction.isButton()) {
     const next = await setChannelState(channel, { status: "encerrada", staffId: staff.id });
-    const panel = interaction.message; await panel.edit({ embeds: [replaceStatus(EmbedBuilder.from(panel.embeds[0]).setColor(0x99aab5).setTimestamp(), "⚪ Atendimento encerrado", staff)], components: [] });
-    if (next) await sendLog(interaction.client, next, staff, channel.id, "Encerrada", undefined, collectedData(EmbedBuilder.from(panel.embeds[0]))); await channel.send(`<@${state.userId}>, este atendimento foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`); await scheduleDeletion(channel); await interaction.followUp({ content: "Atendimento encerrado.", ephemeral: true }); return true;
+    const panel = interaction.message; await panel.edit({ components: staffPanelComponents({ ...state, status: "encerrada", staffId: staff.id, staffUsername: staff.user.username }, false) });
+    if (next) await sendLog(interaction.client, next, staff, channel.id, "Encerrada", undefined, { name: state.name, birthDate: state.birthDate }); await channel.send(`<@${state.userId}>, este atendimento foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`); await scheduleDeletion(channel); await interaction.followUp({ content: "Atendimento encerrado.", ephemeral: true }); return true;
   }
   return true;
 }
@@ -379,14 +424,8 @@ async function handleStart(interaction: ButtonInteraction): Promise<true> {
       { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MentionEveryone] },
     ],
   });
-  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle("Atendimento de verificação")
-    .setDescription("Aguarde uma staff assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.")
-    .addFields(
-      { name: "Usuário", value: `<@${interaction.user.id}> • ${safePrivateValue(member.user.username)}` },
-      { name: "Status", value: "Aguardando staff", inline: true },
-      { name: "Solicitado em", value: `<t:${Math.floor(new Date(createdAt).getTime() / 1000)}:F>`, inline: true },
-    ).setTimestamp(new Date(createdAt));
-  await channel.send({ content: `<@${interaction.user.id}> <@&${verification.staffRoleId}>`, embeds: [embed], components: staffButtons(false), allowedMentions: { users: [interaction.user.id], roles: [verification.staffRoleId] } });
+  const state: State = { userId: interaction.user.id, username: member.user.username, status: "solicitada", createdAt, step: "idle" };
+  await channel.send({ components: staffPanelComponents(state), flags: ["IsComponentsV2"], allowedMentions: { users: [interaction.user.id], roles: [verification.staffRoleId] } });
   await interaction.editReply(`Seu canal privado foi criado: <#${channel.id}>.`); return true;
 }
 
@@ -395,20 +434,20 @@ async function approve(interaction: ButtonInteraction, channel: TextChannel, sta
   if (!member) { await interaction.followUp({ content: "O usuário não está mais no servidor.", ephemeral: true }); return true; }
   await member.roles.add(verification.verifiedRoleId!, `Verificação aprovada por ${staff.user.tag}`);
   const next = await setChannelState(channel, { status: "aprovada", staffId: staff.id }); const panel = await findStaffPanel(channel);
-  if (panel) await panel.edit({ embeds: [replaceStatus(EmbedBuilder.from(panel.embeds[0]).setColor(0x57f287).setTimestamp(), "✅ Verificação aprovada", staff)], components: [] });
+  if (panel) await panel.edit({ components: staffPanelComponents({ ...state, status: "aprovada", staffId: staff.id, staffUsername: staff.user.username }, false) });
   await channel.send(`<@${state.userId}>, sua verificação foi **aprovada** e o cargo foi entregue. Este canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   await member.send("Sua verificação no servidor foi aprovada. Você já recebeu o cargo de verificado.").catch(() => undefined);
-  if (next) await sendLog(interaction.client, next, staff, channel.id, "Aprovada", undefined, panel ? collectedData(EmbedBuilder.from(panel.embeds[0])) : undefined); await scheduleDeletion(channel);
+  if (next) await sendLog(interaction.client, next, staff, channel.id, "Aprovada", undefined, { name: state.name, birthDate: state.birthDate }); await scheduleDeletion(channel);
   await interaction.followUp({ content: "Verificação aprovada e cargo entregue.", ephemeral: true }); return true;
 }
 
 async function reject(interaction: ModalSubmitInteraction, channel: TextChannel, state: State, staff: GuildMember): Promise<true> {
   await interaction.deferReply({ ephemeral: true }); const reason = interaction.fields.getTextInputValue("reason").trim();
   const next = await setChannelState(channel, { status: "recusada", staffId: staff.id }); const panel = await findStaffPanel(channel);
-  if (panel) await panel.edit({ embeds: [replaceStatus(EmbedBuilder.from(panel.embeds[0]).setColor(0xed4245).setTimestamp(), `🚫 Verificação recusada\nMotivo: ${reason}`, staff)], components: [] });
+  if (panel) await panel.edit({ components: staffPanelComponents({ ...state, status: "recusada", reason, staffId: staff.id, staffUsername: staff.user.username }, false) });
   await channel.send(`<@${state.userId}>, sua verificação foi **recusada**. Motivo: ${reason}\nEste canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   const member = await interaction.guild!.members.fetch(state.userId).catch(() => null);
   await member?.send(`Sua verificação foi recusada. Motivo: ${reason}`).catch(() => undefined);
-  if (next) await sendLog(interaction.client, next, staff, channel.id, "Recusada", reason, panel ? collectedData(EmbedBuilder.from(panel.embeds[0])) : undefined); await scheduleDeletion(channel);
+  if (next) await sendLog(interaction.client, next, staff, channel.id, "Recusada", reason, { name: state.name, birthDate: state.birthDate }); await scheduleDeletion(channel);
   await interaction.editReply("Verificação recusada e registrada."); return true;
 }
