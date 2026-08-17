@@ -16,7 +16,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { reportWarningEmoji, verificationBlockEmoji, verificationCheckEmoji } from "../../emoji-manager.js";
+import { reportWarningEmoji, verificationBlockEmoji, verificationCheckEmoji, lfgCloseEmoji  } from "../../emoji-manager.js";
 
 type ReportStatus = "pending" | "resolved" | "unresolved" | "closed";
 type ReportState = { userId: string; status: ReportStatus };
@@ -59,9 +59,9 @@ function openButton(): ActionRowBuilder<ButtonBuilder> {
 function staffButtons(status: ReportStatus): ActionRowBuilder<ButtonBuilder> {
   const finished = status !== "pending";
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:resolved").setLabel("・ Resolvido").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(finished),
-    new ButtonBuilder().setCustomId("report:unresolved").setLabel("・ Não resolvido").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(finished),
-    new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar atendimento").setStyle(ButtonStyle.Secondary).setDisabled(finished),
+    new ButtonBuilder().setCustomId("report:resolved").setLabel(" Resolvido").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(finished),
+    new ButtonBuilder().setCustomId("report:unresolved").setLabel(" Não resolvido").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(finished),
+    new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar atendimento").setEmoji(lfgCloseEmoji() ?? "❌").setStyle(ButtonStyle.Secondary).setDisabled(finished),
   );
 }
 
