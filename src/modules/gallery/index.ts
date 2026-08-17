@@ -1,8 +1,33 @@
-import { AttachmentBuilder, EmbedBuilder, PermissionFlagsBits, type ButtonInteraction, type Client, type Message, type TextChannel } from "discord.js";
-import { config } from "./config.js";
-import { beginGalleryReport, cancelGalleryReport, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, verifyGalleryPost } from "./gallery.js";
-import { addPhotoFrame } from "./gallery-image.js";
-import { galleryButtons, galleryReportButtons } from "./emoji-manager.js";
+import { AttachmentBuilder, ComponentType, EmbedBuilder, PermissionFlagsBits, SeparatorSpacingSize, type APIContainerComponent, type ButtonInteraction, type Client, type Message, type TextChannel } from "discord.js";
+import { config } from "../../config.js";
+import { galleryButtons, galleryReportButtons } from "../../emoji-manager.js";
+import { beginGalleryReport, cancelGalleryReport, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, verifyGalleryPost } from "./store.js";
+import { addPhotoFrame } from "./image.js";
+
+function galleryPostComponents(userId: string, mediaUrl: string, caption: string, timestamp: number, likes: number, reportDisabled = false): APIContainerComponent[] {
+  const legend = caption ? `### ${caption.slice(0, 4000)}\n-# Galeria da comunidade - <t:${Math.floor(timestamp / 1000)}:f>` : `-# Galeria da comunidade - <t:${Math.floor(timestamp / 1000)}:f>`;
+  return [{
+    type: ComponentType.Container,
+    components: [
+      { type: ComponentType.TextDisplay, content: `### <@${userId}>` },
+      { type: ComponentType.MediaGallery, items: [{ media: { url: mediaUrl } }] },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content: legend },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      galleryButtons(likes, reportDisabled).toJSON(),
+    ],
+  }];
+}
+
+function componentsWithGalleryButtons(message: Message, likes: number, reportDisabled: boolean) {
+  const container = message.components.find((component) => component.type === ComponentType.Container);
+  if (!container) return [galleryButtons(likes, reportDisabled)];
+  const data = container.toJSON() as APIContainerComponent;
+  return [{
+    ...data,
+    components: data.components.map((component) => component.type === ComponentType.ActionRow ? galleryButtons(likes, reportDisabled).toJSON() : component),
+  }];
+}
 
 export async function refreshGalleryButtons(client: Client): Promise<void> {
   const channel = await client.channels.fetch(config.galleryChannelId).catch(() => null);
@@ -11,7 +36,18 @@ export async function refreshGalleryButtons(client: Client): Promise<void> {
   for (const [messageId, post] of await listGalleryPosts()) {
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) continue;
-    await message.edit({ components: [galleryButtons(post.likes.length, post.reportDisabled ?? false)] }).catch((error) => console.error(`[GALERIA] Falha ao atualizar os botões de ${messageId}:`, error));
+    const isComponentsV2 = message.components.some((component) => component.type === ComponentType.Container);
+    const imageUrl = message.embeds[0]?.image?.url ?? message.attachments.first()?.url;
+    if (!isComponentsV2 && imageUrl) {
+      const caption = message.embeds[0]?.description?.replace(/^###\s*/, "") ?? "";
+      await message.edit({
+        embeds: [],
+        components: galleryPostComponents(post.ownerId, imageUrl, caption, message.createdTimestamp, post.likes.length, post.reportDisabled ?? false),
+        flags: ["IsComponentsV2"],
+      }).catch((error) => console.error(`[GALERIA] Falha ao migrar a publicação ${messageId}:`, error));
+    } else {
+      await message.edit({ components: componentsWithGalleryButtons(message, post.likes.length, post.reportDisabled ?? false) }).catch((error) => console.error(`[GALERIA] Falha ao atualizar os botões de ${messageId}:`, error));
+    }
     refreshed += 1;
   }
   console.log(`[GALERIA] Botões sincronizados em ${refreshed} publicações.`);
@@ -27,15 +63,10 @@ export async function handleGalleryMessage(message: Message): Promise<boolean> {
     const framed = await addPhotoFrame(Buffer.from(await response.arrayBuffer()));
     const filename = `foto-${message.author.id}.png`;
     const caption = message.content.trim();
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setAuthor({ name: message.member?.displayName ?? message.author.username, iconURL: message.author.displayAvatarURL() })
-      .setImage(`attachment://${filename}`)
-      .setFooter({ text: "Galeria da comunidade" })
-      .setTimestamp();
-    if (caption) embed.setDescription(`### ${caption.slice(0, 4000)}`);
     const post = await message.channel.send({
-      embeds: [embed], files: [new AttachmentBuilder(framed, { name: filename })], components: [galleryButtons(0)],
+      files: [new AttachmentBuilder(framed, { name: filename })],
+      components: galleryPostComponents(message.author.id, `attachment://${filename}`, caption, Date.now(), 0),
+      flags: ["IsComponentsV2"],
     });
     await createGalleryPost(post.id, message.author.id);
     await message.delete().catch(() => undefined);
@@ -59,7 +90,7 @@ export async function handleGalleryButton(interaction: ButtonInteraction): Promi
   }
   if (action === "curtir") {
     const result = await toggleGalleryLike(interaction.message.id, interaction.user.id);
-    await interaction.update({ components: [galleryButtons(result.post?.likes.length ?? 0, result.post?.reportDisabled ?? false)] });
+    await interaction.update({ components: componentsWithGalleryButtons(interaction.message, result.post?.likes.length ?? 0, result.post?.reportDisabled ?? false) });
   } else if (action === "detalhes") {
     const likes = post.likes.slice(0, 50).map((id) => `<@${id}>`).join("\n");
     const extra = post.likes.length > 50 ? `\n+${post.likes.length - 50}` : "";
@@ -123,7 +154,7 @@ async function handleGalleryModerationButton(interaction: ButtonInteraction): Pr
 
   if (action === "verificar") {
     const verified = await verifyGalleryPost(messageId);
-    await publication.edit({ components: [galleryButtons(verified?.likes.length ?? post.likes.length, true)] });
+    await publication.edit({ components: componentsWithGalleryButtons(publication, verified?.likes.length ?? post.likes.length, true) });
     const reviewed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x57f287).setFooter({ text: `Verificado por ${interaction.user.tag}` });
     await interaction.message.edit({ embeds: [reviewed], components: [] });
     await interaction.editReply("Publicação verificada. O botão de denúncia foi removido.");

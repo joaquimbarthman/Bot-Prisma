@@ -1,7 +1,7 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, EmbedBuilder, PermissionFlagsBits, SeparatorSpacingSize,
   StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type ButtonInteraction, type Client,
-  type GuildMember, type Interaction, type ModalSubmitInteraction,
+  type APIContainerComponent, type GuildMember, type Interaction, type ModalSubmitInteraction,
 } from "discord.js";
 import { config } from "../../config.js";
 import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgSoundEmoji, lfgTrashEmoji, lfgWarningEmoji } from "../../emoji-manager.js";
@@ -50,6 +50,32 @@ function controls(session: LfgSession): ActionRowBuilder<ButtonBuilder> {
   );
 }
 function panel(): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } { const card = new EmbedBuilder().setColor(0x5865f2).setAuthor({ name: "PRISMA • LFG" }).setTitle("Encontrar pessoas para jogar").setDescription("Crie um grupo em poucos toques, reúna sua equipe e entre no lobby.").addFields({ name: "Como funciona", value: "Escolha o jogo, defina vagas e publique. Quando o grupo estiver completo, ele é marcado automaticamente.", inline: false }); if (botAvatarUrl) card.setThumbnail(botAvatarUrl); return { embeds: [card], components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("・ Criar grupo").setEmoji(lfgGamepadEmoji() ?? "🎮").setStyle(ButtonStyle.Primary))] }; }
+function lfgPanelComponents(): APIContainerComponent[] {
+  return [{
+    type: ComponentType.Container,
+    accent_color: 0x5865f2,
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content: "## PRISMA • LFG\n### Encontrar pessoas para jogar\nCrie um grupo em poucos toques, reuna sua equipe e entre no lobby.",
+      },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.MediaGallery, items: [{ media: { url: "https://i.imgur.com/r0pG15G.gif" } }] },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel(" Criar grupo").setEmoji(lfgGamepadEmoji() ?? "🎮").setStyle(ButtonStyle.Primary),
+      ).toJSON(),
+    ],
+  }];
+}
+
+function hasButtonWithCustomId(component: unknown, customId: string): boolean {
+  if (!component || typeof component !== "object") return false;
+  const candidate = component as { customId?: unknown; components?: unknown };
+  if (candidate.customId === customId) return true;
+  return Array.isArray(candidate.components) && candidate.components.some((child) => hasButtonWithCustomId(child, customId));
+}
+
 function draftView(draft: Draft): { embeds: EmbedBuilder[]; components: Array<ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>> } {
   const schedule = draft.scheduledMinutes ? `Daqui a ${draft.scheduledMinutes} min` : "Agora";
   return {
@@ -96,7 +122,17 @@ async function submitCreate(interaction: ButtonInteraction, draft: Draft): Promi
   await mutate((db) => { const current = db.sessions.find((value) => value.id === id)!; current.messageId = message.id; current.updatedAt = new Date().toISOString(); });
   createdCooldowns.set(interaction.user.id, Date.now()); drafts.delete(draftKey(interaction)); await interaction.update({ content: "LFG criado e publicado.", embeds: [], components: [] });
 }
-export async function startLfgModule(client: Client): Promise<void> { botAvatarUrl = client.user?.displayAvatarURL({ size: 256 }); if (!config.lfg.panelChannelId) return; const channel = await client.channels.fetch(config.lfg.panelChannelId).catch(() => null); if (!channel?.isTextBased() || channel.isDMBased()) { console.error("[LFG] Canal do painel não encontrado."); return; } const messages = await channel.messages.fetch({ limit: 50 }); const existing = messages.find((message) => message.author.id === client.user?.id && message.components.some((row) => "components" in row && row.components.some((component) => "customId" in component && component.customId === `${PREFIX}create`))); if (existing) await existing.edit(panel()); else await channel.send(panel()); }
+export async function startLfgModule(client: Client): Promise<void> {
+  botAvatarUrl = client.user?.displayAvatarURL({ size: 256 });
+  if (!config.lfg.panelChannelId) return;
+  const channel = await client.channels.fetch(config.lfg.panelChannelId).catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) { console.error("[LFG] Canal do painel não encontrado."); return; }
+  const messages = await channel.messages.fetch({ limit: 50 });
+  const existing = messages.find((message) => message.author.id === client.user?.id && message.components.some((component) => hasButtonWithCustomId(component, `${PREFIX}create`)));
+  const payload = { components: lfgPanelComponents(), flags: ["IsComponentsV2"] as const };
+  if (existing) await existing.edit({ ...payload, embeds: [] });
+  else await channel.send(payload);
+}
 export async function handleLfgInteraction(interaction: Interaction): Promise<boolean> {
   if (!(interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith(PREFIX)) return false;
   const [,, id] = interaction.customId.split(":");

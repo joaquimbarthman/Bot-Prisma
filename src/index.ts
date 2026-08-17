@@ -2,7 +2,7 @@ import { Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits, REST,
 import { commands } from "./commands.js";
 import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
-import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./gallery-feature.js";
+import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./modules/gallery/index.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";

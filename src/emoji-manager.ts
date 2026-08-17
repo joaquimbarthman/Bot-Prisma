@@ -85,7 +85,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
 
 export function galleryButtons(likes: number, reportDisabled = false): ActionRowBuilder<ButtonBuilder> {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("galeria:curtir").setLabel(`・ ${likes}`).setEmoji(likes > 0 ? galleryEmojis.full ?? "♥" : galleryEmojis.empty ?? "♡").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("galeria:curtir").setLabel(` ${likes}`).setEmoji(likes > 0 ? galleryEmojis.full ?? "♥" : galleryEmojis.empty ?? "♡").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("galeria:detalhes").setLabel(" ").setEmoji(galleryEmojis.details ?? "⋯").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("galeria:excluir").setLabel(" ").setEmoji(galleryEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Secondary),
   );

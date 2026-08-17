@@ -3,9 +3,12 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
+  ComponentType,
   EmbedBuilder,
   PermissionFlagsBits,
   OverwriteType,
+  SeparatorSpacingSize,
+  type APIContainerComponent,
   type ButtonInteraction,
   type Client,
   type Guild,
@@ -49,7 +52,7 @@ function statusFromInteraction(interaction: ButtonInteraction): ReportStatus {
 
 function openButton(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:open").setLabel("・ Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("report:open").setLabel(" Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
   );
 }
 
@@ -89,6 +92,43 @@ function isReportChannelName(name: string): boolean {
   return name.startsWith("atendimento-") || name.startsWith("denuncia-");
 }
 
+function publicPanelComponents(): APIContainerComponent[] {
+  return [{
+    type: ComponentType.Container,
+    accent_color: 0xed4245,
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content: "## PRISMA • Segurança\n ### Central de atendimentos\nUse o botao abaixo para abrir um atendimento privado com a equipe. Explique o ocorrido e envie provas no canal criado.",
+      },
+      {
+        type: ComponentType.Separator,
+        divider: true,
+        spacing: SeparatorSpacingSize.Small,
+      },
+      {
+        type: ComponentType.MediaGallery,
+        items: [{
+          media: { url: "https://i.imgur.com/4WikC8s.gif" },
+        }],
+      },
+      {
+        type: ComponentType.Separator,
+        divider: true,
+        spacing: SeparatorSpacingSize.Small,
+      },
+      openButton().toJSON(),
+    ],
+  }];
+}
+
+function hasButtonWithCustomId(component: unknown, customId: string): boolean {
+  if (!component || typeof component !== "object") return false;
+  const candidate = component as { customId?: unknown; components?: unknown };
+  if (candidate.customId === customId) return true;
+  return Array.isArray(candidate.components) && candidate.components.some((child) => hasButtonWithCustomId(child, customId));
+}
+
 async function findOpenReport(guild: Guild, userId: string): Promise<TextChannel | null> {
   await guild.channels.fetch();
   return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && isReportChannelName(channel.name) && reportUserId(channel) === userId) as TextChannel | undefined ?? null;
@@ -102,11 +142,11 @@ async function ensurePanel(client: Client, guild: Guild): Promise<void> {
   const channel = await guild.channels.fetch(config.reports.panelChannelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) throw new Error(`Canal do painel de atendimentos ${config.reports.panelChannelId} não encontrado.`);
   const recent = await channel.messages.fetch({ limit: 50 });
-  const existing = recent.find((message) => message.author.id === client.user?.id && message.components.some((row) => "components" in row && row.components.some((component) => "customId" in component && component.customId === "report:open")));
-  if (existing) { await existing.edit({ embeds: [publicPanelEmbed()], components: [openButton()] }); return; }
+  const existing = recent.find((message) => message.author.id === client.user?.id && message.components.some((component) => hasButtonWithCustomId(component, "report:open")));
+  const panel = { components: publicPanelComponents(), flags: ["IsComponentsV2"] as const };
+  if (existing) { await existing.edit({ ...panel, embeds: [] }); return; }
   await channel.send({
-    embeds: [publicPanelEmbed()],
-    components: [openButton()],
+    ...panel,
   });
 }
 

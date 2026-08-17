@@ -206,6 +206,16 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
   const panel = await guild.channels.fetch(verification.panelChannelId).catch(() => null);
   const verifiedChat = await guild.channels.fetch(verification.verifiedChatChannelId).catch(() => null);
   const gallery = await guild.channels.fetch(config.galleryChannelId).catch(() => null);
+  const onboarding = await guild.fetchOnboarding().catch(() => null);
+  const onboardingChannelIds = new Set<string>();
+  if (onboarding) {
+    for (const channelId of onboarding.defaultChannels.keys()) onboardingChannelIds.add(channelId);
+    for (const prompt of onboarding.prompts.values()) {
+      for (const option of prompt.options.values()) {
+        for (const channelId of option.channels.keys()) onboardingChannelIds.add(channelId);
+      }
+    }
+  }
   if (panel && !panel.isThread()) {
     await panel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, SendMessages: false });
     await panel.permissionOverwrites.edit(verification.staffRoleId, { ViewChannel: true, SendMessages: false });
@@ -215,9 +225,17 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
   for (const channel of [verifiedChat, gallery]) {
     if (!channel || channel.isThread()) continue;
     const isVerifiedChat = channel.id === verification.verifiedChatChannelId;
-    await channel.permissionOverwrites.edit(guild.roles.everyone, isVerifiedChat
-      ? { ViewChannel: true, ReadMessageHistory: true, AddReactions: true, SendMessages: false, SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false, AttachFiles: false, EmbedLinks: false, UseApplicationCommands: false }
-      : { ViewChannel: false });
+    const mustBePublicForOnboarding = onboardingChannelIds.has(channel.id);
+    const publicReadPermissions = { ViewChannel: true, ReadMessageHistory: true, AddReactions: true, SendMessages: false, SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false, AttachFiles: false, EmbedLinks: false, UseApplicationCommands: false };
+    try {
+      await channel.permissionOverwrites.edit(guild.roles.everyone, isVerifiedChat || mustBePublicForOnboarding
+        ? publicReadPermissions
+        : { ViewChannel: false });
+    } catch (error) {
+      if ((error as { code?: unknown }).code !== 350003) throw error;
+      console.warn(`[VERIFICACAO] Canal ${channel.id} faz parte do Onboarding; mantendo leitura publica para @everyone.`);
+      await channel.permissionOverwrites.edit(guild.roles.everyone, publicReadPermissions);
+    }
     await channel.permissionOverwrites.edit(verification.verifiedRoleId!, { ViewChannel: true, SendMessages: true, SendMessagesInThreads: true, ReadMessageHistory: true, AttachFiles: true, EmbedLinks: true, AddReactions: true, UseApplicationCommands: true });
     await channel.permissionOverwrites.edit(verification.staffRoleId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, ManageMessages: true });
     await channel.permissionOverwrites.edit(botId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, ManageMessages: true });
