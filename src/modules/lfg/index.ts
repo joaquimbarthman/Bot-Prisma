@@ -49,7 +49,7 @@ function publicationComponents(session: LfgSession): APIContainerComponent[] {
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `**Jogadores**　　　　　　　　　**Status**\n${session.participants.length}/${session.maxPlayers}　　　　　   　 　　　　${label(status)}\n\n**Participantes**\n${participants}`,
+        content: `**Jogadores**　　　　　　　**Status**\n${session.participants.length}/${session.maxPlayers}　　　　　   　 　　　　${label(status)}\n\n**Participantes**\n${participants}`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       row.toJSON(),
