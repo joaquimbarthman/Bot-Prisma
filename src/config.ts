@@ -66,6 +66,7 @@ export const config = {
     accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
     personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/prisma-personality.json",
+    soulPath: process.env.PRISMA_SOUL_PATH?.trim() || "personality/soul.md",
     reasoningEffort: process.env.AI_REASONING_EFFORT?.trim() || "minimal",
     maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),
     historyMaxMessages: integer("AI_HISTORY_MAX_MESSAGES", 10),

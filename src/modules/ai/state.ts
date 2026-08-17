@@ -11,6 +11,7 @@ export interface PrismaRelationship {
   trust: number;
   preferredStyle?: string | null;
   relationshipSummary?: string | null;
+  recentMilestones?: string[];
   summaryUpdatedAt?: string | null;
   interactionCount: number;
   createdAt: string;
@@ -44,6 +45,8 @@ export interface PrismaStateUpdate {
   sarcasm?: number;
   affection?: number;
   relationshipSummaryCandidate?: string | null;
+  recentMilestoneCandidates?: string[] | null;
+  preferredStyleCandidate?: string | null;
 }
 
 const moodSet = new Set<string>(prismaMoods);
@@ -89,6 +92,26 @@ export function safeRelationshipSummary(value: unknown): string | null | undefin
   return summary;
 }
 
+export function safeRecentMilestones(value: unknown): string[] | null | undefined {
+  if (value === null) return null;
+  if (!Array.isArray(value)) return undefined;
+  const milestones: string[] = [];
+  for (const candidate of value.slice(0, 5)) {
+    const safe = safeRelationshipSummary(candidate);
+    if (typeof safe !== "string" || safe.length > 140) continue;
+    if (!milestones.includes(safe)) milestones.push(safe);
+  }
+  return milestones.length ? milestones : undefined;
+}
+
+export function safePreferredStyle(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const style = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!style || sensitiveSummaryPattern.test(style) || sensitiveValuePattern.test(style) || instructionPattern.test(style) || /https?:\/\/|[<>{}\[\]`]/i.test(style)) return undefined;
+  return style;
+}
+
 export function validateStateUpdate(value: unknown): PrismaStateUpdate {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
@@ -111,6 +134,10 @@ export function validateStateUpdate(value: unknown): PrismaStateUpdate {
   if (typeof source.mood === "string" && moodSet.has(source.mood)) result.mood = source.mood as PrismaMood;
   const summary = safeRelationshipSummary(aliasedValue(source, "relationship_summary_candidate", "relationshipSummaryCandidate"));
   if (summary !== undefined) result.relationshipSummaryCandidate = summary;
+  const milestones = safeRecentMilestones(aliasedValue(source, "recent_milestone_candidates", "recentMilestoneCandidates"));
+  if (milestones !== undefined) result.recentMilestoneCandidates = milestones;
+  const preferredStyle = safePreferredStyle(aliasedValue(source, "preferred_style_candidate", "preferredStyleCandidate"));
+  if (preferredStyle !== undefined) result.preferredStyleCandidate = preferredStyle;
   return result;
 }
 
@@ -124,6 +151,7 @@ export function defaultRelationship(discordId: string, now = new Date().toISOStr
     trust: 30,
     preferredStyle: null,
     relationshipSummary: null,
+    recentMilestones: [],
     summaryUpdatedAt: null,
     interactionCount: 0,
     createdAt: now,
@@ -163,9 +191,8 @@ export function decayTemperament(temperament: PrismaTemperament, now = new Date(
   };
 }
 
-function summaryCanChange(relationship: PrismaRelationship, now: Date): boolean {
+function memoryCanChange(relationship: PrismaRelationship, now: Date): boolean {
   if (relationship.interactionCount < 5) return false;
-  if (!relationship.relationshipSummary) return true;
   const lastUpdate = relationship.summaryUpdatedAt ? Date.parse(relationship.summaryUpdatedAt) : NaN;
   return !Number.isFinite(lastUpdate) || now.getTime() - lastUpdate >= 7 * 24 * 60 * 60_000;
 }
@@ -187,9 +214,23 @@ export function applyValidatedStateUpdate(
     interactionCount: Math.max(0, state.relationship.interactionCount + 1),
     updatedAt: timestamp,
   };
-  if (update.relationshipSummaryCandidate && summaryCanChange(relationship, now)) {
-    relationship.relationshipSummary = update.relationshipSummaryCandidate;
+  if (memoryCanChange(relationship, now)) {
+    let memoryChanged = false;
+    if (update.relationshipSummaryCandidate) {
+      relationship.relationshipSummary = update.relationshipSummaryCandidate;
+      memoryChanged = true;
+    }
+    if (update.recentMilestoneCandidates?.length) {
+      relationship.recentMilestones = [...new Set([...(relationship.recentMilestones ?? []), ...update.recentMilestoneCandidates])].slice(-5);
+      memoryChanged = true;
+    }
+    if (update.preferredStyleCandidate) {
+      relationship.preferredStyle = update.preferredStyleCandidate;
+      memoryChanged = true;
+    }
+    if (memoryChanged) {
     relationship.summaryUpdatedAt = timestamp;
+    }
   }
   const currentTemperament = decayTemperament(state.temperament, now);
   const temperament: PrismaTemperament = {

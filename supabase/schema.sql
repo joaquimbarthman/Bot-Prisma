@@ -24,6 +24,7 @@ create table if not exists public.prisma_relationships (
   trust smallint not null default 30 check (trust between 0 and 100),
   preferred_style text,
   relationship_summary text check (char_length(relationship_summary) <= 300),
+  recent_milestones jsonb not null default '[]'::jsonb check (jsonb_typeof(recent_milestones) = 'array' and jsonb_array_length(recent_milestones) <= 5),
   interaction_count integer not null default 0 check (interaction_count >= 0),
   summary_updated_at timestamptz,
   created_at timestamptz not null default now(),
@@ -52,6 +53,7 @@ alter table public.prisma_relationships
   add column if not exists trust smallint not null default 30,
   add column if not exists preferred_style text,
   add column if not exists relationship_summary text,
+  add column if not exists recent_milestones jsonb not null default '[]'::jsonb,
   add column if not exists interaction_count integer not null default 0,
   add column if not exists summary_updated_at timestamptz,
   add column if not exists created_at timestamptz not null default now(),
@@ -238,6 +240,8 @@ alter table public.ai_events enable row level security;
 alter table public.prisma_relationships enable row level security;
 alter table public.prisma_temperament enable row level security;
 
+drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);
+
 create or replace function public.apply_prisma_state(
   p_discord_id text,
   p_familiarity smallint,
@@ -247,6 +251,7 @@ create or replace function public.apply_prisma_state(
   p_trust smallint,
   p_preferred_style text,
   p_relationship_summary text,
+  p_recent_milestones jsonb,
   p_interaction_count integer,
   p_summary_updated_at timestamptz,
   p_relationship_created_at timestamptz,
@@ -280,6 +285,7 @@ begin
     trust,
     preferred_style,
     relationship_summary,
+    recent_milestones,
     interaction_count,
     summary_updated_at,
     created_at,
@@ -293,6 +299,7 @@ begin
     p_trust,
     p_preferred_style,
     p_relationship_summary,
+    p_recent_milestones,
     p_interaction_count,
     p_summary_updated_at,
     p_relationship_created_at,
@@ -306,6 +313,7 @@ begin
     trust = excluded.trust,
     preferred_style = excluded.preferred_style,
     relationship_summary = excluded.relationship_summary,
+    recent_milestones = excluded.recent_milestones,
     interaction_count = excluded.interaction_count,
     summary_updated_at = excluded.summary_updated_at,
     updated_at = excluded.updated_at;
@@ -362,9 +370,9 @@ begin
 end
 $reset_prisma_state$;
 
-revoke all on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) from public, anon, authenticated;
+revoke all on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function public.reset_prisma_state(text, boolean) from public, anon, authenticated;
-grant execute on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) to service_role;
+grant execute on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) to service_role;
 grant execute on function public.reset_prisma_state(text, boolean) to service_role;
 
 commit;
