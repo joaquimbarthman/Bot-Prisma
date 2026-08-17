@@ -4,7 +4,7 @@ import type { LfgGameKey } from "./config.js";
 
 export type LfgStatus = "open" | "completed" | "closed" | "expired" | "deleted";
 export type LfgSession = {
-  id: string; guildId: string; channelId: string; messageId: string | null; creatorId: string;
+  id: string; guildId: string; channelId: string; messageId: string | null; roleMentionMessageId: string | null; creatorId: string;
   game: LfgGameKey; maxPlayers: number; participants: string[]; scheduledFor: string | null;
   note: string; autoVoiceEnabled: boolean; voiceChannelId: string | null; temporaryRoleId: string | null; status: LfgStatus;
   createdAt: string; updatedAt: string; expiresAt: string; deleteVoiceWhenEmpty: boolean;
@@ -14,7 +14,12 @@ const file = path.resolve("data", "lfg-module.json");
 let queue = Promise.resolve();
 
 async function read(): Promise<Database> {
-  try { const value = JSON.parse(await readFile(file, "utf8")) as Partial<Database>; return { sessions: Array.isArray(value.sessions) ? value.sessions : [] }; }
+  try {
+    const content = await readFile(file, "utf8");
+    if (!content.trim()) return { sessions: [] };
+    const value = JSON.parse(content) as Partial<Database>;
+    return { sessions: Array.isArray(value.sessions) ? value.sessions : [] };
+  }
   catch (error: unknown) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { sessions: [] }; throw error; }
 }
 async function write(db: Database): Promise<void> {
