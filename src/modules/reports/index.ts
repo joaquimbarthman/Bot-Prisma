@@ -46,10 +46,6 @@ function statusFromValue(value: string): ReportStatus {
   return "pending";
 }
 
-function statusFromInteraction(interaction: ButtonInteraction): ReportStatus {
-  return statusFromValue(interaction.message.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
-}
-
 function openButton(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("report:open").setLabel(" Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
@@ -72,20 +68,23 @@ function statusLabel(status: ReportStatus): string {
   return "⏳ Aguardando análise";
 }
 
-function reportEmbed(userId: string, status: ReportStatus): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : status === "closed" ? 0x99aab5 : 0xfee75c)
-    .setTitle("Atendimento privado")
-    .setDescription(`Olá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.`)
-    .addFields({ name: "Status", value: statusLabel(status) })
-    .setFooter({ text: "Somente você e a equipe responsável podem acessar este canal." });
-}
-
-function publicPanelEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle("Central de atendimentos")
-    .setDescription("Use o botão abaixo para abrir um atendimento privado com a equipe. Explique o ocorrido e envie provas no canal criado.");
+function reportComponents(userId: string, status: ReportStatus): APIContainerComponent[] {
+  return [{
+    type: ComponentType.Container,
+    accent_color: status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : status === "closed" ? 0x99aab5 : 0xfee75c,
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content: `<@${userId}> <@&${config.reports.staffRoleId}>\n## Atendimento privado\nOlá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.\n\n**Status**\n${statusLabel(status)}\n\n-# Somente você e a equipe responsável podem acessar este canal.`,
+      },
+      {
+        type: ComponentType.Separator,
+        divider: true,
+        spacing: SeparatorSpacingSize.Small,
+      },
+      staffButtons(status).toJSON(),
+    ],
+  }];
 }
 
 function isReportChannelName(name: string): boolean {
@@ -167,10 +166,10 @@ async function migrateTechnicalTopics(guild: Guild): Promise<void> {
       await channel.setName(expectedName).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar nome de ${channel.id}:`, error));
     }
     const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-    const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((row) => "components" in row && row.components.some((component) => "customId" in component && component.customId === "report:resolved")));
+    const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((component) => hasButtonWithCustomId(component, "report:resolved")));
     if (panel) {
       const status = statusFromValue(panel.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
-      await panel.edit({ embeds: [reportEmbed(userId, status)], components: [staffButtons(status)] }).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar painel de ${channel.id}:`, error));
+      await panel.edit({ content: null, embeds: [], components: reportComponents(userId, status), flags: ["IsComponentsV2"] }).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar painel de ${channel.id}:`, error));
     }
   }
 }
@@ -200,9 +199,8 @@ async function openReport(interaction: ButtonInteraction): Promise<void> {
     ],
   });
   await channel.send({
-    content: `<@${interaction.user.id}> <@&${config.reports.staffRoleId}>`,
-    embeds: [reportEmbed(interaction.user.id, "pending")],
-    components: [staffButtons("pending")],
+    components: reportComponents(interaction.user.id, "pending"),
+    flags: ["IsComponentsV2"],
     allowedMentions: { users: [interaction.user.id], roles: [config.reports.staffRoleId] },
   });
   await interaction.editReply(`Seu atendimento foi aberto em <#${channel.id}>.`);
@@ -215,13 +213,13 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   const userId = reportUserId(channel);
   if (!userId || !isReportChannelName(channel.name)) { await interaction.reply({ content: "Este canal não possui um atendimento válido.", ephemeral: true }); return; }
   if (!(action === "resolved" || action === "unresolved" || action === "close")) return;
-  const state: ReportState = { userId, status: statusFromInteraction(interaction) };
+  const state: ReportState = { userId, status: "pending" };
   const finalStatus: ReportStatus = action === "close" ? "closed" : action;
-  await interaction.update({ embeds: [reportEmbed(state.userId, finalStatus)], components: [staffButtons(finalStatus)] });
+  await interaction.update({ components: reportComponents(state.userId, finalStatus) });
   const log = await interaction.guild!.channels.fetch(config.reports.logChannelId).catch(() => null);
   if (!log?.isSendable()) {
     await interaction.followUp({ content: "Não encontrei o canal de registros de atendimento. Este canal não será apagado.", ephemeral: true });
-    await interaction.message.edit({ embeds: [reportEmbed(state.userId, "pending")], components: [staffButtons("pending")] });
+    await interaction.message.edit({ components: reportComponents(state.userId, "pending") });
     return;
   }
   const createdAt = Math.floor(channel.createdTimestamp / 1000);

@@ -38,18 +38,17 @@ export async function grantVerifiedRoleToBooster(member: GuildMember): Promise<b
   return true;
 }
 
+export function startedBoosting(
+  oldMember: Pick<GuildMember, "premiumSinceTimestamp">,
+  newMember: Pick<GuildMember, "premiumSinceTimestamp">,
+): boolean {
+  return oldMember.premiumSinceTimestamp === null && newMember.premiumSinceTimestamp !== null;
+}
+
 export async function syncBoosterAccessRoles(guild: Guild): Promise<void> {
   const members = await guild.members.fetch();
   const boosters = members.filter(shouldGrantAccessRole);
   const results = await Promise.allSettled(boosters.map((member) => grantAccessRoleToBooster(member)));
   const failures = results.filter((result) => result.status === "rejected");
   if (failures.length) console.error(`[PRISMA-IA] Falha ao conceder o cargo de acesso a ${failures.length} Booster(s). Verifique a hierarquia e a permissão Gerenciar cargos.`);
-}
-
-export async function syncBoosterVerifiedRoles(guild: Guild): Promise<void> {
-  const members = await guild.members.fetch();
-  const boosters = members.filter((member) => member.premiumSinceTimestamp !== null && !member.roles.cache.has(config.verification.verifiedRoleId!));
-  const results = await Promise.allSettled(boosters.map((member) => grantVerifiedRoleToBooster(member)));
-  const failures = results.filter((result) => result.status === "rejected");
-  if (failures.length) console.error(`[BOOSTER] Falha ao conceder o cargo de verificado a ${failures.length} Booster(s). Verifique a hierarquia e a permissão Gerenciar cargos.`);
 }

@@ -23,7 +23,7 @@ function sessionStatus(session: LfgSession): LfgSession["status"] { return sessi
 function label(status: LfgSession["status"]): string { return ({ open: "🟢 Aberto", completed: "✅ Completo", closed: "🔒 Fechado", expired: "⌛ Expirado", deleted: "🗑️ Excluído" })[status]; }
 function publicationComponents(session: LfgSession): APIContainerComponent[] {
   const game = LFG_GAMES[session.game]; const status = sessionStatus(session);
-  const scheduled = session.scheduledFor ? `<t:${Math.floor(Date.parse(session.scheduledFor) / 1000)}:F>` : "Agora";
+  const scheduled = session.scheduledFor ? `<t:${Math.floor(Date.parse(session.scheduledFor) / 1000)}:t>` : "Agora";
   const participants = session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum";
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

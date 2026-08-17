@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GuildMember } from "discord.js";
 import { config } from "../src/config.js";
-import { accessLevel, shouldGrantAccessRole } from "../src/modules/ai/permissions.js";
+import { accessLevel, shouldGrantAccessRole, startedBoosting } from "../src/modules/ai/permissions.js";
 
 function member(roleIds: string[], premiumSinceTimestamp: number | null): GuildMember {
   return { roles: { cache: { has: (id: string) => roleIds.includes(id) } }, premiumSinceTimestamp } as unknown as GuildMember;
@@ -31,4 +31,10 @@ test("Booster sem o cargo entra na fila de concessão automática", () => {
   } finally {
     config.prismaAi.accessRoleId = original;
   }
+});
+
+test("o cargo de verificado é concedido somente ao iniciar o Boost", () => {
+  assert.equal(startedBoosting(member([], null), member([], Date.now())), true);
+  assert.equal(startedBoosting(member([], Date.now() - 1_000), member([], Date.now())), false);
+  assert.equal(startedBoosting(member([], null), member([], null)), false);
 });
