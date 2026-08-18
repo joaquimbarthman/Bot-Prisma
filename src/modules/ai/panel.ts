@@ -283,14 +283,14 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     return true;
   }
   if (action === "reset-cancel") {
-    await interaction.deleteReply().catch(() => undefined);
+    await refreshUserPanel(interaction);
     await interaction.followUp({ content: "Reinício cancelado. Nenhuma informação foi alterada.", flags: ["Ephemeral"] });
     return true;
   }
   if (action === "reset-only" || action === "reset-with-history") {
     const clearHistory = action === "reset-with-history";
     await resetPrismaState(interaction.user.id, clearHistory);
-    await interaction.deleteReply().catch(() => undefined);
+    await refreshUserPanel(interaction);
     await interaction.followUp({
       content: clearHistory
         ? "Relação e histórico reiniciados. A dinâmica e o histórico recente foram apagados."
