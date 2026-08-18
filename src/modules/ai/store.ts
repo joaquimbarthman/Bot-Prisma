@@ -10,6 +10,7 @@ import {
   defaultTemperament,
   prismaMoods,
   safePreferredStyle,
+  safeAboutMe,
   safeRecentMilestones,
   safeRelationshipSummary,
   type PrismaMood,
@@ -21,7 +22,7 @@ import {
 
 export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperament, PrismaUserState } from "./state.js";
 
-export type UserSettings = { nickname: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
+export type UserSettings = { nickname: string; aboutMe: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 type SpontaneousEvent = { discordId: string; createdAt: string };
@@ -34,13 +35,14 @@ type Database = {
   spontaneous: SpontaneousEvent[];
 };
 
-const defaults: UserSettings = { nickname: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
-const privacySafeDefaults: UserSettings = { nickname: "", allowMentions: false, memoryEnabled: false, spontaneousInteractions: false };
+const defaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
+const privacySafeDefaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: false, memoryEnabled: false, spontaneousInteractions: false };
 const file = path.resolve("data", "ai-module.json");
 const supabase = config.supabaseUrl && config.supabaseSecretKey
   ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
   : null;
 let localQueue = Promise.resolve();
+let warnedMissingStateRpc = false;
 const stateQueues = new Map<string, Promise<void>>();
 const stateRevisions = new Map<string, number>();
 const historyQueues = new Map<string, Promise<void>>();
@@ -57,6 +59,7 @@ function booleanOrDefault(value: unknown, fallback: boolean): boolean {
 function normalizeSettings(value: Partial<UserSettings>): UserSettings {
   return {
     nickname: sanitizeNickname(value.nickname),
+    aboutMe: safeAboutMe(value.aboutMe) ?? "",
     allowMentions: booleanOrDefault(value.allowMentions, defaults.allowMentions),
     memoryEnabled: booleanOrDefault(value.memoryEnabled, defaults.memoryEnabled),
     spontaneousInteractions: booleanOrDefault(value.spontaneousInteractions, defaults.spontaneousInteractions),
@@ -67,6 +70,7 @@ function fromSettings(row: Record<string, unknown> | null): UserSettings {
   if (!row) return { ...defaults };
   return normalizeSettings({
     nickname: row.nickname as string,
+    aboutMe: row.about_me as string,
     allowMentions: row.allow_mentions as boolean,
     memoryEnabled: row.memory_enabled as boolean,
     spontaneousInteractions: row.spontaneous_interactions as boolean,
@@ -77,6 +81,7 @@ function toSettings(id: string, value: UserSettings) {
   return {
     discord_id: id,
     nickname: value.nickname,
+    about_me: value.aboutMe,
     allow_mentions: value.allowMentions,
     memory_enabled: value.memoryEnabled,
     spontaneous_interactions: value.spontaneousInteractions,
@@ -247,8 +252,51 @@ async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> 
   if (!supabase) return false;
   const { error } = await supabase.rpc("apply_prisma_state", stateRpcParameters(state));
   if (!error) return true;
-  remoteFailure("atualizar estado relacional", error.message);
-  return false;
+  const missingRpc = /apply_prisma_state|schema cache|function .*does not exist/i.test(error.message);
+  if (!missingRpc) {
+    remoteFailure("atualizar estado relacional", error.message);
+    return false;
+  }
+  if (!warnedMissingStateRpc) {
+    console.warn("[SUPABASE] RPC apply_prisma_state ausente; usando fallback direto até as migrações serem aplicadas.");
+    warnedMissingStateRpc = true;
+  }
+
+  const params = stateRpcParameters(state);
+  const relationship = {
+    discord_id: params.p_discord_id,
+    familiarity: params.p_familiarity,
+    warmth: params.p_warmth,
+    patience: params.p_patience,
+    banter: params.p_banter,
+    trust: params.p_trust,
+    preferred_style: params.p_preferred_style,
+    relationship_summary: params.p_relationship_summary,
+    recent_milestones: params.p_recent_milestones,
+    interaction_count: params.p_interaction_count,
+    summary_updated_at: params.p_summary_updated_at,
+    created_at: params.p_relationship_created_at,
+    updated_at: params.p_relationship_updated_at,
+  };
+  let relationshipResult = await supabase.from("prisma_relationships").upsert(relationship, { onConflict: "discord_id" });
+  if (relationshipResult.error && /recent_milestones|schema cache|column .* does not exist/i.test(relationshipResult.error.message)) {
+    const { recent_milestones: _ignored, ...legacyRelationship } = relationship;
+    relationshipResult = await supabase.from("prisma_relationships").upsert(legacyRelationship, { onConflict: "discord_id" });
+  }
+  const temperamentResult = await supabase.from("prisma_temperament").upsert({
+    discord_id: params.p_discord_id,
+    mood: params.p_mood,
+    energy: params.p_energy,
+    sarcasm: params.p_sarcasm,
+    affection: params.p_affection,
+    last_interaction_at: params.p_last_interaction_at,
+    updated_at: params.p_temperament_updated_at,
+  }, { onConflict: "discord_id" });
+  if (relationshipResult.error || temperamentResult.error) {
+    remoteFailure("fallback direto do estado relacional", relationshipResult.error?.message ?? temperamentResult.error?.message);
+    return false;
+  }
+  return true;
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -294,7 +342,11 @@ export async function updateSettings(id: string, patch: Partial<UserSettings>): 
     if (readError) { remoteFailure("ler preferências para atualização", readError.message); throw new Error("Não foi possível salvar sua preferência agora."); }
     const result = normalizeSettings({ ...fromSettings(data), ...patch });
     const { error } = await supabase.from("user_settings").upsert(toSettings(id, result), { onConflict: "discord_id" });
-    if (error) { remoteFailure("salvar preferências", error.message); throw new Error("Não foi possível salvar sua preferência agora."); }
+    if (error) {
+      remoteFailure("salvar preferências", error.message);
+      if (/about_me|schema cache/i.test(error.message)) throw new Error("A coluna about_me ainda não existe no Supabase. Aplique a migração 20260817_prisma_about_me.sql.");
+      throw new Error("Não foi possível salvar sua preferência agora.");
+    }
     return result;
   }
   return withLocal((db) => {

@@ -57,6 +57,11 @@ export const config = {
     nowExpiryMinutes: integer("LFG_NOW_EXPIRY_MINUTES", 120),
     voiceEmptyGraceMinutes: integer("LFG_VOICE_EMPTY_GRACE_MINUTES", 60),
   },
+  bumpReminder: {
+    channelId: process.env.BUMP_REMINDER_CHANNEL_ID?.trim() || "1537991941512237067",
+    moderationRoleId: process.env.BUMP_REMINDER_ROLE_ID?.trim() || "1538337494355935302",
+    intervalHours: integer("BUMP_REMINDER_INTERVAL_HOURS", 2),
+  },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),
   prismaAi: {

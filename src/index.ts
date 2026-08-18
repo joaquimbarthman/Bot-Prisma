@@ -11,6 +11,7 @@ import { handleVerificationInteraction, handleVerificationMessage, startVerifica
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
+import { startBumpReminder } from "./modules/bump-reminder/index.js";
 
 validateConfig();
 
@@ -37,6 +38,7 @@ client.once(Events.ClientReady, async (ready) => {
   }
   startAiCleanup(ready);
   startLfgCleanup(ready);
+  startBumpReminder(ready);
   console.log(`Prisma conectado como ${ready.user.tag}. IA: ${config.openAiKey ? "ativa" : "desativada"}.`);
   console.log(`[MONITOR] Canais: ${config.monitoredChannelIds.size ? [...config.monitoredChannelIds].join(", ") : "todos os canais de texto"}.`);
   for (const channelId of config.monitoredChannelIds) {

@@ -81,7 +81,7 @@ function publicPanelComponents(): APIContainerComponent[] {
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.MediaGallery,
-        items: [{ media: { url: "https://i.imgur.com/r0pG15G.gif" } }],
+        items: [{ media: { url: "https://imgur.com/SAg0MOT.gif" } }],
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       startButton().toJSON(),

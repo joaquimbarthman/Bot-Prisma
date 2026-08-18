@@ -92,6 +92,12 @@ export function safeRelationshipSummary(value: unknown): string | null | undefin
   return summary;
 }
 
+export function safeAboutMe(value: unknown): string | null | undefined {
+  const safe = safeRelationshipSummary(value);
+  if (typeof safe === "string" && safe.length > 160) return undefined;
+  return safe;
+}
+
 export function safeRecentMilestones(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value)) return undefined;
