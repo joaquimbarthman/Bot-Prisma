@@ -177,6 +177,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
+      currentAuthorName: message.member.displayName,
     };
     const allowedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
@@ -191,7 +192,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
     }
-    if (needsChannelContext(message)) {
+    if (direct || needsChannelContext(message)) {
       const channelContext = await recentChannelContext(message);
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
@@ -269,6 +270,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
       "Comente sobre minha atividade atual.",
       {
         mode: "activity",
+        currentAuthorName: newPresence.member.displayName,
         activityDescription: activity.description,
       },
     );

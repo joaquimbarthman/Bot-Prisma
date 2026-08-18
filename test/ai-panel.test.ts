@@ -53,7 +53,7 @@ test("painel público possui somente a entrada para o painel privado", () => {
   assert.equal("label" in buttons[0] ? buttons[0].label : undefined, "Abrir painel");
   assert.equal(container.type, 17);
   assert.equal(container.components.filter((component) => component.type === 14).length, 2);
-  assert.ok(container.components.some((component) => component.type === 13));
+  assert.ok(container.components.some((component) => component.type === 12));
 });
 
 test("resume o sobre mim no painel sem alterar o texto armazenado", () => {

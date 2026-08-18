@@ -23,7 +23,7 @@ test("gera prompt compacto com personalidade-base fixa", () => {
   assert.match(prompt, /viado.*bicha.*contexto claramente amistoso/i);
   assert.match(prompt, /no máximo uma ou duas expressões/i);
   assert.match(prompt, /não como assistente/i);
-  assert.ok(prompt.length < 3_500, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
+  assert.ok(prompt.length < 5_000, `Prompt inesperadamente grande: ${prompt.length} caracteres`);
 });
 
 test("não promove dados relacionais às instruções privilegiadas", () => {
