@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyValidatedStateUpdate, decayTemperament, defaultRelationship, defaultTemperament, validateStateUpdate } from "../src/modules/ai/state.js";
+import { applyValidatedStateUpdate, decayTemperament, defaultRelationship, defaultTemperament, relationshipAbsenceDays, relationshipCallback, relationshipCelebration, relationshipStage, validateStateUpdate } from "../src/modules/ai/state.js";
 
 test("valida campos conhecidos e aplica clamps obrigatórios", () => {
   const update = validateStateUpdate({
@@ -131,3 +131,23 @@ for (const [label, candidate] of unsafeSummaryCandidates) {
     assert.equal(update.relationshipSummaryCandidate, undefined);
   });
 }
+
+test("define estágios explícitos conforme o vínculo amadurece", () => {
+  assert.equal(relationshipStage(defaultRelationship("123")).id, "newcomers");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 10, familiarity: 45, trust: 40, warmth: 50 }).id, "growing");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 50, familiarity: 65, trust: 60, warmth: 70 }).id, "close");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 150, familiarity: 80, trust: 75, warmth: 80 }).id, "accomplices");
+});
+
+test("celebra marcos uma vez e recupera lembranças em cadência moderada", () => {
+  assert.match(relationshipCelebration({ ...defaultRelationship("123"), interactionCount: 49 }) ?? "", /sintonia/);
+  assert.equal(relationshipCelebration({ ...defaultRelationship("123"), interactionCount: 50 }), null);
+  assert.equal(relationshipCallback({ ...defaultRelationship("123"), interactionCount: 24, recentMilestones: ["Venceram uma partida difícil."] }), "Venceram uma partida difícil.");
+  assert.equal(relationshipCallback({ ...defaultRelationship("123"), interactionCount: 25, recentMilestones: ["Venceram uma partida difícil."] }), null);
+});
+
+test("mede ausência sem alterar silenciosamente o temperamento", () => {
+  const temperament = { ...defaultTemperament("123"), lastInteractionAt: "2026-08-01T12:00:00.000Z" };
+  assert.equal(relationshipAbsenceDays(temperament, new Date("2026-08-09T12:00:00.000Z")), 8);
+  assert.equal(relationshipAbsenceDays(defaultTemperament("123"), new Date()), null);
+});

@@ -129,3 +129,15 @@ test("limita a resposta visível abaixo do teto do Discord", () => {
   const output = parseProviderOutput(JSON.stringify({ reply: longReply, state_update: {} }), [], 140);
   assert.ok(output.reply.length <= 1_800);
 });
+
+test("orienta o tom pelo vínculo sem expor pontuação", () => {
+  const state = {
+    relationship: { ...defaultRelationship("123"), interactionCount: 49, familiarity: 65, trust: 60, warmth: 70 },
+    temperament: { ...defaultTemperament("123"), lastInteractionAt: "2020-01-01T00:00:00.000Z" },
+  };
+  const prompt = buildRuntimePrompt({ mode: "direct" }, state);
+  assert.match(prompt, /Amizade próxima/);
+  assert.match(prompt, /boa sintonia/);
+  assert.match(prompt, /pelo menos uma semana/);
+  assert.match(prompt, /não exponha contagens, pontos ou estágios internos/i);
+});

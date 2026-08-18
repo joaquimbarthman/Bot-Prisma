@@ -61,7 +61,7 @@ function needsChannelContext(message: Message): boolean {
 }
 
 function requestsDirectMention(content: string): boolean {
-  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva)\b/i.test(normalized(content));
+  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda)\b/i.test(normalized(content));
 }
 
 export function explicitlyRequestedMentionUserIds(
@@ -71,7 +71,10 @@ export function explicitlyRequestedMentionUserIds(
   authorId?: string,
 ): string[] {
   if (!requestsDirectMention(content)) return [];
-  return [...mentionedUserIds].filter((userId) => userId !== botId && userId !== authorId).slice(0, 3);
+  const rawMentionIds = [...content.matchAll(/<@!?(\d{1,25})>/g)].map((match) => match[1]);
+  return [...new Set([...mentionedUserIds, ...rawMentionIds])]
+    .filter((userId) => userId !== botId && userId !== authorId)
+    .slice(0, 3);
 }
 
 async function recentChannelContext(message: Message): Promise<string> {
@@ -137,6 +140,9 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       client.user?.id,
       message.author.id,
     );
+    if (requestsDirectMention(content)) {
+      console.log(`[PRISMA-IA] Menções de usuário autorizadas para ${message.author.id}: ${allowedMentionUserIds.join(", ") || "nenhuma"}.`);
+    }
     if (allowedMentionUserIds.length) replyContext.allowedMentionUserIds = allowedMentionUserIds;
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";

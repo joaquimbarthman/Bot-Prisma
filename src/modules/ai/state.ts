@@ -246,7 +246,45 @@ export function applyValidatedStateUpdate(
 }
 
 export function qualitativeRelationship(relationship: PrismaRelationship): string {
-  const familiar = relationship.familiarity >= 65 ? "muito familiar" : relationship.familiarity >= 35 ? "familiar" : "em construção";
+  const stage = relationshipStage(relationship);
   const tone = relationship.banter >= 65 ? "brincalhona" : relationship.warmth >= 65 ? "acolhedora" : relationship.trust >= 65 ? "estável" : "equilibrada";
-  return `${familiar} e ${tone}`;
+  return `${stage.label.toLowerCase()}, com uma dinâmica ${tone}`;
+}
+
+export type RelationshipStage = "newcomers" | "growing" | "close" | "accomplices";
+
+const relationshipStages: Record<RelationshipStage, { label: string; guidance: string }> = {
+  newcomers: { label: "Se conhecendo", guidance: "Seja receptiva, mas ainda sem intimidade presumida, apelidos pessoais ou piadas internas." },
+  growing: { label: "Criando confiança", guidance: "Pode demonstrar familiaridade leve e espelhar algumas expressões da pessoa sem forçar intimidade." },
+  close: { label: "Amizade próxima", guidance: "Fale com mais calor e naturalidade; reutilize com moderação o estilo e as referências que funcionam com essa pessoa." },
+  accomplices: { label: "Cúmplices", guidance: "A conversa pode ter bastante sintonia e brincadeira personalizada, desde que respeite os limites e o assunto atual." },
+};
+
+export function relationshipStage(relationship: PrismaRelationship): { id: RelationshipStage; label: string; guidance: string } {
+  const closeness = (relationship.familiarity + relationship.trust + relationship.warmth) / 3;
+  let id: RelationshipStage = "newcomers";
+  if (relationship.interactionCount >= 120 && closeness >= 70) id = "accomplices";
+  else if (relationship.interactionCount >= 40 && closeness >= 55) id = "close";
+  else if (relationship.interactionCount >= 8 && closeness >= 35) id = "growing";
+  return { id, ...relationshipStages[id] };
+}
+
+export function relationshipCelebration(relationship: PrismaRelationship): string | null {
+  const nextInteraction = relationship.interactionCount + 1;
+  if (nextInteraction === 50) return "Reconheça de leve que vocês já criaram uma boa sintonia.";
+  if (nextInteraction === 100) return "Celebre de forma breve que essa amizade já tem história.";
+  if (nextInteraction === 365) return "Faça uma celebração pessoal e calorosa pela trajetória compartilhada.";
+  return null;
+}
+
+export function relationshipAbsenceDays(temperament: PrismaTemperament, now = new Date()): number | null {
+  const lastInteraction = temperament.lastInteractionAt ? Date.parse(temperament.lastInteractionAt) : NaN;
+  if (!Number.isFinite(lastInteraction)) return null;
+  return Math.floor(Math.max(0, now.getTime() - lastInteraction) / 86_400_000);
+}
+
+export function relationshipCallback(relationship: PrismaRelationship): string | null {
+  const milestones = relationship.recentMilestones ?? [];
+  if (!milestones.length || relationship.interactionCount < 20 || relationship.interactionCount % 12 !== 0) return null;
+  return milestones[Math.floor(relationship.interactionCount / 12) % milestones.length] ?? null;
 }
