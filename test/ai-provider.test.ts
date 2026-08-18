@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, parseProviderOutput, sanitizeOutput } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, parseProviderOutput, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("preserva somente menções de usuários autorizados", () => {
@@ -140,4 +140,17 @@ test("orienta o tom pelo vínculo sem expor pontuação", () => {
   assert.match(prompt, /boa sintonia/);
   assert.match(prompt, /pelo menos uma semana/);
   assert.match(prompt, /não exponha contagens, pontos ou estágios internos/i);
+});
+
+test("mantém conversa casual curta e só expande quando solicitado", () => {
+  assert.equal(replyWordLimit("o que acha da Ariana?", "direct"), 30);
+  assert.equal(replyWordLimit("fale mais sobre a Ariana", "direct"), 140);
+  assert.equal(replyWordLimit("atividade", "activity"), 20);
+  assert.equal(replyWordLimit("saudade", "absence"), 20);
+});
+
+test("atividade e ausência recebem instruções humanas e curtas", () => {
+  assert.match(buildRuntimePrompt({ mode: "activity", activityDescription: "ouvindo Into You de Ariana Grande" }), /nome do jogo, música ou artista/);
+  assert.match(buildRuntimePrompt({ mode: "absence" }), /cadê você/);
+  assert.match(buildRuntimePrompt({ mode: "absence" }), /não cobre explicações/i);
 });

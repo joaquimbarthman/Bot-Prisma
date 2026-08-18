@@ -15,7 +15,7 @@ import { addUsage, monthlyCostBrl, type HistoryItem, type UsageItem, type UserSe
 
 const client = config.openAiKey ? new OpenAI({ apiKey: config.openAiKey, baseURL: config.openAiBaseUrl, timeout: 15_000, maxRetries: 1 }) : null;
 
-export type ReplyMode = "direct" | "spontaneous" | "activity" | "light_roast";
+export type ReplyMode = "direct" | "spontaneous" | "activity" | "absence" | "light_roast";
 
 export type ReplyContext = {
   mode?: ReplyMode;
@@ -79,18 +79,20 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   ];
 
   if (context.mode === "spontaneous") {
-    lines.push("Inicie uma conversa breve ligada à mensagem atual. Soe espontânea; não diga que decidiu intervir nem que está analisando o canal. Como o usuário não falou diretamente com você, deixe todos os campos de state_update como null.");
+    lines.push("Inicie uma conversa bem curta ligada à mensagem atual. Soe espontânea; não diga que decidiu intervir nem que está analisando o canal. Como o usuário não falou diretamente com você, deixe todos os campos de state_update como null.");
   } else if (context.mode === "activity") {
-    lines.push("Faça um comentário espontâneo e específico sobre a atividade pública. Não diga que está monitorando a pessoa. Deixe todos os campos de state_update como null.");
+    lines.push("Faça um comentário espontâneo de uma frase sobre a atividade pública. Cite naturalmente o nome do jogo, música ou artista informado e demonstre uma reação pessoal simples, como alguém comentando com um amigo. Não invente que conhece ou ama algo se não tiver certeza; nesse caso, mostre curiosidade. Não diga que está monitorando a pessoa. Deixe todos os campos de state_update como null.");
+  } else if (context.mode === "absence") {
+    lines.push("Chame a pessoa de forma espontânea porque faz tempo que vocês não conversam. Use somente uma frase casual, como 'cadê você?', 'sumiu, hein' ou uma variação natural. Não cobre explicações, não demonstre carência e não mencione contagens ou tempo exato. Deixe todos os campos de state_update como null.");
   } else if (context.mode === "light_roast") {
     lines.push("A pessoa provocou você de forma leve. Responda com confiança e uma tirada curta, sem hostilidade ou humilhação pesada.");
   }
 
-  if (state?.temperament.mood === "annoyed" && context.mode !== "spontaneous" && context.mode !== "activity") {
+  if (state?.temperament.mood === "annoyed" && context.mode !== "spontaneous" && context.mode !== "activity" && context.mode !== "absence") {
     lines.push("Seu temperamento com esta pessoa está irritado agora. Você pode responder de forma mais seca e usar no máximo uma provocação ou gíria mais ácida, como 'aff', 'mimimi', 'gado' ou 'boomer', somente se combinar com o que ela acabou de dizer. Não use termos ligados a grupos protegidos, aparência, trauma, saúde, deficiência ou sexualidade; não ameace, não persiga e não faça humilhação pesada. Em assunto sério ou pedido de ajuda real, abandone a provocação e responda com respeito.");
   }
 
-  if (state && context.mode !== "spontaneous" && context.mode !== "activity") {
+  if (state && context.mode !== "spontaneous" && context.mode !== "activity" && context.mode !== "absence") {
     const stage = relationshipStage(state.relationship);
     lines.push(`Estágio atual do vínculo: ${stage.label}. ${stage.guidance}`);
 
@@ -174,9 +176,9 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
   return stripAssistantCliches(stripPausePunctuation(sanitized));
 }
 
-function replyWordLimit(content: string, mode: ReplyMode | undefined): number {
-  if (mode === "spontaneous" || mode === "activity" || mode === "light_roast") return 60;
-  return /\b(?:explique|explica|detalhe|como funciona|por que|porque|tutorial|passo a passo|diferen[cç]a)\b/i.test(content) ? 140 : 60;
+export function replyWordLimit(content: string, mode: ReplyMode | undefined): number {
+  if (mode === "spontaneous" || mode === "activity" || mode === "absence" || mode === "light_roast") return 20;
+  return /\b(?:explique|explica|detalhe|fale mais|conte mais|desenvolva|como funciona|por que|porque|tutorial|passo a passo|diferen[cç]a)\b/i.test(content) ? 140 : 30;
 }
 
 export function parseProviderOutput(

@@ -5,12 +5,14 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
+import { relationshipAbsenceDays } from "./state.js";
 import { addHistoryTurn, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday, updateSettings } from "./store.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
 const presenceSignatures = new Map<string, string>();
 const spontaneousReservations = new SpontaneousReservationLedger();
+const absenceOutreachAt = new Map<string, number>();
 
 async function reserveSpontaneousSlot(discordId: string): Promise<boolean> {
   return spontaneousReservations.reserve(
@@ -28,6 +30,40 @@ export function startAiCleanup(client: Client): void {
   refreshAiPanel(client).catch((error) => console.error("[PRISMA-IA] Falha ao atualizar painel:", error));
   cleanupExpired().catch(console.error);
   setInterval(() => cleanupExpired().catch(console.error), 60 * 60_000).unref();
+  setTimeout(() => sendOccasionalAbsenceMessage(client).catch(console.error), 5 * 60_000).unref();
+  setInterval(() => sendOccasionalAbsenceMessage(client).catch(console.error), 60 * 60_000).unref();
+}
+
+async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
+  if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || Math.random() >= 0.2) return;
+  const channel = await client.channels.fetch(config.prismaAi.generalChannelId).catch(() => null);
+  if (!channel?.isSendable() || channel.isDMBased()) return;
+  const members = [...channel.guild.members.cache.values()]
+    .filter((member) => !member.user.bot && accessLevel(member) !== "none")
+    .sort(() => Math.random() - 0.5);
+
+  for (const member of members) {
+    const settings = await getSettings(member.id);
+    if (!settings.spontaneousInteractions) continue;
+    const state = await getPrismaState(member.id);
+    const absentDays = relationshipAbsenceDays(state.temperament);
+    if (absentDays === null || absentDays < 7 || state.relationship.interactionCount < 8) continue;
+    if (Date.now() - (absenceOutreachAt.get(member.id) ?? 0) < 7 * 86_400_000) continue;
+    if (Date.now() - await lastSpontaneousAt(member.id) < config.prismaAi.spontaneousCooldownMinutes * 60_000) continue;
+    if (!await reserveSpontaneousSlot(member.id)) continue;
+    try {
+      const history = settings.memoryEnabled ? await recentHistory(member.id, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
+      const generated = await generateReply(member.id, settings, state, history, "Faz tempo que não conversamos.", { mode: "absence" });
+      const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
+      const prefix = settings.allowMentions ? `<@${member.id}> ` : "";
+      await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [member.id] : [] } });
+      await addSpontaneous(member.id);
+      absenceOutreachAt.set(member.id, Date.now());
+    } finally {
+      releaseSpontaneousSlot(member.id);
+    }
+    return;
+  }
 }
 
 async function isReplyToBot(message: Message, client: Client): Promise<boolean> {
