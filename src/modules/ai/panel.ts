@@ -193,6 +193,7 @@ async function authorizedMember(interaction: Interaction): Promise<GuildMember |
 }
 
 async function refreshUserPanel(interaction: Interaction): Promise<void> {
+  if (!(interaction.isButton() || interaction.isModalSubmit())) return;
   const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
   await interaction.editReply({ components: userPanelComponents(interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
 }
