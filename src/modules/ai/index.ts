@@ -94,8 +94,8 @@ function isDirectBotInsult(content: string, botId?: string): boolean {
 }
 
 function requestedNickname(content: string): string | null {
-  const match = content.match(/(?:quero\s+(?:que\s+)?(?:você|voce|vc)\s+me\s+cham(?:e|ando)\s+de|me\s+cham(?:a|e)\s+de)\s+["']?([^\n.!?]{2,32})["']?/i);
-  const nickname = match?.[1]?.trim();
+  const match = content.match(/(?:quero\s+(?:que\s+)?(?:você|voce|vc)\s+me\s+cham(?:e|ando)\s+de|(?:pode\s+)?me\s+cham(?:a|e)\s+de|pode\s+me\s+chamar\s+de)\s+["']?([^\n.!?]{2,32})["']?/i);
+  const nickname = match?.[1]?.replace(/\s+(?:por favor|pfv|please|ok|né|ne)\s*$/i, "").trim();
   return nickname && !/@(?:everyone|here)|<@|https?:\/\//i.test(nickname) ? nickname : null;
 }
 
@@ -178,6 +178,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
+      currentAuthorId: message.author.id,
     };
     const allowedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
@@ -271,6 +272,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
       {
         mode: "activity",
         currentAuthorName: newPresence.member.displayName,
+        currentAuthorId: newPresence.userId,
         activityDescription: activity.description,
       },
     );

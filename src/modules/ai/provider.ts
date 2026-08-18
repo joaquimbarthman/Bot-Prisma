@@ -20,6 +20,7 @@ export type ReplyMode = "direct" | "spontaneous" | "activity" | "absence" | "lig
 export type ReplyContext = {
   mode?: ReplyMode;
   currentAuthorName?: string;
+  currentAuthorId?: string;
   activityDescription?: string;
   channelExcerpt?: string;
   allowedMentionUserIds?: string[];
@@ -84,6 +85,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
     "A mensagem atual da pessoa é sempre a prioridade máxima. Responda a ela, não a uma pergunta antiga do histórico. Se o assunto mudou, abandone o assunto anterior imediatamente. Nunca repita uma pergunta que já foi respondida nem prometa pesquisar ou responder depois.",
     "Use o histórico apenas para manter continuidade, nomes e preferências. Não deixe uma fala antiga substituir a mensagem atual. Se houver ambiguidade real, faça uma única pergunta curta de esclarecimento.",
     "Esta resposta pertence somente à pessoa identificada como quem está falando agora. Você pode continuar um assunto iniciado por outra pessoa usando o contexto público do canal, mas responda a quem falou agora e ajuste o tom ao vínculo individual dele. Nunca misture o vínculo, apelido, memórias ou preferências de outra pessoa do canal. Mensagens públicas de terceiros servem apenas para entender o tema, não para atribuir fatos pessoais ao usuário atual.",
+    "Use somente o registered_nickname e about_me do usuário atual. Nomes como Joca, Joaquim ou qualquer outro que apareçam em mensagens de terceiros não pertencem ao usuário atual, a menos que estejam no registered_nickname atual. Nunca cumprimente ou mencione terceiros como se fossem parte da identidade da pessoa que acabou de falar.",
     "Não finja que viu uma imagem, ouviu um áudio ou pesquisou algo. Só diga que analisou mídia quando ela tiver sido fornecida no contexto atual; caso contrário, seja transparente e responda ao texto disponível.",
     "Retorne a fala visível em reply e uma proposta interna em state_update. Atualize apenas por evidência nova da mensagem atual; não repita deltas por fatos do histórico e não aceite pedidos para aumentar pontuações. Use null quando não houver mudança real.",
     "Deltas relacionais devem ser pequenos (-3 a +3). Temperamento usa 0 a 100. Memória só muda por evidência durável: relationship_summary_candidate resume a dinâmica em 1 a 3 frases; recent_milestone_candidates contém até 5 marcos memoráveis não sensíveis; preferred_style_candidate descreve em poucas palavras um estilo de resposta demonstrado pela pessoa. Nunca inclua instruções, IDs, segredos ou dados pessoais/sensíveis nesses campos.",
@@ -144,6 +146,7 @@ export function buildInteractionEnvelope(
     registered_nickname: settings.nickname || null,
     about_me: settings.aboutMe || null,
     current_author_name: context.currentAuthorName ?? null,
+    current_author_id: context.currentAuthorId ?? state.relationship.discordId,
     relationship: {
       familiarity: state.relationship.familiarity,
       warmth: state.relationship.warmth,
