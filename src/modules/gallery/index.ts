@@ -4,8 +4,22 @@ import { galleryButtons, galleryReportButtons } from "../../emoji-manager.js";
 import { beginGalleryReport, cancelGalleryReport, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, verifyGalleryPost } from "./store.js";
 import { addPhotoFrame } from "./image.js";
 
+function galleryTimestamp(timestamp: number): string {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(timestamp));
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("day")}/${value("month")}/${value("year")} ・ ${value("hour")}:${value("minute")}`;
+}
+
 function galleryPostComponents(userId: string, mediaUrl: string, caption: string, timestamp: number, likes: number, reportDisabled = false): APIContainerComponent[] {
-  const legend = caption ? `### ${caption.slice(0, 4000)}\n-# Galeria da comunidade - <t:${Math.floor(timestamp / 1000)}:f>` : `-# Galeria da comunidade - <t:${Math.floor(timestamp / 1000)}:f>`;
+  const legend = caption ? `### ${caption.slice(0, 4000)}\n-# Galeria da comunidade - ${galleryTimestamp(timestamp)}` : `-# Galeria da comunidade - ${galleryTimestamp(timestamp)}`;
   return [{
     type: ComponentType.Container,
     components: [
@@ -25,7 +39,13 @@ function componentsWithGalleryButtons(message: Message, likes: number, reportDis
   const data = container.toJSON() as APIContainerComponent;
   return [{
     ...data,
-    components: data.components.map((component) => component.type === ComponentType.ActionRow ? galleryButtons(likes, reportDisabled).toJSON() : component),
+    components: data.components.map((component) => {
+      if (component.type === ComponentType.ActionRow) return galleryButtons(likes, reportDisabled).toJSON();
+      if (component.type === ComponentType.TextDisplay && typeof component.content === "string") {
+        return { ...component, content: component.content.replace(/(Galeria da comunidade - ).*$/m, `$1${galleryTimestamp(message.createdTimestamp)}`) };
+      }
+      return component;
+    }),
   }];
 }
 
