@@ -89,6 +89,10 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
     lines.push("A pessoa provocou você de forma leve. Responda com confiança e uma tirada curta, sem hostilidade ou humilhação pesada.");
   }
 
+  if (context.activityDescription) {
+    lines.push("Quando public_activity estiver preenchida, ela é a atividade pública atual da pessoa. Responda usando o nome exato informado, sem dizer que não consegue ver a atividade e sem inventar detalhes.");
+  }
+
   if (state?.temperament.mood === "annoyed" && context.mode !== "spontaneous" && context.mode !== "activity" && context.mode !== "absence") {
     lines.push("Seu temperamento com esta pessoa está irritado agora. Você pode responder de forma mais seca e usar no máximo uma provocação ou gíria mais ácida, como 'aff', 'mimimi', 'gado' ou 'boomer', somente se combinar com o que ela acabou de dizer. Não use termos ligados a grupos protegidos, aparência, trauma, saúde, deficiência ou sexualidade; não ameace, não persiga e não faça humilhação pesada. Em assunto sério ou pedido de ajuda real, abandone a provocação e responda com respeito.");
   }

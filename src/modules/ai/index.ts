@@ -77,7 +77,14 @@ function normalized(value: string): string {
 }
 
 function asksAboutActivity(content: string): boolean {
-  return /\b(?:o que|oq|que)\s+(?:eu\s+)?(?:estou|to)\s+(?:fazendo|jogando|ouvindo|escutando)|\bqual\s+(?:jogo|musica)\b/.test(normalized(content));
+  const value = normalized(content);
+  return /\b(?:o que|oq|que)\b.{0,32}\b(?:fazendo|jogando|ouvindo|escutando|assistindo|vendo)\b/.test(value)
+    || /\b(?:qual|que)\s+(?:jogo|atividade|musica|música)\b/.test(value)
+    || /\b(?:estou|to|tô|esta|está|ta|tá)\s+(?:fazendo|jogando|ouvindo|escutando|assistindo|vendo)\b/.test(value)
+    || /\b(?:na|em|da)\s+minha\s+atividade\b/.test(value)
+    || /\b(?:sabe|consegue|consegue ver|tem como saber|da pra saber|d[aá] para saber|adivinha|me diz|me fala)\b.{0,32}\b(?:o que|qual|minha atividade|estou|to|tô)\b.{0,24}\b(?:faço|fazendo|jogando|ouvindo|assistindo|vendo|atividade|jogo|musica|música)\b/.test(value)
+    || /\b(?:qual|que)\s+(?:e|é)\s+(?:a\s+)?minha\s+atividade\b/.test(value)
+    || /\b(?:o que|oq|que)\s+(?:eu\s+)?(?:ando|t[oô]|estou)\s+(?:fazendo|jogando|ouvindo|assistindo)\b/.test(value);
 }
 
 function isDirectBotInsult(content: string, botId?: string): boolean {
@@ -166,7 +173,8 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const prismaState = await getPrismaState(message.author.id);
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
-    const currentActivity = message.member.presence ? publicActivity(message.member.presence) : null;
+    const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
+    const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
     };
