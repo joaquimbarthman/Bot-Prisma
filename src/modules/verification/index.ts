@@ -21,7 +21,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationStartEmoji, verificationTakeEmoji, verificationWaitingEmoji } from "../../emoji-manager.js";
+import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationStartEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
 
 const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
@@ -93,7 +93,6 @@ function staffButtons(reviewReady = false): ActionRowBuilder<ButtonBuilder>[] {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("verification:take").setLabel("Assumir atendimento").setEmoji(verificationTakeEmoji() ?? "👤").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("verification:waiting").setLabel("Aguardando chamada").setEmoji(verificationWaitingEmoji() ?? "🔊").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("verification:approve").setLabel("Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady),
