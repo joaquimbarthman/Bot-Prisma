@@ -76,7 +76,7 @@ export const config = {
     maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),
     historyMaxMessages: integer("AI_HISTORY_MAX_MESSAGES", 10),
     historyMaxChars: integer("AI_HISTORY_MAX_CHARS", 12000),
-    userCooldownSeconds: integer("AI_USER_COOLDOWN_SECONDS", 30),
+    userCooldownSeconds: Math.max(3, integer("AI_USER_COOLDOWN_SECONDS", 3)),
     spontaneousCooldownMinutes: integer("AI_SPONTANEOUS_COOLDOWN_MINUTES", 180),
     dailySpontaneousLimit: integer("AI_DAILY_SPONTANEOUS_LIMIT", 10),
     spontaneousChancePercent: decimal("AI_SPONTANEOUS_CHANCE_PERCENT", 2),
