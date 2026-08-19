@@ -208,7 +208,7 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
 export function replyWordLimit(content: string, mode: ReplyMode | undefined): number {
   if (mode === "spontaneous" || mode === "activity" || mode === "absence" || mode === "light_roast") return 20;
   const detailedRequest = /\b(?:explique|explica|expleque|detalhe|detalha|fale mais|conte mais|desenvolva|aprofund|como funciona|por que|porque|tutorial|passo a passo|diferen[cç]a|compare|compara|calcule|calcula|c[aá]lculo|divida|divis[aã]o|f[oó]rmula|frequ[eê]ncia|pot[eê]ncia|ensine|ensina)\b/i;
-  return detailedRequest.test(content) ? 100 : 30;
+  return detailedRequest.test(content) ? 100 : 40;
 }
 
 export function parseProviderOutput(

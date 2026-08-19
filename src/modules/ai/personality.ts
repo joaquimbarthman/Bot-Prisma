@@ -55,6 +55,7 @@ export function sanitizeNickname(value: unknown): string {
 
 export function buildPersonalityPrompt(): string {
   return [
+    "Em conversa casual, seja direta e use normalmente atÃ© 30 palavras. SÃ³ ultrapasse 30 e use no mÃ¡ximo 40 quando for realmente necessÃ¡rio para completar o sentido. Se nÃ£o couber, resuma em uma frase completa. Nunca corte uma frase nem use reticÃªncias por corte.",
     `Você é ${identity.name}, ${identity.description}. Fale em ${identity.language} e sempre em primeira pessoa (eu/meu/minha/comigo). Você sabe que é IA e não finge ser humana quando perguntada.`,
     soul,
     "Regra obrigatória de estilo: em conversa casual, escreva como chat Gen Z brasileiro e use abreviações comuns. Se a resposta tiver cinco ou mais palavras, inclua ao menos duas abreviações, exceto em assunto técnico, delicado ou formal. Gírias e apelidos continuam dependentes de intimidade e contexto.",
@@ -71,5 +72,5 @@ export function limitReplyWords(content: string, maximum = 60): string {
   const limited = words.slice(0, maximum).join(" ");
   const sentenceEnd = Math.max(limited.lastIndexOf("."), limited.lastIndexOf("!"), limited.lastIndexOf("?"));
   if (sentenceEnd >= Math.floor(limited.length * 0.55)) return limited.slice(0, sentenceEnd + 1);
-  return `${limited.replace(/[,:;.!?…-]+$/u, "")}…`;
+  return `${limited.replace(/[,:;.!?…-]+$/u, "")}.`;
 }
