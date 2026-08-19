@@ -6,13 +6,14 @@ export function startHealthServer(client: Client): Server {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("PORT deve ser uma porta válida.");
 
   const server = createServer((request, response) => {
-    if (request.method !== "GET" || (request.url !== "/" && request.url !== "/health")) {
+    if (request.method !== "GET" || !["/", "/health", "/ready"].includes(request.url ?? "")) {
       response.writeHead(404, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
       response.end(JSON.stringify({ status: "not_found" }));
       return;
     }
     const ready = client.isReady();
-    response.writeHead(ready ? 200 : 503, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    const readinessCheck = request.url === "/ready";
+    response.writeHead(readinessCheck && !ready ? 503 : 200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
     response.end(JSON.stringify({ status: ready ? "ok" : "starting", discord: ready ? "connected" : "connecting", uptimeSeconds: Math.floor(process.uptime()) }));
   });
 
