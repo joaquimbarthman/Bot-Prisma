@@ -154,7 +154,7 @@ export function defaultRelationship(discordId: string, now = new Date().toISOStr
     warmth: 50,
     patience: 60,
     banter: 30,
-    trust: 30,
+    trust: 0,
     preferredStyle: null,
     relationshipSummary: null,
     recentMilestones: [],

@@ -9,4 +9,8 @@ export const commands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
   new SlashCommandBuilder().setName("configurar-prisma").setDescription("Publica o painel único de configuração da IA")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder().setName("teste-ai").setDescription("Ativa o modo de testes da Prisma IA")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder().setName("fim-teste-ai").setDescription("Desativa o modo de testes da Prisma IA")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 ].map((command) => command.toJSON());

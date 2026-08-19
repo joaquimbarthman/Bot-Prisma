@@ -62,7 +62,7 @@ test("resume o sobre mim no painel sem alterar o texto armazenado", () => {
   assert.equal(shortAboutMe("Curto RPG"), "Curto RPG");
 });
 
-test("exibe evolução zerada e confiança inicial no painel", () => {
+test("exibe evolução e confiança zeradas no início", () => {
   assert.equal(relationshipPercentage(defaultRelationship("123")), 0);
   assert.equal(relationshipPercentage({
     ...defaultRelationship("123"),
@@ -73,6 +73,6 @@ test("exibe evolução zerada e confiança inicial no painel", () => {
   }), 100);
   const serialized = JSON.stringify(userPanelComponents(mockUser, settings, defaultRelationship("123"))[0]);
   assert.match(serialized, /\*\*Afinidade\*\*　0%/);
-  assert.match(serialized, /\*\*Confiança\*\*　30%/);
+  assert.match(serialized, /\*\*Confiança\*\*　0%/);
   assert.match(serialized, /\*\*Sintonia\*\*　0%/);
 });

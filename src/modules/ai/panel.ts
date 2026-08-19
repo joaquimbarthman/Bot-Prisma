@@ -85,7 +85,7 @@ export function relationshipPercentage(relationship: PrismaRelationship): number
   return Math.round((
     normalizedRelationshipScore(relationship.familiarity, 10)
     + normalizedRelationshipScore(relationship.warmth, 50)
-    + normalizedRelationshipScore(relationship.trust, 30)
+    + normalizedRelationshipScore(relationship.trust, 0)
     + normalizedRelationshipScore(relationship.banter, 30)
   ) / 4);
 }
@@ -113,8 +113,6 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
   const status = (enabled: boolean) => enabled ? "🟢 Ativadas" : "⚪ Desativadas";
   const progress = relationshipPercentage(relationship);
   const affinity = Math.round((normalizedRelationshipScore(relationship.familiarity, 10) + normalizedRelationshipScore(relationship.warmth, 50)) / 2);
-  // A confiança já começa com uma base saudável (30). Exibir apenas o
-  // crescimento relativo fazia o painel parecer travado em 0%.
   const trust = Math.round(Math.max(0, Math.min(100, relationship.trust)));
   const harmony = Math.round((normalizedRelationshipScore(relationship.warmth, 50) + normalizedRelationshipScore(relationship.banter, 30)) / 2);
   return [{

@@ -12,6 +12,7 @@ import {
   type PrismaUserState,
 } from "./state.js";
 import { addUsage, monthlyCostBrl, type HistoryItem, type UsageItem, type UserSettings } from "./store.js";
+import { PRISMA_AI_VERSION } from "./version.js";
 
 const client = config.openAiKey ? new OpenAI({ apiKey: config.openAiKey, baseURL: config.openAiBaseUrl, timeout: 15_000, maxRetries: 1 }) : null;
 
@@ -24,6 +25,8 @@ export type ReplyContext = {
   activityDescription?: string;
   channelExcerpt?: string;
   allowedMentionUserIds?: string[];
+  directHistory?: HistoryItem[];
+  mentionedUserHistory?: HistoryItem[];
 };
 
 export type ProviderResult = {
@@ -194,7 +197,10 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
     .replace(/<@!?(\d+)>/g, (mention, userId: string) => allowedUsers.has(userId) ? mention : "[menção removida]")
     .replace(/<@&\d+>|<#\d+>/g, "[menção removida]")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
-  return stripAssistantCliches(stripPausePunctuation(sanitized));
+  return stripAssistantCliches(stripPausePunctuation(sanitized))
+    .replace(/\bcê\b/gi, "vc")
+    .replace(/:(?!\/\/|\d{1,2}:\d{2})/g, ",")
+    .replace(/;/g, ",");
 }
 
 export function replyWordLimit(content: string, mode: ReplyMode | undefined): number {
@@ -243,7 +249,7 @@ export async function generateReply(
   if (await monthlyCostBrl() >= config.prismaAi.monthlyBudgetBrl) throw new Error("Orçamento mensal interno atingido.");
   const input = [
     ...history.map((item) => ({ role: item.role, content: item.content })),
-    { role: "user" as const, content: `Envelope de dados da interação atual (JSON):\n${buildInteractionEnvelope(settings, state, content, context)}` },
+    { role: "user" as const, content: `Envelope de dados da interação atual (JSON):\n${buildInteractionEnvelope(settings, state, content, context)}\nVersão interna da IA: ${PRISMA_AI_VERSION}` },
     { role: "user" as const, content: `MENSAGEM ATUAL — RESPONDA A ESTA AGORA:\nPessoa falando agora: ${context.currentAuthorName ?? "usuário atual"}\n${content.slice(0, 3_000)}` },
   ];
   const response = await client.responses.create({

@@ -7,6 +7,8 @@ import { generateReply, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
 import { relationshipAbsenceDays } from "./state.js";
 import { addHistoryTurn, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday, updateSettings } from "./store.js";
+import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
+import { PRISMA_AI_VERSION } from "./version.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -121,7 +123,7 @@ export function explicitlyRequestedMentionUserIds(
 }
 
 async function recentChannelContext(message: Message): Promise<string> {
-  const messages = await message.channel.messages.fetch({ limit: 12, before: message.id }).catch(() => null);
+  const messages = await message.channel.messages.fetch({ limit: config.prismaAi.channelHistoryLimit, before: message.id }).catch(() => null);
   if (!messages) return "";
   const cutoff = Date.now() - 48 * 60 * 60_000;
   const lines = [...messages.values()].reverse()
@@ -131,12 +133,23 @@ async function recentChannelContext(message: Message): Promise<string> {
   return lines.join("\n");
 }
 
+async function expandedChannelContext(message: Message): Promise<string> {
+  const messages = await message.channel.messages.fetch({ limit: config.prismaAi.channelHistoryExpandedLimit, before: message.id }).catch(() => null);
+  if (!messages) return "";
+  return [...messages.values()].reverse().filter((m) => m.content.trim()).map((m) => `${m.member?.displayName ?? m.author.username}: ${m.cleanContent.replace(/\s+/g, " ").slice(0, 280)}`).join("\n").slice(-12_000);
+}
+
 async function isDirectedAtBot(message: Message, client: Client): Promise<boolean> {
   return !!client.user && (message.mentions.users.has(client.user.id) || /\bprisma\b/i.test(message.content) || await isReplyToBot(message, client));
 }
 
 export async function handleAiMessage(client: Client, message: Message): Promise<boolean> {
-  if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || message.channelId !== config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content) return false;
+  if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content || ![config.prismaAi.generalChannelId, config.prismaAi.testChannelId].includes(message.channelId)) return false;
+  const runtime = await getAiRuntimeState();
+  if (runtime.testModeEnabled && message.channelId === config.prismaAi.generalChannelId) {
+    if (canSendTestNotice(message.author.id, config.prismaAi.testNoticeCooldownSeconds * 1000)) await message.reply({ content: "O prisma está atualmente sendo testado, logo ele volta pra conversar com você!", allowedMentions: { repliedUser: false } });
+    return true;
+  }
   const level = accessLevel(message.member);
   const direct = asksAboutActivity(message.content) || await isDirectedAtBot(message, client);
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
@@ -194,7 +207,8 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
     }
     if (direct || needsChannelContext(message)) {
-      const channelContext = await recentChannelContext(message);
+      let channelContext = await recentChannelContext(message);
+      if (!channelContext || channelContext.length < 120) channelContext = await expandedChannelContext(message);
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
     const generated = await generateReply(message.author.id, settings, prismaState, history, content, replyContext);
@@ -289,5 +303,11 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
 export async function handleAiInteraction(interaction: Interaction): Promise<boolean> {
   if (await handlePanelInteraction(interaction)) return true;
   if (interaction.isChatInputCommand() && interaction.commandName === "configurar-prisma") { await publishPanel(interaction); return true; }
+  if (interaction.isChatInputCommand() && (interaction.commandName === "teste-ai" || interaction.commandName === "fim-teste-ai")) {
+    const enabled = interaction.commandName === "teste-ai";
+    await setAiTestMode(enabled, interaction.user.id);
+    await interaction.reply({ content: enabled ? `modo de testes ativado, IA ${PRISMA_AI_VERSION}, canal de teste <#${config.prismaAi.testChannelId}>` : "modo de testes desativado, voltei a responder no canal principal", ephemeral: true });
+    return true;
+  }
   return false;
 }

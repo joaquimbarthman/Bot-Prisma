@@ -67,6 +67,8 @@ export const config = {
   prismaAi: {
     enabled: boolean("PRISMA_AI_ENABLED", false),
     generalChannelId: process.env.AI_GENERAL_CHANNEL_ID?.trim(),
+    testChannelId: process.env.AI_TEST_CHANNEL_ID?.trim() || "1539473171441258566",
+    testNoticeCooldownSeconds: Math.max(30, integer("AI_TEST_NOTICE_COOLDOWN_SECONDS", 45)),
     panelChannelId: process.env.AI_PANEL_CHANNEL_ID?.trim(),
     accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
@@ -76,6 +78,8 @@ export const config = {
     maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),
     historyMaxMessages: integer("AI_HISTORY_MAX_MESSAGES", 10),
     historyMaxChars: integer("AI_HISTORY_MAX_CHARS", 12000),
+    channelHistoryLimit: integer("AI_CHANNEL_HISTORY_LIMIT", 30),
+    channelHistoryExpandedLimit: integer("AI_CHANNEL_HISTORY_EXPANDED_LIMIT", 100),
     userCooldownSeconds: Math.max(3, integer("AI_USER_COOLDOWN_SECONDS", 3)),
     spontaneousCooldownMinutes: integer("AI_SPONTANEOUS_COOLDOWN_MINUTES", 180),
     dailySpontaneousLimit: integer("AI_DAILY_SPONTANEOUS_LIMIT", 10),
