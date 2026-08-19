@@ -199,7 +199,8 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
 
 export function replyWordLimit(content: string, mode: ReplyMode | undefined): number {
   if (mode === "spontaneous" || mode === "activity" || mode === "absence" || mode === "light_roast") return 20;
-  return /\b(?:explique|explica|detalhe|fale mais|conte mais|desenvolva|como funciona|por que|porque|tutorial|passo a passo|diferen[cç]a)\b/i.test(content) ? 140 : 30;
+  const detailedRequest = /\b(?:explique|explica|expleque|detalhe|detalha|fale mais|conte mais|desenvolva|aprofund|como funciona|por que|porque|tutorial|passo a passo|diferen[cç]a|compare|compara|calcule|calcula|c[aá]lculo|divida|divis[aã]o|f[oó]rmula|frequ[eê]ncia|pot[eê]ncia|ensine|ensina)\b/i;
+  return detailedRequest.test(content) ? 100 : 30;
 }
 
 export function parseProviderOutput(

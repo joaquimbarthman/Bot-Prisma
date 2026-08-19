@@ -145,7 +145,8 @@ test("orienta o tom pelo vínculo sem expor pontuação", () => {
 
 test("mantém conversa casual curta e só expande quando solicitado", () => {
   assert.equal(replyWordLimit("o que acha da Ariana?", "direct"), 30);
-  assert.equal(replyWordLimit("fale mais sobre a Ariana", "direct"), 140);
+  assert.equal(replyWordLimit("fale mais sobre a Ariana", "direct"), 100);
+  assert.equal(replyWordLimit("calcule a divisão da frequência", "direct"), 100);
   assert.equal(replyWordLimit("atividade", "activity"), 20);
   assert.equal(replyWordLimit("saudade", "absence"), 20);
 });
