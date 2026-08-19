@@ -123,20 +123,28 @@ export function explicitlyRequestedMentionUserIds(
 }
 
 async function recentChannelContext(message: Message): Promise<string> {
-  const messages = await message.channel.messages.fetch({ limit: config.prismaAi.channelHistoryLimit, before: message.id }).catch(() => null);
-  if (!messages) return "";
-  const cutoff = Date.now() - 48 * 60 * 60_000;
-  const lines = [...messages.values()].reverse()
-    .filter((item) => item.createdTimestamp >= cutoff && item.content.trim())
+  const first = await message.channel.messages.fetch({ limit: 100, before: message.id }).catch(() => null);
+  if (!first) return "";
+  const oldest = [...first.values()].at(-1);
+  const second = config.prismaAi.channelHistoryLimit > 100 && oldest
+    ? await message.channel.messages.fetch({ limit: 100, before: oldest.id }).catch(() => null)
+    : null;
+  const messages = [...(second?.values() ?? []), ...first.values()];
+  const lines = messages.reverse()
+    .filter((item) => item.content.trim())
     .map((item) => `${item.member?.displayName ?? item.author.username}: ${item.cleanContent.replace(/\s+/g, " ").slice(0, 280)}`);
-  while (lines.join("\n").length > 1_800) lines.shift();
+  while (lines.join("\n").length > 40_000) lines.shift();
   return lines.join("\n");
 }
 
 async function expandedChannelContext(message: Message): Promise<string> {
-  const messages = await message.channel.messages.fetch({ limit: config.prismaAi.channelHistoryExpandedLimit, before: message.id }).catch(() => null);
-  if (!messages) return "";
-  return [...messages.values()].reverse().filter((m) => m.content.trim()).map((m) => `${m.member?.displayName ?? m.author.username}: ${m.cleanContent.replace(/\s+/g, " ").slice(0, 280)}`).join("\n").slice(-12_000);
+  const first = await message.channel.messages.fetch({ limit: 100, before: message.id }).catch(() => null);
+  if (!first) return "";
+  const oldest = [...first.values()].at(-1);
+  const second = config.prismaAi.channelHistoryExpandedLimit > 100 && oldest
+    ? await message.channel.messages.fetch({ limit: 100, before: oldest.id }).catch(() => null)
+    : null;
+  return [...(second?.values() ?? []), ...first.values()].reverse().filter((m) => m.content.trim()).map((m) => `${m.member?.displayName ?? m.author.username}: ${m.cleanContent.replace(/\s+/g, " ").slice(0, 500)}`).join("\n").slice(-40_000);
 }
 
 async function isDirectedAtBot(message: Message, client: Client): Promise<boolean> {

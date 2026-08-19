@@ -170,7 +170,7 @@ export function buildInteractionEnvelope(
     },
     current_message: content.slice(0, 3_000),
     public_activity: context.activityDescription?.replace(/[\r\n]+/g, " ").slice(0, 400) ?? null,
-    discord_excerpt: context.channelExcerpt?.slice(0, 1_800) ?? null,
+    discord_excerpt: context.channelExcerpt?.slice(0, 40_000) ?? null,
   });
 }
 
@@ -199,6 +199,8 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
   return stripAssistantCliches(stripPausePunctuation(sanitized))
     .replace(/\bcê\b/gi, "vc")
+    .replace(/\bce\b/gi, "vc")
+    .replace(/\bc\b/gi, "vc")
     .replace(/:(?!\/\/|\d{1,2}:\d{2})/g, ",")
     .replace(/;/g, ",");
 }
