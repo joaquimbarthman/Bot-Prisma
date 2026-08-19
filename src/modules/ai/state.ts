@@ -216,7 +216,9 @@ export function applyValidatedStateUpdate(
     warmth: clampScore(state.relationship.warmth + (update.warmthDelta ?? 0)),
     patience: clampScore(state.relationship.patience + (update.patienceDelta ?? 0)),
     banter: clampScore(state.relationship.banter + (update.banterDelta ?? 0)),
-    trust: clampScore(state.relationship.trust + (update.trustDelta ?? 0)),
+    // A continued direct conversation is a small positive trust signal when
+    // the model has no contrary evidence. Explicit model deltas still win.
+    trust: clampScore(state.relationship.trust + (update.trustDelta ?? 1)),
     interactionCount: Math.max(0, state.relationship.interactionCount + 1),
     updatedAt: timestamp,
   };

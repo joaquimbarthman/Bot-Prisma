@@ -4,13 +4,13 @@ import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
 import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./modules/gallery/index.js";
 import { startHealthServer } from "./health-server.js";
-import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./moderation-feature.js";
+import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./modules/moderation/moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
 import { grantAccessRoleToBooster, grantVerifiedRoleToBooster, startedBoosting, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
-import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./punishment-role.js";
+import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { startBumpReminder } from "./modules/bump-reminder/index.js";
 
 validateConfig();

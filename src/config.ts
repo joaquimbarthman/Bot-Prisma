@@ -50,6 +50,7 @@ export const config = {
     logChannelId: process.env.REPORT_LOG_CHANNEL_ID?.trim() || "1538276823786455050",
   },
   lfg: {
+    voiceCategoryId: process.env.LFG_VOICE_CATEGORY_ID?.trim() || "1538663337011707944",
     panelChannelId: process.env.LFG_PANEL_CHANNEL_ID?.trim() || "1538659348631519303",
     staffRoleId: process.env.LFG_STAFF_ROLE_ID?.trim(),
     maxOpenPerUser: integer("LFG_MAX_OPEN_PER_USER", 2),
@@ -93,6 +94,8 @@ export const config = {
   openAiKey: process.env.OPENAI_API_KEY,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
   openAiBaseUrl: (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
+  moderationModel: process.env.MODERATION_MODEL?.trim() || "omni-moderation-latest",
+  port: integer("PORT", 10_000),
   aiMaxDailyRequests: integer("AI_MAX_DAILY_REQUESTS", 1000),
   warningsBeforeTimeout: integer("WARNINGS_BEFORE_TIMEOUT", 3),
   timeoutMinutes: integer("TIMEOUT_MINUTES", 10),

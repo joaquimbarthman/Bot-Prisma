@@ -1,8 +1,9 @@
 import { createServer, type Server } from "node:http";
 import type { Client } from "discord.js";
+import { config } from "./config.js";
 
 export function startHealthServer(client: Client): Server {
-  const port = Number(process.env.PORT ?? 10_000);
+  const port = config.port;
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("PORT deve ser uma porta válida.");
 
   const server = createServer((request, response) => {

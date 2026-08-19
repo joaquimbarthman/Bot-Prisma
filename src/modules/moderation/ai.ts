@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { config } from "./config.js";
+import { config } from "../../config.js";
 import type { ModerationResult } from "./filter.js";
 
 const cache = new Map<string, { expires: number; result: ModerationResult }>();
@@ -28,7 +28,7 @@ export async function aiModeration(content: string): Promise<ModerationResult> {
 
   try {
     const analysis = await openai.moderations.create({
-      model: "omni-moderation-latest",
+      model: config.moderationModel,
       input: content.slice(0, 3000),
     });
     const moderation = analysis.results[0];

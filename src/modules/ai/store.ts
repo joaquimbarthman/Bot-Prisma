@@ -19,11 +19,16 @@ import {
   type PrismaTemperament,
   type PrismaUserState,
 } from "./state.js";
+import { applyEmotionalUpdate, clampEmotion, decayEmotionalState, defaultEmotionalState, type PrismaEmotionalState, type PrismaEmotionalUpdate } from "./emotional-state.js";
 
 export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperament, PrismaUserState } from "./state.js";
 
 export type UserSettings = { nickname: string; aboutMe: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
+export type PrismaProfile = { userId: string; displayName: string | null; profileSummary: string | null; communicationStyle: string | null; interests: string[]; knownPreferences: string[] };
+export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null };
+export type PrismaMessage = { messageId: string; guildId: string; channelId: string; userId: string; content: string; authorIsPrisma: boolean; replyToMessageId?: string | null; createdAt: string };
+export type PrismaDailySummary = { userId: string; summaryDate: string; summary: string; updatedAt?: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 type SpontaneousEvent = { discordId: string; createdAt: string };
 type Database = {
@@ -33,6 +38,11 @@ type Database = {
   history: HistoryItem[];
   usage: UsageItem[];
   spontaneous: SpontaneousEvent[];
+  profiles?: Record<string, PrismaProfile>;
+  memories?: PrismaMemory[];
+  emotionalStates?: Record<string, PrismaEmotionalState>;
+  prismaMessages?: PrismaMessage[];
+  dailySummaries?: PrismaDailySummary[];
 };
 
 const defaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
@@ -197,13 +207,137 @@ async function readLocal(): Promise<Database> {
       history: parsed.history ?? [],
       usage: parsed.usage ?? [],
       spontaneous: parsed.spontaneous ?? [],
+      profiles: parsed.profiles ?? {}, memories: parsed.memories ?? [],
+      emotionalStates: parsed.emotionalStates ?? {}, prismaMessages: parsed.prismaMessages ?? [], dailySummaries: parsed.dailySummaries ?? [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [] };
+      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [], profiles: {}, memories: [], emotionalStates: {}, prismaMessages: [], dailySummaries: [] };
     }
     throw error;
   }
+}
+
+export async function getPrismaProfile(userId: string): Promise<PrismaProfile | null> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_user_profiles").select("*").eq("user_id", userId).maybeSingle();
+    if (error) { remoteFailure("ler perfil aprendido", error.message); return null; }
+    return data ? { userId, displayName: data.display_name, profileSummary: data.profile_summary, communicationStyle: data.communication_style, interests: data.interests ?? [], knownPreferences: data.known_preferences ?? [] } : null;
+  }
+  return withLocal(db => db.profiles?.[userId] ?? null);
+}
+
+export async function getRelevantPrismaMemories(userId: string, limit = 8, currentMessage = ""): Promise<PrismaMemory[]> {
+  const terms = new Set(currentMessage.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  const rank = (memory: PrismaMemory) => memory.importance * 2 + memory.confidence + [...terms].filter(term => memory.content.toLocaleLowerCase("pt-BR").includes(term)).length * 50;
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_memories").select("*").eq("user_id", userId).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(limit);
+    if (error) { remoteFailure("ler memórias", error.message); return []; }
+    return (data ?? []).map(row => ({ id: row.id, userId, memoryType: row.memory_type, content: row.content, importance: score(row.importance, 50), confidence: score(row.confidence, 60), sourceMessageId: row.source_message_id })).sort((a, b) => rank(b) - rank(a));
+  }
+  return withLocal(db => (db.memories ?? []).filter(memory => memory.userId === userId).sort((a,b) => rank(b) - rank(a)).slice(0, limit));
+}
+
+function safeMemoryText(value: unknown, maximum = 300): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum);
+  if (text.length < 3 || /(?:https?:\/\/|<@!?\d+>|\b(?:token|senha|password|api[ _-]?key|cpf|telefone|e-?mail)\b)/i.test(text)) return null;
+  return text;
+}
+
+export async function upsertPrismaProfile(profile: PrismaProfile & { guildId?: string | null }): Promise<void> {
+  const now = new Date().toISOString();
+  if (supabase) {
+    const { error } = await supabase.from("prisma_user_profiles").upsert({ user_id: profile.userId, guild_id: profile.guildId ?? null, display_name: profile.displayName, profile_summary: safeMemoryText(profile.profileSummary), communication_style: safeMemoryText(profile.communicationStyle, 160), interests: profile.interests.slice(0, 12), known_preferences: profile.knownPreferences.slice(0, 12), last_interaction_at: now, updated_at: now }, { onConflict: "user_id" });
+    if (error) remoteFailure("salvar perfil aprendido", error.message);
+    return;
+  }
+  await withLocal(db => { (db.profiles ??= {})[profile.userId] = profile; }, true);
+}
+
+export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
+  const content = safeMemoryText(memory.content);
+  if (!content) return;
+  const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60) };
+  if (supabase) {
+    const { data: existing, error: readError } = await supabase.from("prisma_memories").select("id,importance,confidence").eq("user_id", candidate.userId).ilike("content", candidate.content).maybeSingle();
+    if (readError) { remoteFailure("procurar memória existente", readError.message); return; }
+    const row = { memory_type: candidate.memoryType, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.max(candidate.confidence, score(existing?.confidence, 0)), source_message_id: candidate.sourceMessageId ?? null, updated_at: new Date().toISOString() };
+    const { error } = existing
+      ? await supabase.from("prisma_memories").update(row).eq("id", existing.id).eq("user_id", candidate.userId)
+      : await supabase.from("prisma_memories").insert({ user_id: candidate.userId, ...row });
+    if (error) remoteFailure("salvar memória", error.message);
+    return;
+  }
+  await withLocal(db => {
+    const memories = db.memories ??= [];
+    const current = memories.find(item => item.userId === candidate.userId && item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR"));
+    if (current) Object.assign(current, candidate, { importance: Math.max(current.importance, candidate.importance), confidence: Math.max(current.confidence, candidate.confidence) });
+    else memories.push(candidate);
+  }, true);
+}
+
+export async function listPrismaMemories(userId: string): Promise<PrismaMemory[]> {
+  return getRelevantPrismaMemories(userId, 30);
+}
+
+export async function deletePrismaMemory(userId: string, memoryId: number): Promise<boolean> {
+  if (!Number.isInteger(memoryId) || memoryId < 1) return false;
+  if (supabase) {
+    const { error, count } = await supabase.from("prisma_memories").delete({ count: "exact" }).eq("id", memoryId).eq("user_id", userId);
+    if (error) { remoteFailure("apagar memória", error.message); return false; }
+    return (count ?? 0) > 0;
+  }
+  return withLocal(db => {
+    const memories = db.memories ?? [];
+    const index = memories.findIndex(item => item.id === memoryId && item.userId === userId);
+    if (index < 0) return false;
+    memories.splice(index, 1); return true;
+  }, true);
+}
+
+export async function deletePrismaUserData(userId: string, scope: "history" | "memories" | "relationship" | "all"): Promise<void> {
+  if (!userId.trim()) throw new Error("Usuário inválido.");
+  if (supabase) {
+    const { error } = await supabase.rpc("delete_prisma_user_data", { p_user_id: userId, p_scope: scope });
+    if (error) { remoteFailure("apagar dados Prisma", error.message); throw new Error("Não foi possível apagar seus dados agora."); }
+  }
+  await withLocal(db => {
+    if (scope === "history" || scope === "all") { db.history = db.history.filter(item => item.discordId !== userId); db.prismaMessages = (db.prismaMessages ?? []).filter(item => item.userId !== userId); }
+    if (scope === "memories" || scope === "all") { if (db.profiles) delete db.profiles[userId]; db.memories = (db.memories ?? []).filter(item => item.userId !== userId); db.dailySummaries = (db.dailySummaries ?? []).filter(item => item.userId !== userId); }
+    if (scope === "relationship" || scope === "all") { delete db.relationships[userId]; delete db.temperaments[userId]; if (db.emotionalStates) delete db.emotionalStates[userId]; }
+  }, true);
+}
+
+export async function getEmotionalState(userId: string, now = new Date()): Promise<PrismaEmotionalState> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_emotional_states").select("*").eq("user_id", userId).maybeSingle();
+    if (error) { remoteFailure("ler estado emocional", error.message); return defaultEmotionalState(userId, now.toISOString()); }
+    const state = data ? { userId, happiness: clampEmotion(data.happiness, 50), sadness: clampEmotion(data.sadness), anger: clampEmotion(data.anger), irritation: clampEmotion(data.irritation), affection: clampEmotion(data.affection, 30), curiosity: clampEmotion(data.curiosity, 50), excitement: clampEmotion(data.excitement, 30), boredom: clampEmotion(data.boredom), confidence: clampEmotion(data.confidence, 50), energy: clampEmotion(data.energy, 50), updatedAt: timestamp(data.updated_at, now.toISOString()) } : defaultEmotionalState(userId, now.toISOString());
+    return decayEmotionalState(state, now);
+  }
+  return withLocal(db => decayEmotionalState(db.emotionalStates?.[userId] ?? defaultEmotionalState(userId, now.toISOString()), now));
+}
+
+export async function updateEmotionalState(userId: string, update: PrismaEmotionalUpdate): Promise<void> {
+  const next = applyEmotionalUpdate(await getEmotionalState(userId), update);
+  if (supabase) {
+    const { error } = await supabase.from("prisma_emotional_states").upsert({ user_id: userId, happiness: next.happiness, sadness: next.sadness, anger: next.anger, irritation: next.irritation, affection: next.affection, curiosity: next.curiosity, excitement: next.excitement, boredom: next.boredom, confidence: next.confidence, energy: next.energy, updated_at: next.updatedAt }, { onConflict: "user_id" });
+    if (error) remoteFailure("salvar estado emocional", error.message);
+    return;
+  }
+  await withLocal(db => { (db.emotionalStates ??= {})[userId] = next; }, true);
+}
+
+export async function addPrismaMessage(message: PrismaMessage): Promise<void> {
+  const content = message.content.trim().slice(0, 4_000);
+  if (!content || !message.messageId) return;
+  if (supabase) {
+    const { error } = await supabase.from("prisma_messages").upsert({ message_id: message.messageId, guild_id: message.guildId, channel_id: message.channelId, user_id: message.userId, content, author_is_prisma: message.authorIsPrisma, reply_to_message_id: message.replyToMessageId ?? null, created_at: message.createdAt }, { onConflict: "message_id", ignoreDuplicates: true });
+    if (error) remoteFailure("salvar mensagem Prisma", error.message);
+    return;
+  }
+  await withLocal(db => { const messages = db.prismaMessages ??= []; if (!messages.some(item => item.messageId === message.messageId)) messages.push({ ...message, content }); }, true);
 }
 
 async function saveLocal(db: Database): Promise<void> {
@@ -315,14 +449,19 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("ai_events").select("id").limit(1),
     supabase.from("prisma_relationships").select("discord_id").limit(1),
     supabase.from("prisma_temperament").select("discord_id").limit(1),
+    supabase.from("prisma_user_profiles").select("user_id").limit(1),
+    supabase.from("prisma_memories").select("id").limit(1),
+    supabase.from("prisma_messages").select("id").limit(1),
+    supabase.from("prisma_emotional_states").select("user_id").limit(1),
+    supabase.from("prisma_daily_summaries").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament"];
+  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
     return false;
   }
-  console.log("[SUPABASE] Conectado; 6 tabelas acessíveis.");
+  console.log("[SUPABASE] Conectado; tabelas da Prisma acessíveis.");
   return true;
 }
 

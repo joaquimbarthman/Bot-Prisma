@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { config } from "./config.js";
+import { config } from "../../config.js";
 
 export type ModerationResult = {
   flagged: boolean;

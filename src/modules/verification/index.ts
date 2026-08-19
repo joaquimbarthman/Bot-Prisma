@@ -113,7 +113,7 @@ function statusDisplay(state: State): string {
 
 function requestedAtDisplay(value: string): string {
   const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: config.prismaAi.timezone,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

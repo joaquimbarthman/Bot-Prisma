@@ -1,14 +1,15 @@
 import { ActivityType, type Client, type Interaction, type Message, type Presence } from "discord.js";
 import { config } from "../../config.js";
-import { localModeration } from "../../filter.js";
+import { localModeration } from "../moderation/filter.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { relationshipAbsenceDays } from "./state.js";
-import { addHistoryTurn, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday, updateSettings } from "./store.js";
+import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
+import { learnFromInteraction } from "./learning.js";
+import { buildPrismaPersonalContext } from "./context-builder.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -48,14 +49,16 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
     const settings = await getSettings(member.id);
     if (!settings.spontaneousInteractions) continue;
     const state = await getPrismaState(member.id);
-    const absentDays = relationshipAbsenceDays(state.temperament);
-    if (absentDays === null || absentDays < 7 || state.relationship.interactionCount < 8) continue;
-    if (Date.now() - (absenceOutreachAt.get(member.id) ?? 0) < 7 * 86_400_000) continue;
+    const lastInteraction = state.temperament.lastInteractionAt ? Date.parse(state.temperament.lastInteractionAt) : NaN;
+    const absentHours = Number.isFinite(lastInteraction) ? (Date.now() - lastInteraction) / 3_600_000 : 0;
+    if (absentHours < 3 || state.relationship.interactionCount < 4) continue;
+    if (Date.now() - (absenceOutreachAt.get(member.id) ?? 0) < 24 * 60 * 60_000) continue;
     if (Date.now() - await lastSpontaneousAt(member.id) < config.prismaAi.spontaneousCooldownMinutes * 60_000) continue;
     if (!await reserveSpontaneousSlot(member.id)) continue;
     try {
       const history = settings.memoryEnabled ? await recentHistory(member.id, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
-      const generated = await generateReply(member.id, settings, state, history, "Faz tempo que não conversamos.", { mode: "absence" });
+      const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
+      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
       const prefix = settings.allowMentions ? `<@${member.id}> ` : "";
       await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [member.id] : [] } });
@@ -95,6 +98,11 @@ function isDirectBotInsult(content: string, botId?: string): boolean {
   return new RegExp(`^(?:seu|sua)?\\s*${insult}$|\\b(?:prisma|voce|vc|tu)\\s+(?:(?:e|eh|ta)\\s+)?(?:um|uma)?\\s*(?:seu|sua)?\\s*${insult}\\b`).test(value);
 }
 
+function requestsSpontaneousOptOut(content: string): boolean {
+  return /\b(?:desativa|desative|deslig(a|ue)|para|pare|nao quero|não quero|sem)\b.{0,30}\b(?:intera[cç][aã]o espont[aâ]nea|mensagem espont[aâ]nea|me chamar|me chamar do nada|me procurar|notifica[cç][aã]o)/i.test(content)
+    || /\b(?:não|nao)\s+(?:me\s+)?(?:chama|procura|manda mensagem)\s+(?:do nada|espontaneamente)/i.test(content);
+}
+
 function requestedNickname(content: string): string | null {
   const match = content.match(/(?:quero\s+(?:que\s+)?(?:você|voce|vc)\s+me\s+cham(?:e|ando)\s+de|(?:pode\s+)?me\s+cham(?:a|e)\s+de|pode\s+me\s+chamar\s+de)\s+["']?([^\n.!?]{2,32})["']?/i);
   const nickname = match?.[1]?.replace(/\s+(?:por favor|pfv|please|ok|né|ne)\s*$/i, "").trim();
@@ -109,13 +117,17 @@ function requestsDirectMention(content: string): boolean {
   return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda)\b/i.test(normalized(content));
 }
 
+function requestsContextualMention(content: string): boolean {
+  return /<@!?\d+>/.test(content) && /\b(?:o que|oq|qual|como)\b.{0,80}\b(?:acha|achou|opin(?:a|i)|pensa|pensou|avalia|avaliou)\b/i.test(normalized(content));
+}
+
 export function explicitlyRequestedMentionUserIds(
   content: string,
   mentionedUserIds: Iterable<string>,
   botId?: string,
   authorId?: string,
 ): string[] {
-  if (!requestsDirectMention(content)) return [];
+  if (!requestsDirectMention(content) && !requestsContextualMention(content)) return [];
   const rawMentionIds = [...content.matchAll(/<@!?(\d{1,25})>/g)].map((match) => match[1]);
   return [...new Set([...mentionedUserIds, ...rawMentionIds])]
     .filter((userId) => userId !== botId && userId !== authorId)
@@ -170,6 +182,11 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   }
 
   let settings = await getSettings(message.author.id);
+  if (requestsSpontaneousOptOut(message.content) && settings.spontaneousInteractions) {
+    settings = await updateSettings(message.author.id, { spontaneousInteractions: false });
+    await message.reply({ content: "beleza, não vou mais te chamar do nada. se quiser, você pode ativar isso de novo no painel da Prisma.", allowedMentions: { repliedUser: false } });
+    return true;
+  }
   const historyRevision = captureHistoryRevision(message.author.id);
   let spontaneous = false;
   let spontaneousReserved = false;
@@ -191,15 +208,19 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       try { settings = await updateSettings(message.author.id, { nickname: preferredNickname }); }
       catch (error) { console.error("[PRISMA-IA] Não foi possível persistir o apelido; continuando sem bloquear a resposta:", error); }
     }
-    const prismaState = await getPrismaState(message.author.id);
-    const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
+    const prismaState = await getPrismaState(message.author.id);
+    const { learnedProfile, relevantMemories, emotionalState } = await buildPrismaPersonalContext(message.author.id, settings, content);
+    const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
       currentAuthorId: message.author.id,
+      learnedProfile,
+      relevantMemories,
+      emotionalState,
     };
     const allowedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
@@ -232,15 +253,18 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       ...(settings.allowMentions ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
-    await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
+    const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
     try {
-      if (!spontaneous) await applyPrismaStateUpdate(message.author.id, prismaState, unsafeOutput ? {} : generated.stateUpdate);
+      if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, generated.stateUpdate);
       if (settings.memoryEnabled && (await getSettings(message.author.id)).memoryEnabled) {
         const now = new Date().toISOString();
         await addHistoryTurn([
           { discordId: message.author.id, channelId: message.channelId, role: "user", content, createdAt: now },
           { discordId: message.author.id, channelId: message.channelId, role: "assistant", content: answer, createdAt: now },
         ], historyRevision);
+        await addPrismaMessage({ messageId: message.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content, authorIsPrisma: false, replyToMessageId: message.reference?.messageId ?? null, createdAt: message.createdAt.toISOString() });
+        await addPrismaMessage({ messageId: sent.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content: answer, authorIsPrisma: true, replyToMessageId: message.id, createdAt: sent.createdAt.toISOString() });
+        void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer });
       }
       if (spontaneous) await addSpontaneous(message.author.id);
     } catch (error) {

@@ -20,7 +20,7 @@ import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
-import { clearNickname, clearUserHistory, getPrismaState, getSettings, resetPrismaState, updateSettings, type UserSettings } from "./store.js";
+import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type UserSettings } from "./store.js";
 
 export function publicPanelComponents(): APIContainerComponent[] {
   return [{
@@ -42,15 +42,15 @@ function userPanelButtons(settings: UserSettings): ActionRowBuilder<ButtonBuilde
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:nickname").setLabel("Apelido").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("prisma-ai:memory").setLabel("Memória recente").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("prisma-ai:mentions").setLabel("Menções").setEmoji(aiPanelEmojis.mention ?? "📨").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("prisma-ai:spontaneous").setLabel("Espontâneas").setEmoji(aiPanelEmojis.spontaneous ?? "⚡").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("prisma-ai:memory").setLabel("Memória").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("prisma-ai:spontaneous").setLabel("Espontâneas").setEmoji(aiPanelEmojis.spontaneous ?? "⚡").setStyle(settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:about-me").setLabel("Sobre mim").setEmoji(aiPanelEmojis.humor ?? "🙂").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("prisma-ai:clear-history").setLabel("Apagar histórico de 48h").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("prisma-ai:view-memories").setLabel("Ver memórias").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("prisma-ai:forget").setLabel("Apagar memórias").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("prisma-ai:clear-history").setLabel("Apagar histórico").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("prisma-ai:reset-relationship").setLabel("Reiniciar relação").setEmoji(aiPanelEmojis.reset ?? "🔄").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("prisma-ai:nickname-remove").setLabel("Remover apelido").setEmoji(aiPanelEmojis.close ?? "✖️").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
@@ -69,8 +69,7 @@ function resetConfirmationComponents(result?: "cancelled" | "relationship" | "al
   if (!result) components.push(
     { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("prisma-ai:reset-only").setLabel("Só a relação").setEmoji(aiPanelEmojis.reset ?? "🔄").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("prisma-ai:reset-with-history").setLabel("Relação + histórico").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("prisma-ai:reset-only").setLabel("Confirmar reinício").setEmoji(aiPanelEmojis.reset ?? "🔄").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("prisma-ai:reset-cancel").setLabel("Cancelar").setEmoji(aiPanelEmojis.close ?? "✖️").setStyle(ButtonStyle.Secondary),
     ).toJSON(),
   );
@@ -111,10 +110,7 @@ export function shortAboutMe(value: string, maximum = 40): string {
 
 export function userPanelComponents(user: Interaction["user"], settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
   const status = (enabled: boolean) => enabled ? "🟢 Ativadas" : "⚪ Desativadas";
-  const progress = relationshipPercentage(relationship);
-  const affinity = Math.round((normalizedRelationshipScore(relationship.familiarity, 10) + normalizedRelationshipScore(relationship.warmth, 50)) / 2);
-  const trust = Math.round(Math.max(0, Math.min(100, relationship.trust)));
-  const harmony = Math.round((normalizedRelationshipScore(relationship.warmth, 50) + normalizedRelationshipScore(relationship.banter, 30)) / 2);
+  const relationshipScore = relationshipPercentage(relationship);
   return [{
     type: ComponentType.Container,
     accent_color: 0x7c5cff,
@@ -134,12 +130,12 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Vínculo com a Prisma\n**${qualitativeRelationship(relationship)}**\n${progressBar(progress)}　**${progress}%**\n\n**Afinidade**　${affinity}%\n**Confiança**　${trust}%\n**Sintonia**　${harmony}%\n\n**Como a Prisma vê vocês**\n${relationship.relationshipSummary || "A relação ainda está começando a ganhar forma."}`,
+        content: `### Vínculo com a Prisma\n**${qualitativeRelationship(relationship)}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n${relationship.relationshipSummary || "A relação ainda está começando a ganhar forma."}\n\n-# ${relationship.interactionCount} interações • o vínculo evolui aos poucos.`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Suas preferências\n**Apelido**　${settings.nickname || "Não definido"}\n**Sobre mim**　${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória recente**　${settings.memoryEnabled ? "🟢 Ativada • até 48 horas" : "⚪ Desativada"}\n**Menções**　${status(settings.allowMentions)}\n**Interações espontâneas**　${status(settings.spontaneousInteractions)}`,
+        content: `### Suas preferências\n**Apelido**　${settings.nickname || "Não definido"}\n**Sobre mim**　${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória**　${settings.memoryEnabled ? "🟢 Ativada" : "⚪ Desativada"}\n**Interações espontâneas**　${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       ...userPanelButtons(settings).map((row) => row.toJSON()),
@@ -202,10 +198,10 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   if (!(interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith("prisma-ai:")) return false;
   if (!interaction.inGuild()) return true;
   const action = interaction.customId.split(":")[1];
-  const selfServiceDeletion = ["clear-history", "reset-relationship", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove"].includes(action);
+  const selfServiceDeletion = ["clear-history", "reset-relationship", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove", "view-memories", "forget", "forget-confirm", "delete-all", "delete-all-confirm"].includes(action);
   const resetConfirmation = interaction.isButton() && ["reset-only", "reset-with-history", "reset-cancel"].includes(action);
   const opensModal = interaction.isButton() && (action === "nickname" || action === "about-me");
-  const updatesPanel = (interaction.isButton() && ["clear-history", "nickname-remove", "memory", "mentions", "spontaneous"].includes(action))
+  const updatesPanel = (interaction.isButton() && ["clear-history", "nickname-remove", "memory", "spontaneous"].includes(action))
     || (interaction.isModalSubmit() && ["nickname-save", "about-me-save"].includes(action));
   if (resetConfirmation) await interaction.deferUpdate();
   else if (updatesPanel) await interaction.deferUpdate();
@@ -282,6 +278,33 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     await interaction.reply({ components: resetConfirmationComponents(), flags: ["Ephemeral", "IsComponentsV2"] });
     return true;
   }
+  if (action === "view-memories") {
+    const memories = await listPrismaMemories(interaction.user.id);
+    const content = memories.length
+      ? `## O que a Prisma lembra\n${memories.map((memory, index) => `${index + 1}. ${memory.content}`).join("\n")}`
+      : "A Prisma ainda não tem memórias duráveis suas.";
+    await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    return true;
+  }
+  if (action === "forget" || action === "delete-all") {
+    const all = action === "delete-all";
+    await interaction.editReply({
+      content: all
+        ? "Isso apagará histórico, memórias, perfil, relação e estado emocional. Confirma?"
+        : "Isso apagará apenas as memórias, o perfil aprendido e os resumos. O histórico e a relação serão mantidos. Confirma?",
+      components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`prisma-ai:${all ? "delete-all-confirm" : "forget-confirm"}`).setLabel("Confirmar exclusão").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId("prisma-ai:reset-cancel").setLabel("Cancelar").setStyle(ButtonStyle.Secondary),
+      )], allowedMentions: { parse: [] },
+    });
+    return true;
+  }
+  if (action === "forget-confirm" || action === "delete-all-confirm") {
+    if (action === "delete-all-confirm") await deletePrismaUserData(interaction.user.id, "all");
+    else await deletePrismaUserData(interaction.user.id, "memories");
+    await interaction.editReply({ content: action === "delete-all-confirm" ? "Todos os seus dados da Prisma foram apagados." : "As memórias e o perfil foram apagados. O histórico e a relação foram mantidos.", components: [] });
+    return true;
+  }
   if (action === "reset-cancel") {
     await refreshUserPanel(interaction);
     await interaction.followUp({ content: "Reinício cancelado. Nenhuma informação foi alterada.", flags: ["Ephemeral"] });
@@ -290,6 +313,8 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   if (action === "reset-only" || action === "reset-with-history") {
     const clearHistory = action === "reset-with-history";
     await resetPrismaState(interaction.user.id, clearHistory);
+    await deletePrismaUserData(interaction.user.id, "relationship");
+    if (clearHistory) await deletePrismaUserData(interaction.user.id, "history");
     await refreshUserPanel(interaction);
     await interaction.followUp({
       content: clearHistory
@@ -306,18 +331,15 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
 
   if (action === "clear-history") {
     await clearUserHistory(interaction.user.id);
+    await deletePrismaUserData(interaction.user.id, "history");
     await refreshUserPanel(interaction);
-    await interaction.followUp({ content: "Histórico recente de 48 horas apagado. A relação com a Prisma foi mantida.", flags: ["Ephemeral"] });
+    await interaction.followUp({ content: "Todo o histórico de conversa da Prisma foi apagado. As memórias e a relação foram mantidas.", flags: ["Ephemeral"] });
     return true;
   }
 
   const settings = await getSettings(interaction.user.id);
   if (action === "memory") {
     const value = !settings.memoryEnabled; await updateSettings(interaction.user.id, { memoryEnabled: value });
-    if (!value) await clearUserHistory(interaction.user.id);
-    await refreshUserPanel(interaction);
-  } else if (action === "mentions") {
-    const value = !settings.allowMentions; await updateSettings(interaction.user.id, { allowMentions: value });
     await refreshUserPanel(interaction);
   } else if (action === "spontaneous") {
     const value = !settings.spontaneousInteractions; await updateSettings(interaction.user.id, { spontaneousInteractions: value });

@@ -1,4 +1,6 @@
-export const LFG_VOICE_CATEGORY_ID = "1538663337011707944";
+import { config } from "../../config.js";
+
+export const LFG_VOICE_CATEGORY_ID = config.lfg.voiceCategoryId;
 
 export const LFG_GAMES = {
   fortnite: { name: "Fortnite", roleId: "1538650428189712414", img: "https://i.pinimg.com/474x/4b/ab/34/4bab34086b84ee2a0e1b66b1e82ed0be.jpg" },

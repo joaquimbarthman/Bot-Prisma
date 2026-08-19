@@ -1,7 +1,7 @@
 import { EmbedBuilder, PermissionFlagsBits, type ButtonInteraction, type ChatInputCommandInteraction, type Client, type Message, type TextChannel } from "discord.js";
 import { aiModeration } from "./ai.js";
-import { config } from "./config.js";
-import { moderationButtons } from "./emoji-manager.js";
+import { config } from "../../config.js";
+import { moderationButtons } from "../../emoji-manager.js";
 import { localModeration } from "./filter.js";
 import { forgiveMember, punishMember } from "./punishment-role.js";
 import { decreaseReputation, getReputation, resetReputation } from "./reputation.js";

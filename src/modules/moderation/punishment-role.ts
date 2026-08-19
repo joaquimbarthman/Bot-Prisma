@@ -1,5 +1,5 @@
 import { ChannelType, PermissionFlagsBits, type Guild, type GuildBasedChannel, type GuildMember, type Role, type TextChannel } from "discord.js";
-import { config } from "./config.js";
+import { config } from "../../config.js";
 import { clearPreservedRoles, getPreservedRoles, preserveMemberRoles } from "./punishment-role-snapshots.js";
 
 const punishmentPermissions = {

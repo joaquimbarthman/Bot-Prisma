@@ -6,7 +6,7 @@ import { addPhotoFrame } from "./image.js";
 
 function galleryTimestamp(timestamp: number): string {
   const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: config.prismaAi.timezone,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
