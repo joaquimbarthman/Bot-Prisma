@@ -25,14 +25,14 @@ import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, 
 export function publicPanelComponents(): APIContainerComponent[] {
   return [{
     type: ComponentType.Container,
-    accent_color: 0x7c5cff,
+    accent_color: 0x99aab5,
     components: [
       { type: ComponentType.TextDisplay, content: "## PRISMA • AI\n\n### Uma nova forma de interagir com a Prisma\n\nUma personalidade-base consistente que desenvolve uma dinâmica própria com você ao longo das conversas." },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       { type: ComponentType.MediaGallery, items: [{ media: { url: "https://i.imgur.com/tpY1lXI.gif" } }] },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId("prisma-ai:open").setLabel("Abrir painel").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("prisma-ai:open").setLabel("Abrir painel").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Secondary),
       ).toJSON(),
     ],
   }];

@@ -121,7 +121,7 @@ export function galleryReportButtons(channelId: string, messageId: string): Acti
 
 export function moderationButtons(userId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`moderacao:banir:${userId}`).setLabel("・ Banir").setEmoji(moderationEmojis.block ?? "🚫").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`moderacao:confiar:${userId}`).setLabel("・ Confiar").setEmoji(moderationEmojis.check ?? "✅").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`moderacao:banir:${userId}`).setLabel("Banir").setEmoji(moderationEmojis.block ?? "🚫").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`moderacao:confiar:${userId}`).setLabel("Restaurar confiança").setEmoji(moderationEmojis.check ?? "✅").setStyle(ButtonStyle.Success),
   );
 }

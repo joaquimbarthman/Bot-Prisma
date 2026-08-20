@@ -1,4 +1,4 @@
-import { EmbedBuilder, PermissionFlagsBits, type ButtonInteraction, type ChatInputCommandInteraction, type Client, type Message, type TextChannel } from "discord.js";
+import { ComponentType, MessageFlags, PermissionFlagsBits, type ButtonInteraction, type ChatInputCommandInteraction, type Client, type Message, type TextChannel } from "discord.js";
 import { aiModeration } from "./ai.js";
 import { config } from "../../config.js";
 import { moderationButtons } from "../../emoji-manager.js";
@@ -75,17 +75,39 @@ export async function handleModerationMessage(client: Client, message: Message):
   const channel = await client.channels.fetch(config.modLogChannelId).catch(() => null) as TextChannel | null;
   if (!channel?.isTextBased()) return true;
   const content = message.content.replace(/`/g, "ˋ").slice(0, 950);
-  const embed = new EmbedBuilder().setColor(reputation <= 25 ? 0xed4245 : reputation <= 50 ? 0xfee75c : 0xf0b232)
-    .setAuthor({ name: "Central de Segurança • Prisma", iconURL: client.user?.displayAvatarURL() })
-    .setTitle("Nova ocorrência detectada").setDescription("Uma mensagem foi removida automaticamente e aguarda a revisão da equipe.")
-    .setThumbnail(message.author.displayAvatarURL({ size: 256 }))
-    .addFields(
-      { name: "👤 Membro", value: message.member?.displayName ?? message.author.username, inline: true },
-      { name: "💭 Canal", value: `<#${message.channelId}>`, inline: true }, { name: "🔨 Motivo", value: reason },
-      { name: "🛡️ Confiança", value: reputationBar(reputation), inline: true }, { name: "⚠️ Avisos", value: `**${count}/${config.warningsBeforeTimeout}**`, inline: true },
-      { name: "✉️ Conteúdo removido", value: `\`\`\`\n${content}\n\`\`\`` },
-    ).setFooter({ text: count >= config.warningsBeforeTimeout ? `ID: ${message.author.id} • Use os botões abaixo para revisar` : `ID: ${message.author.id} • Ações disponíveis ao atingir ${config.warningsBeforeTimeout}/${config.warningsBeforeTimeout}` }).setTimestamp();
-  await channel.send({ embeds: [embed], components: count >= config.warningsBeforeTimeout ? [moderationButtons(message.author.id)] : [] });
+  const accentColor = reputation <= 25 ? 0xed4245 : reputation <= 50 ? 0xfee75c : 0xf0b232;
+  const timestamp = Math.floor(Date.now() / 1_000);
+  await channel.send({
+    flags: MessageFlags.IsComponentsV2,
+    components: [{
+      type: ComponentType.Container,
+      accent_color: accentColor,
+      components: [
+        {
+          type: ComponentType.Section,
+          components: [{
+            type: ComponentType.TextDisplay,
+            content: `## Ocorrência de moderação\n**Membro** ・ <@${message.author.id}>\n\n-# Mensagem removida automaticamente. Revise os dados abaixo se for necessário tomar uma ação adicional.`,
+          }],
+          accessory: {
+            type: ComponentType.Thumbnail,
+            media: { url: message.author.displayAvatarURL({ size: 256 }) },
+            description: `Foto de ${message.author.username}`,
+          },
+        },
+        { type: ComponentType.Separator, divider: true, spacing: 1 },
+        {
+          type: ComponentType.TextDisplay,
+          content: `**Canal**　　　　　　　 **Motivo**\n<#${message.channelId}>　  　      ${reason}\n\n**Avisos**　　　　　　  **  Confiança**\n${count}/${config.warningsBeforeTimeout}　　　 　　　　　 ${reputationBar(reputation)}`,
+        },
+        { type: ComponentType.Separator, divider: true, spacing: 1 },
+        { type: ComponentType.TextDisplay, content: `**Conteúdo removido**\n\`\`\`\n${content}\n\`\`\`` },
+        { type: ComponentType.Separator, divider: true, spacing: 1 },
+        moderationButtons(message.author.id).toJSON(),
+        { type: ComponentType.TextDisplay, content: `-# Central de Segurança • <t:${timestamp}:t>` },
+      ],
+    }],
+  });
   return true;
 }
 

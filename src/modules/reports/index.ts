@@ -48,7 +48,7 @@ function statusFromValue(value: string): ReportStatus {
 
 function openButton(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:open").setLabel(" Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("report:open").setLabel(" Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Success),
   );
 }
 
@@ -94,7 +94,7 @@ function isReportChannelName(name: string): boolean {
 function publicPanelComponents(): APIContainerComponent[] {
   return [{
     type: ComponentType.Container,
-    accent_color: 0xed4245,
+    accent_color: 0x57f287,
     components: [
       {
         type: ComponentType.TextDisplay,
