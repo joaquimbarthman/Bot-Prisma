@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { config } from "../../config.js";
 type Database = Record<string, Record<string, number>>;
-const file = path.resolve("data", "reputations.json");
+const file = path.resolve(config.dataDir, "reputations.json");
 let queue = Promise.resolve();
 async function read(): Promise<Database> {
   try { return JSON.parse(await readFile(file, "utf8")) as Database; }

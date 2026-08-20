@@ -1,9 +1,10 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { config } from "../../config.js";
 
 type Warning = { at: string; reason: string; moderator: string };
 type Database = Record<string, Record<string, Warning[]>>;
-const file = path.resolve("data", "warnings.json");
+const file = path.resolve(config.dataDir, "warnings.json");
 let queue = Promise.resolve();
 
 async function read(): Promise<Database> {

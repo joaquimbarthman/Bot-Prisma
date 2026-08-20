@@ -19,6 +19,7 @@ function decimal(name: string, fallback: number): number {
 }
 
 export const config = {
+  dataDir: process.env.DATA_DIR?.trim() || "data",
   token: process.env.DISCORD_TOKEN ?? "",
   clientId: process.env.DISCORD_CLIENT_ID ?? "",
   guildId: process.env.DISCORD_GUILD_ID,

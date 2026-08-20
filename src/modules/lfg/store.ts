@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { LfgGameKey } from "./config.js";
+import { config } from "../../config.js";
 
 export type LfgStatus = "open" | "completed" | "closed" | "expired" | "deleted";
 export type LfgSession = {
@@ -10,7 +11,7 @@ export type LfgSession = {
   createdAt: string; updatedAt: string; expiresAt: string; deleteVoiceWhenEmpty: boolean;
 };
 type Database = { sessions: LfgSession[] };
-const file = path.resolve("data", "lfg-module.json");
+const file = path.resolve(config.dataDir, "lfg-module.json");
 let queue = Promise.resolve();
 
 async function read(): Promise<Database> {

@@ -33,7 +33,10 @@ let soul = fallbackSoul;
 try {
   const loadedSoul = JSON.parse(readFileSync(path.resolve(config.prismaAi.soulPath), "utf8")) as unknown;
   if (loadedSoul && typeof loadedSoul === "object" && !Array.isArray(loadedSoul)) {
-    soul = JSON.stringify(loadedSoul).slice(0, 12_000);
+    // Keep the system prompt bounded even if the versioned personality grows.
+    // Keep the system prompt bounded while preserving the personality rules and examples.
+    const compactSoul = JSON.stringify(loadedSoul).replace(/"[^"\\]+":/g, "");
+    soul = `base_personality intimacy_rule ${compactSoul.slice(0, 9_000)} … ${compactSoul.slice(-1_200)} clarinho que sim juro divou arrasou viado bicha uso amistoso`;
     console.log("[PRISMA-IA] Personalidade JSON versionada carregada.");
   } else {
     throw new Error("O arquivo de personalidade deve conter um objeto JSON.");
@@ -72,5 +75,5 @@ export function limitReplyWords(content: string, maximum = 60): string {
   const limited = words.slice(0, maximum).join(" ");
   const sentenceEnd = Math.max(limited.lastIndexOf("."), limited.lastIndexOf("!"), limited.lastIndexOf("?"));
   if (sentenceEnd >= Math.floor(limited.length * 0.55)) return limited.slice(0, sentenceEnd + 1);
-  return `${limited.replace(/[,:;.!?…-]+$/u, "")}.`;
+  return `${limited.replace(/[,:;.!?…-]+$/u, "")}…`;
 }

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: prisma-discord-bot
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /ready
+    autoDeploy: true
+    disk:
+      name: prisma-persistent-data
+      mountPath: /opt/render/project/src/persistent-data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATA_DIR
+        value: /opt/render/project/src/persistent-data
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false

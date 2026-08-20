@@ -10,6 +10,12 @@ Monitora mensagens, remove conteúdo ofensivo, aplica avisos progressivos e regi
 4. Convide o bot com os escopos `bot` e `applications.commands`. Dê as permissões **View Channels**, **Send Messages**, **Manage Messages** e **Moderate Members**.
 5. Rode `npm run dev`.
 
+## Deploy no Render
+
+O arquivo `render.yaml` cria um Web Service pago com build `npm ci && npm run build`, start `npm start`, health check em `/ready` e disco persistente para os arquivos em `DATA_DIR`. Na criação do serviço, preencha as variáveis marcadas como secretas e copie as demais variáveis do `.env` para o painel do Render. Não envie o `.env` para o repositório.
+
+Antes do primeiro deploy, execute `supabase/schema.sql` e todas as migrations pendentes no Supabase. O disco persistente protege os JSONs locais de reinícios, mas não substitui banco de dados para múltiplas instâncias.
+
 Durante testes, preencha `DISCORD_GUILD_ID` para os comandos aparecerem imediatamente. Sem ele, os comandos são globais e podem demorar para aparecer.
 
 ## IA opcional

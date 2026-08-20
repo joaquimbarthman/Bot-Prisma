@@ -5,7 +5,7 @@ import { config } from "../../config.js";
 
 export type GalleryPost = { ownerId: string; likes: string[]; reportPending?: boolean; reportDisabled?: boolean };
 type Database = Record<string, GalleryPost>;
-const file = path.resolve("data", "gallery.json");
+const file = path.resolve(config.dataDir, "gallery.json");
 let queue = Promise.resolve();
 const supabase = config.supabaseUrl && config.supabaseSecretKey
   ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })

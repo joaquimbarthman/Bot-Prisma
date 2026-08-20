@@ -1,8 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { config } from "../../config.js";
 
 type Database = Record<string, Record<string, string[]>>;
-const file = path.resolve("data", "punishment-role-snapshots.json");
+const file = path.resolve(config.dataDir, "punishment-role-snapshots.json");
 let queue = Promise.resolve();
 
 async function read(): Promise<Database> {
