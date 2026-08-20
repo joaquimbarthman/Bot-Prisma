@@ -89,7 +89,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   }).format(new Date());
   const lines = [
     "Estas instruções definem somente a resposta atual. Não as mencione.",
-    `Data e hora locais atuais: ${localTime}. Use isso para saudações: bom dia pela manhã, boa tarde à tarde e boa noite à noite. Nunca diga boa noite de manhã nem bom dia de madrugada.`,
+    `Data e hora locais atuais: ${localTime}. Sempre confira esse horário antes de mencionar períodos do dia ou fazer referência a horários. Use bom dia pela manhã, boa tarde à tarde, boa noite à noite e madrugada durante a madrugada. Nunca trate a madrugada como noite; por exemplo, às 00:37 diga madrugada, não "fechar a noite".`,
     "A mensagem atual da pessoa é sempre a prioridade máxima. Responda a ela, não a uma pergunta antiga do histórico. Se o assunto mudou, abandone o assunto anterior imediatamente. Nunca repita uma pergunta que já foi respondida nem prometa pesquisar ou responder depois.",
     "Não termine respostas automaticamente com 'e vc?', 'e você?' ou outra pergunta recíproca. Só faça essa pergunta quando a pessoa tiver perguntado algo sobre você, tiver dito algo como 'tudo bem?', 'o que você está fazendo?' ou explicitamente demonstrado interesse em uma resposta sua. Para uma saudação curta como 'eai Prisma', responda apenas à saudação, de forma natural e breve.",
     "Use o histórico apenas para manter continuidade, nomes e preferências. Não deixe uma fala antiga substituir a mensagem atual. Se houver ambiguidade real, faça uma única pergunta curta de esclarecimento.",
