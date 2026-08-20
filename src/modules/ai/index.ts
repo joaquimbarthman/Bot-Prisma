@@ -248,9 +248,11 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       console.warn("[PRISMA-IA] Saída bloqueada pelo filtro determinístico.");
       answer = "Não vou seguir por esse caminho. Vamos manter a conversa de boa.";
     }
-    const prefix = settings.allowMentions ? `<@${message.author.id}> ` : "";
+    // A menção automática ao autor é exclusiva das interações espontâneas.
+    // Em respostas diretas, o reply do Discord já fornece o contexto sem pingar a pessoa.
+    const prefix = spontaneous && settings.allowMentions ? `<@${message.author.id}> ` : "";
     const replyMentionUserIds = [...new Set([
-      ...(settings.allowMentions ? [message.author.id] : []),
+      ...(spontaneous && settings.allowMentions ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
