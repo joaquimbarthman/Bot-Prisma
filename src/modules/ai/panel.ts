@@ -79,6 +79,14 @@ function deletionConfirmationComponents(target: DeletionTarget): APIContainerCom
   }];
 }
 
+function deletionResultComponents(title: string, description: string, color: number): APIContainerComponent[] {
+  return [{
+    type: ComponentType.Container,
+    accent_color: color,
+    components: [{ type: ComponentType.TextDisplay, content: `## ${title}\n${description}` }],
+  }];
+}
+
 export function relationshipPercentage(relationship: PrismaRelationship): number {
   return Math.round((
     normalizedRelationshipScore(relationship.familiarity, 10)
@@ -209,12 +217,6 @@ async function refreshUserPanel(interaction: Interaction): Promise<void> {
   await interaction.editReply({ components: userPanelComponents(interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
 }
 
-async function restoreUserPanel(interaction: Interaction): Promise<void> {
-  if (!interaction.isButton()) return;
-  const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
-  await interaction.update({ components: userPanelComponents(interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
-}
-
 export async function handlePanelInteraction(interaction: Interaction): Promise<boolean> {
   if (!(interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith("prisma-ai:")) return false;
   if (!interaction.inGuild()) return true;
@@ -301,7 +303,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   }
   if (opensDeletionConfirmation) {
     const target: DeletionTarget = action === "forget" ? "memories" : action === "clear-history" ? "history" : action === "reset-relationship" ? "relationship" : "all";
-    await interaction.update({ components: deletionConfirmationComponents(target), allowedMentions: { parse: [] } });
+    await interaction.reply({ components: deletionConfirmationComponents(target), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "view-memories") {
@@ -313,15 +315,21 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     return true;
   }
   if (action === "cancel-deletion" && interaction.isButton()) {
-    await restoreUserPanel(interaction);
+    await interaction.update({ components: deletionResultComponents("Exclusão cancelada", "Nenhuma informação foi alterada.", 0x99aab5) });
     return true;
   }
   if (confirmsDeletion) {
+    const descriptions: Record<string, string> = {
+      "confirm-memories": "Memórias, perfil aprendido e resumos foram apagados.",
+      "confirm-history": "O histórico de conversa foi apagado.",
+      "confirm-relationship": "A relação construída com a Prisma foi reiniciada.",
+      "confirm-all": "Todos os seus dados da Prisma foram apagados.",
+    };
     if (action === "confirm-memories") await deletePrismaUserData(interaction.user.id, "memories");
     if (action === "confirm-history") { await clearUserHistory(interaction.user.id); await deletePrismaUserData(interaction.user.id, "history"); }
     if (action === "confirm-relationship") { await resetPrismaState(interaction.user.id, false); await deletePrismaUserData(interaction.user.id, "relationship"); }
     if (action === "confirm-all") await deletePrismaUserData(interaction.user.id, "all");
-    await refreshUserPanel(interaction);
+    await interaction.editReply({ components: deletionResultComponents("Exclusão concluída", descriptions[action] ?? "Os dados foram apagados.", 0x57f287) });
     return true;
   }
   if (action === "reset-cancel") {
