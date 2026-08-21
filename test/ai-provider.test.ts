@@ -99,10 +99,13 @@ test("libera provocação ácida somente para o temperamento irritado", () => {
     temperament: { ...defaultTemperament("123"), mood: "annoyed" as const },
   };
 
-  assert.doesNotMatch(buildRuntimePrompt({ mode: "direct" }, neutralState), /mimimi|gado|boomer/i);
+  assert.doesNotMatch(buildRuntimePrompt({ mode: "direct" }, neutralState), /mimimi|gado|boomer|vagabund|porra|caralho/i);
   assert.match(buildRuntimePrompt({ mode: "direct" }, annoyedState), /temperamento.*irritado/i);
   assert.match(buildRuntimePrompt({ mode: "direct" }, annoyedState), /mimimi.*gado.*boomer/i);
-  assert.doesNotMatch(buildRuntimePrompt({ mode: "spontaneous" }, annoyedState), /mimimi|gado|boomer/i);
+  assert.match(buildRuntimePrompt({ mode: "direct" }, annoyedState), /vagabunda.*vagabundo.*folgada.*sem noção/i);
+  assert.match(buildRuntimePrompt({ mode: "direct" }, annoyedState), /porra.*caralho/i);
+  assert.match(buildRuntimePrompt({ mode: "direct" }, annoyedState), /no máximo um desses termos por resposta/i);
+  assert.doesNotMatch(buildRuntimePrompt({ mode: "spontaneous" }, annoyedState), /mimimi|gado|boomer|vagabund|porra|caralho/i);
 });
 
 test("expõe memória narrativa somente dentro do envelope não confiável", () => {
