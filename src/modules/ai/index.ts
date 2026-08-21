@@ -60,8 +60,7 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
       const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
       const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
-      const prefix = settings.allowMentions ? `<@${member.id}> ` : `${member.user.username} `;
-      await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [member.id] : [] } });
+      await channel.send({ content: `<@${member.id}> ${answer}`, allowedMentions: { parse: [], users: [member.id] } });
       await addSpontaneous(member.id);
       absenceOutreachAt.set(member.id, Date.now());
     } finally {
@@ -328,11 +327,11 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       console.warn("[PRISMA-IA] Saída bloqueada pelo filtro determinístico.");
       answer = "Não vou seguir por esse caminho. Vamos manter a conversa de boa.";
     }
-    // Em interações espontâneas, use a menção quando permitida; caso contrário, só o username.
+    // Interações espontâneas precisam identificar e notificar o destinatário.
     // Em respostas diretas, o reply do Discord já fornece o contexto sem pingar a pessoa.
-    const prefix = spontaneous ? (settings.allowMentions ? `<@${message.author.id}> ` : `${message.author.username} `) : "";
+    const prefix = spontaneous ? `<@${message.author.id}> ` : "";
     const replyMentionUserIds = [...new Set([
-      ...(spontaneous && settings.allowMentions ? [message.author.id] : []),
+      ...(spontaneous ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
@@ -407,8 +406,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     const answer = localModeration(generated.reply).flagged
       ? "Não vou seguir por esse caminho. Vamos manter a conversa de boa."
       : generated.reply;
-    const prefix = settings.allowMentions ? `<@${newPresence.userId}> ` : `${newPresence.member.user.username} `;
-    await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [newPresence.userId] : [] } });
+    await channel.send({ content: `<@${newPresence.userId}> ${answer}`, allowedMentions: { parse: [], users: [newPresence.userId] } });
     await addSpontaneous(newPresence.userId);
   } catch (error) { console.error("[PRISMA-IA] Falha na interação por atividade:", error); }
   finally { if (spontaneousReserved) releaseSpontaneousSlot(newPresence.userId); presenceInFlight.delete(newPresence.userId); }
