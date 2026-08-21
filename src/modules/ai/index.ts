@@ -3,9 +3,9 @@ import { config } from "../../config.js";
 import { localModeration } from "../moderation/filter.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
-import { generateReply, type ReplyContext } from "./provider.js";
+import { generateReply, rewriteOperatorRule, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, recentHistory, spontaneousCountToday, updateSettings } from "./store.js";
+import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
@@ -60,7 +60,7 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
       const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
       const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
-      const prefix = settings.allowMentions ? `<@${member.id}> ` : "";
+      const prefix = settings.allowMentions ? `<@${member.id}> ` : `${member.user.username} `;
       await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [member.id] : [] } });
       await addSpontaneous(member.id);
       absenceOutreachAt.set(member.id, Date.now());
@@ -109,6 +109,15 @@ function requestedNickname(content: string): string | null {
   return nickname && !/@(?:everyone|here)|<@|https?:\/\//i.test(nickname) ? nickname : null;
 }
 
+function operatorRuleFromMessage(content: string): string | null {
+  const text = content.replace(/\s+/g, " ").trim();
+  const startsWithTrigger = text.match(/^(?:prisma\s*[,!:.-]?\s*)?lembre\s+disso\b\s*[:,-]?\s*(.+)$/i);
+  const endsWithTrigger = text.match(/^(.+?)\s*(?:[,;:—-]\s*|\s+)(?:prisma\s*[,!:.-]?\s*)?lembre\s+disso[.!?]*$/i);
+  const instruction = (startsWithTrigger?.[1] ?? endsWithTrigger?.[1] ?? "").replace(/\s+/g, " ").trim();
+  if (instruction.length < 5 || instruction.length > 400) return null;
+  return instruction;
+}
+
 function needsChannelContext(message: Message): boolean {
   return /\b(?:o que .{0,40} (?:falou|disse)|que (?:ele|ela) (?:falou|disse)|mensagem (?:dele|dela)|resum(?:a|e) (?:a|essa) conversa|contexto da conversa)\b/i.test(normalized(message.content));
 }
@@ -119,6 +128,33 @@ function requestsDirectMention(content: string): boolean {
 
 function requestsContextualMention(content: string): boolean {
   return /<@!?\d+>/.test(content) && /\b(?:o que|oq|qual|como)\b.{0,80}\b(?:acha|achou|opin(?:a|i)|pensa|pensou|avalia|avaliou)\b/i.test(normalized(content));
+}
+
+function requestedPlainUsernames(content: string): string[] {
+  if (!requestsDirectMention(content)) return [];
+  return [...content.matchAll(/(?:^|[^<\w])@([a-z0-9_.]{2,32})/gi)]
+    .map((match) => match[1])
+    .filter((name) => !/^(?:everyone|here)$/i.test(name))
+    .filter((name, index, values) => values.indexOf(name) === index)
+    .slice(0, 3);
+}
+
+function requestedRecipientUsernames(content: string): string[] {
+  if (!requestsDirectMention(content)) return [];
+  return [...content.matchAll(/\b(?:para|pra)\s+\*{0,2}@?([a-z0-9_.]{2,32})/gi)]
+    .map((match) => match[1])
+    .filter((name, index, values) => values.indexOf(name) === index)
+    .slice(0, 3);
+}
+
+function includeRequestedRecipient(answer: string, recipient: string | undefined, recipientName?: string): string {
+  if (!recipient) return answer;
+  const hasRecipient = answer.includes(recipient) || (!!recipientName && answer.toLocaleLowerCase("pt-BR").includes(recipientName.toLocaleLowerCase("pt-BR")));
+  if (hasRecipient) return answer;
+  const greeting = /^(oi+|eai|ol[aá])\b[,!]?\s*/i;
+  return greeting.test(answer)
+    ? answer.replace(greeting, (value) => `${value}${recipient}, `)
+    : `${recipient}, ${answer}`;
 }
 
 export function explicitlyRequestedMentionUserIds(
@@ -132,6 +168,18 @@ export function explicitlyRequestedMentionUserIds(
   return [...new Set([...mentionedUserIds, ...rawMentionIds])]
     .filter((userId) => userId !== botId && userId !== authorId)
     .slice(0, 3);
+}
+
+async function resolveRequestedMentions(message: Message, requestedIds: string[]): Promise<{ allowedMentionUserIds: string[]; unmentionableUsers: Array<{ id: string; username: string }> }> {
+  const allowedMentionUserIds: string[] = [];
+  const unmentionableUsers: Array<{ id: string; username: string }> = [];
+  for (const userId of requestedIds) {
+    const member = message.guild?.members.cache.get(userId) ?? await message.guild?.members.fetch(userId).catch(() => null);
+    const username = member?.user.username ?? message.mentions.users.get(userId)?.username ?? "essa pessoa";
+    if (member && accessLevel(member) !== "none") allowedMentionUserIds.push(userId);
+    else unmentionableUsers.push({ id: userId, username });
+  }
+  return { allowedMentionUserIds, unmentionableUsers };
 }
 
 async function recentChannelContext(message: Message): Promise<string> {
@@ -166,16 +214,17 @@ async function isDirectedAtBot(message: Message, client: Client): Promise<boolea
 export async function handleAiMessage(client: Client, message: Message): Promise<boolean> {
   if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content || ![config.prismaAi.generalChannelId, config.prismaAi.testChannelId].includes(message.channelId)) return false;
   const addressedToPrisma = await isDirectedAtBot(message, client);
+  const operatorRuleCommand = message.author.id === config.prismaAi.operatorUserId ? operatorRuleFromMessage(message.content) : null;
   const runtime = await getAiRuntimeState();
-  if (runtime.testModeEnabled && message.channelId === config.prismaAi.generalChannelId) {
+  if (runtime.testModeEnabled && message.channelId === config.prismaAi.generalChannelId && !operatorRuleCommand) {
     if (!addressedToPrisma) return false;
     if (canSendTestNotice(message.author.id, config.prismaAi.testNoticeCooldownSeconds * 1000)) await message.reply({ content: "O prisma está atualmente sendo testado, logo ele volta pra conversar com você!", allowedMentions: { repliedUser: false } });
     return true;
   }
   const level = accessLevel(message.member);
-  const direct = asksAboutActivity(message.content) || addressedToPrisma;
+  const direct = asksAboutActivity(message.content) || addressedToPrisma || !!operatorRuleCommand;
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
-  if (level === "none") {
+  if (level === "none" && !operatorRuleCommand) {
     if (direct) {
       const notice = await message.reply({ content: `A Prisma IA é exclusiva para membros com o cargo <@&${config.prismaAi.accessRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
       setTimeout(() => notice.delete().catch(() => undefined), 10_000).unref();
@@ -205,6 +254,21 @@ export async function handleAiMessage(client: Client, message: Message): Promise
 
   try {
     await message.channel.sendTyping();
+    if (operatorRuleCommand) {
+      const rewrittenRule = await rewriteOperatorRule(operatorRuleCommand);
+      const saved = rewrittenRule ? await savePrismaOperatorRule(message.author.id, rewrittenRule) : false;
+      const confirmation = await message.reply({
+        content: !rewrittenRule
+          ? "Não consegui reformular essa frase com segurança, então a regra não foi salva. Tente novamente em instantes."
+          : saved
+            ? `Regra salva: ${rewrittenRule}`
+            : "Essa regra já está salva.",
+        allowedMentions: { repliedUser: false },
+      });
+      setTimeout(() => confirmation.delete().catch(() => undefined), 10_000).unref();
+      if (rewrittenRule && saved) setTimeout(() => message.delete().catch(() => undefined), 10_000).unref();
+      return true;
+    }
     const preferredNickname = requestedNickname(message.content);
     if (preferredNickname && preferredNickname !== settings.nickname) {
       try { settings = await updateSettings(message.author.id, { nickname: preferredNickname }); }
@@ -216,6 +280,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
+    const operatorRules = await listPrismaOperatorRules(config.prismaAi.operatorUserId);
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
@@ -223,17 +288,26 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       learnedProfile,
       relevantMemories,
       emotionalState,
+      operatorRules: operatorRules.map((item) => item.rule),
     };
-    const allowedMentionUserIds = explicitlyRequestedMentionUserIds(
+    const requestedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
       message.mentions.users.keys(),
       client.user?.id,
       message.author.id,
     );
+    const { allowedMentionUserIds, unmentionableUsers } = await resolveRequestedMentions(message, requestedMentionUserIds);
+    const recipientUsernames = requestedRecipientUsernames(message.cleanContent);
+    const fallbackUsernames = [...new Set([
+      ...requestedPlainUsernames(content),
+      ...(unmentionableUsers.length || requestedMentionUserIds.length === 0 ? recipientUsernames : []),
+    ])];
     if (requestsDirectMention(content)) {
       console.log(`[PRISMA-IA] Menções de usuário autorizadas para ${message.author.id}: ${allowedMentionUserIds.join(", ") || "nenhuma"}.`);
     }
     if (allowedMentionUserIds.length) replyContext.allowedMentionUserIds = allowedMentionUserIds;
+    if (unmentionableUsers.length) replyContext.unmentionableUsers = unmentionableUsers;
+    if (fallbackUsernames.length) replyContext.fallbackUsernames = fallbackUsernames;
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
     }
@@ -245,16 +319,20 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const generated = await generateReply(message.author.id, settings, prismaState, history, content, replyContext);
     let answer = generated.reply;
     if (!answer) throw new Error("Resposta vazia.");
+    const unavailableRecipient = unmentionableUsers.length ? recipientUsernames[0] ?? unmentionableUsers[0]?.username : undefined;
+    const mentionableRecipientId = allowedMentionUserIds.length === 1 ? allowedMentionUserIds[0] : undefined;
+    const recipient = unavailableRecipient ?? (mentionableRecipientId ? `<@${mentionableRecipientId}>` : recipientUsernames[0]);
+    answer = includeRequestedRecipient(answer, recipient, recipientUsernames[0]);
     const unsafeOutput = localModeration(answer).flagged;
     if (unsafeOutput) {
       console.warn("[PRISMA-IA] Saída bloqueada pelo filtro determinístico.");
       answer = "Não vou seguir por esse caminho. Vamos manter a conversa de boa.";
     }
-    // A menção automática ao autor é exclusiva das interações espontâneas.
+    // Em interações espontâneas, use a menção quando permitida; caso contrário, só o username.
     // Em respostas diretas, o reply do Discord já fornece o contexto sem pingar a pessoa.
-    const prefix = spontaneous ? `<@${message.author.id}> ` : "";
+    const prefix = spontaneous ? (settings.allowMentions ? `<@${message.author.id}> ` : `${message.author.username} `) : "";
     const replyMentionUserIds = [...new Set([
-      ...(spontaneous ? [message.author.id] : []),
+      ...(spontaneous && settings.allowMentions ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
@@ -329,8 +407,8 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     const answer = localModeration(generated.reply).flagged
       ? "Não vou seguir por esse caminho. Vamos manter a conversa de boa."
       : generated.reply;
-    // Mudanças de atividade também são interações espontâneas e sempre começam com a menção.
-    await channel.send({ content: `<@${newPresence.userId}> ${answer}`, allowedMentions: { parse: [], users: [newPresence.userId] } });
+    const prefix = settings.allowMentions ? `<@${newPresence.userId}> ` : `${newPresence.member.user.username} `;
+    await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [newPresence.userId] : [] } });
     await addSpontaneous(newPresence.userId);
   } catch (error) { console.error("[PRISMA-IA] Falha na interação por atividade:", error); }
   finally { if (spontaneousReserved) releaseSpontaneousSlot(newPresence.userId); presenceInFlight.delete(newPresence.userId); }

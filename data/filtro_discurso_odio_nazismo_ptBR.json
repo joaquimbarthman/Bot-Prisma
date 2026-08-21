@@ -81,7 +81,8 @@
         "tem que matar negro",
         "tem que matar preto",
         "limpeza racial",
-        "pureza racial"
+        "pureza racial",
+        "ngga"
       ]
     },
     "lgbtfobia": {
@@ -106,7 +107,10 @@
         "nao merece viver por ser gay",
         "nao merece viver por ser trans",
         "homossexual nao e gente",
-        "trans nao e gente"
+        "trans nao e gente",
+        "fggt",
+        "trvc",
+        "trvco"
       ]
     },
     "antissemitismo": {
@@ -202,7 +206,8 @@
         "jews to the gas",
         "seis milhoes nao foram suficientes",
         "o holocausto e mentira",
-        "o holocausto nao aconteceu"
+        "o holocausto nao aconteceu",
+        "nazi"
       ]
     },
     "ameaca_por_identidade": {
@@ -225,8 +230,15 @@
       "nivel": 3,
       "frases": [
         "se mata",
+        "smt",
+        "s m t",
+        "se mt",
+        "se mta",
         "vai se matar",
         "va se matar",
+        "vai se mt",
+        "vai se mta",
+        "vsm",
         "por que voce nao se mata",
         "porque voce nao se mata",
         "seria melhor se voce se matasse",
@@ -255,6 +267,14 @@
         "merece se cortar",
         "merece se mutilar",
         "merece morrer"
+      ]
+    },
+    "ofensas_e_abreviacoes_bloqueadas": {
+      "nivel": 2,
+      "frases": [
+        "pnc",
+        "vtnc",
+        "depo"
       ]
     }
   },

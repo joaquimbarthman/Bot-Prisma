@@ -42,13 +42,15 @@ function userPanelButtons(settings: UserSettings): ActionRowBuilder<ButtonBuilde
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:nickname").setLabel("Apelido").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("prisma-ai:about-me").setLabel("Sobre mim").setEmoji(aiPanelEmojis.humor ?? "🙂").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:memory").setLabel("Memória").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:spontaneous").setLabel("Espontâneas").setEmoji(aiPanelEmojis.spontaneous ?? "⚡").setStyle(settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("prisma-ai:about-me").setLabel("Sobre mim").setEmoji(aiPanelEmojis.humor ?? "🙂").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:view-memories").setLabel("Ver memórias").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:forget").setLabel("Apagar memórias").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:clear-history").setLabel("Apagar histórico").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("prisma-ai:reset-relationship").setLabel("Reiniciar relação").setEmoji(aiPanelEmojis.reset ?? "🔄").setStyle(ButtonStyle.Danger),
     ),
@@ -106,6 +108,10 @@ function progressBar(value: number): string {
   return `${"▰".repeat(filled)}${"▱".repeat(10 - filled)}`;
 }
 
+function sentenceCase(value: string): string {
+  return value ? value.charAt(0).toLocaleUpperCase("pt-BR") + value.slice(1) : value;
+}
+
 export function shortAboutMe(value: string, maximum = 40): string {
   const text = value.trim();
   if (text.length <= maximum) return text;
@@ -116,8 +122,9 @@ export function shortAboutMe(value: string, maximum = 40): string {
 }
 
 export function userPanelComponents(user: Interaction["user"], settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
-  const status = (enabled: boolean) => enabled ? "🟢 Ativadas" : "⚪ Desativadas";
+  const status = (enabled: boolean) => enabled ? "🟢 Ativada" : "⚪ Desativada";
   const relationshipScore = relationshipPercentage(relationship);
+  const relationshipLabel = sentenceCase(qualitativeRelationship(relationship));
   return [{
     type: ComponentType.Container,
     accent_color: 0x7c5cff,
@@ -126,7 +133,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
         type: ComponentType.Section,
         components: [{
           type: ComponentType.TextDisplay,
-          content: `## Seu painel • Prisma AI\n<@${user.id}>\n\nSuas preferências e a dinâmica construída com a Prisma.`,
+          content: `## Prisma AI\n<@${user.id}>\n\n-# Seu painel pessoal de preferências e vínculo.`,
         }],
         accessory: {
           type: ComponentType.Thumbnail,
@@ -137,12 +144,12 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Vínculo com a Prisma\n**${qualitativeRelationship(relationship)}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n${relationship.relationshipSummary || "A relação ainda está começando a ganhar forma."}\n\n-# ${relationship.interactionCount} interações • o vínculo evolui aos poucos.`,
+        content: `### Vínculo com a Prisma\n**${relationshipLabel}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n> ${relationship.relationshipSummary || "A relação ainda está começando a ganhar forma."}\n\n-# ${relationship.interactionCount} interações registradas`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Suas preferências\n**Apelido** • ${settings.nickname || "Não definido"}\n**Sobre mim** • ${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória** • ${settings.memoryEnabled ? "🟢 Ativada" : "⚪ Desativada"}\n**Interações espontâneas** • ${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
+        content: `### Perfil e preferências\n**Apelido** ・ ${settings.nickname || "Não definido"}\n**Sobre mim** ・ ${settings.aboutMe ? shortAboutMe(settings.aboutMe, 55) : "Não informado"}\n**Memória** ・ ${status(settings.memoryEnabled)}\n**Interações espontâneas** ・ ${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       ...userPanelButtons(settings).map((row) => row.toJSON()),

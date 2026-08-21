@@ -84,6 +84,7 @@ export const config = {
     channelHistoryLimit: integer("AI_CHANNEL_HISTORY_LIMIT", 200),
     channelHistoryExpandedLimit: integer("AI_CHANNEL_HISTORY_EXPANDED_LIMIT", 200),
     userCooldownSeconds: Math.max(3, integer("AI_USER_COOLDOWN_SECONDS", 3)),
+    operatorUserId: "558417730487713794",
     spontaneousCooldownMinutes: integer("AI_SPONTANEOUS_COOLDOWN_MINUTES", 180),
     dailySpontaneousLimit: integer("AI_DAILY_SPONTANEOUS_LIMIT", 10),
     spontaneousChancePercent: decimal("AI_SPONTANEOUS_CHANCE_PERCENT", 2),

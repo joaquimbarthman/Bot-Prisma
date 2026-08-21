@@ -30,6 +30,7 @@ export type PrismaMemory = { id?: number; userId: string; memoryType: string; co
 export type PrismaMessage = { messageId: string; guildId: string; channelId: string; userId: string; content: string; authorIsPrisma: boolean; replyToMessageId?: string | null; createdAt: string };
 export type PrismaDailySummary = { userId: string; summaryDate: string; summary: string; updatedAt?: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
+export type PrismaOperatorRule = { id?: number; ownerId: string; rule: string; createdAt: string };
 type SpontaneousEvent = { discordId: string; createdAt: string };
 type Database = {
   settings: Record<string, UserSettings>;
@@ -43,6 +44,7 @@ type Database = {
   emotionalStates?: Record<string, PrismaEmotionalState>;
   prismaMessages?: PrismaMessage[];
   dailySummaries?: PrismaDailySummary[];
+  operatorRules?: PrismaOperatorRule[];
 };
 
 const defaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
@@ -454,8 +456,9 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("prisma_messages").select("id").limit(1),
     supabase.from("prisma_emotional_states").select("user_id").limit(1),
     supabase.from("prisma_daily_summaries").select("id").limit(1),
+    supabase.from("prisma_operator_rules").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries"];
+  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
@@ -503,6 +506,31 @@ export async function clearNickname(id: string): Promise<void> {
   }
   await withLocal((db) => { if (db.settings[id]) db.settings[id] = { ...db.settings[id], nickname: "" }; }, true);
   if (remoteError) throw new Error("Não foi possível remover seu apelido no Supabase agora.");
+}
+
+export async function listPrismaOperatorRules(ownerId: string): Promise<PrismaOperatorRule[]> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true });
+    if (error) { remoteFailure("ler regras do operador", error.message); return []; }
+    return (data ?? []).map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string }));
+  }
+  return withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId));
+}
+
+export async function savePrismaOperatorRule(ownerId: string, rule: string): Promise<boolean> {
+  const normalized = rule.replace(/\s+/g, " ").trim().slice(0, 350);
+  if (!normalized) return false;
+  if (supabase) {
+    const { error } = await supabase.from("prisma_operator_rules").upsert({ owner_id: ownerId, rule: normalized }, { onConflict: "owner_id,rule", ignoreDuplicates: true });
+    if (error) { remoteFailure("salvar regra do operador", error.message); throw new Error("Não foi possível salvar a regra agora."); }
+    return true;
+  }
+  return withLocal((db) => {
+    const rules = db.operatorRules ?? [];
+    if (rules.some((item) => item.ownerId === ownerId && item.rule === normalized)) return false;
+    db.operatorRules = [...rules, { ownerId, rule: normalized, createdAt: new Date().toISOString() }];
+    return true;
+  }, true);
 }
 
 export async function getPrismaState(id: string, now = new Date()): Promise<PrismaUserState> {
