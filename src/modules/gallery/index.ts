@@ -1,10 +1,12 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, ModalBuilder, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, escapeMarkdown, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "../../config.js";
 import { aiPanelEmojis, galleryButtons } from "../../emoji-manager.js";
 import { aiModeration } from "../moderation/ai.js";
 import { localModeration, normalizeText, shouldUseAi } from "../moderation/filter.js";
 import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
 import { addPhotoFrame } from "./image.js";
+
+const GALLERY_COMMENT_MAX_LENGTH = 80;
 
 function normalizeInstagramHandle(value: string): string | null {
   const handle = value.trim().replace(/^@/, "");
@@ -49,6 +51,32 @@ function galleryPostComponents(userId: string, mediaUrl: string, caption: string
     { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
     ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
   ] }];
+}
+
+function galleryDetailsComponents(post: GalleryPost): APIContainerComponent[] {
+  const visibleLikes = post.likes.slice(0, 50);
+  const hiddenLikes = Math.max(0, post.likes.length - visibleLikes.length);
+  const likes = visibleLikes.length
+    ? `${visibleLikes.map((id) => `<@${id}>`).join("  ·  ")}${hiddenLikes ? `\n-# e mais ${hiddenLikes} ${hiddenLikes === 1 ? "pessoa" : "pessoas"}` : ""}`
+    : "-# Esta foto ainda não recebeu curtidas.";
+
+  const visibleComments = post.comments.slice(-10);
+  const comments = visibleComments.length
+    ? visibleComments.map((comment) => `> <@${comment.userId}>  **·**  ${escapeMarkdown(comment.content)}`).join("\n")
+    : "-# Ainda não há comentários. Seja a primeira pessoa a comentar!";
+  const hiddenComments = Math.max(0, post.comments.length - visibleComments.length);
+
+  return [{
+    type: ComponentType.Container,
+    accent_color: 0xeb459e,
+    components: [
+      { type: ComponentType.TextDisplay, content: `## Detalhes da foto\n-# Publicada por <@${post.ownerId}>` },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content: `### Curtidas  ·  ${post.likes.length}\n${likes}` },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content: `### Comentários  ·  ${post.comments.length}\n${comments}${hiddenComments ? `\n-# Exibindo os 10 mais recentes de ${post.comments.length} comentários.` : ""}` },
+    ],
+  }];
 }
 
 function componentsWithGalleryButtons(message: Message, post: GalleryPost) {
@@ -127,7 +155,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
       return true;
     }
     if (action !== "comentar-modal") return false;
-    const content = interaction.fields.getTextInputValue("comentario").trim().replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, 150);
+    const content = interaction.fields.getTextInputValue("comentario").trim().replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, GALLERY_COMMENT_MAX_LENGTH);
     if (!content) { await interaction.reply({ content: "Escreva um comentário antes de enviar.", ephemeral: true }); return true; }
     if (await blockedGalleryComment(content)) {
       await interaction.reply({ content: "Esse comentário não pode ser publicado. Mantenha a conversa respeitosa.", ephemeral: true });
@@ -164,7 +192,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     if (result.post) await interaction.update({ components: componentsWithGalleryButtons(interaction.message, result.post) });
     else await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true });
   } else if (action === "comentar") {
-    const modal = new ModalBuilder().setCustomId(`galeria:comentar-modal:${interaction.message.id}`).setTitle("Comentar na foto").addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("comentario").setLabel("Comentário (até 150 caracteres)").setStyle(TextInputStyle.Paragraph).setMaxLength(150).setRequired(true)));
+    const modal = new ModalBuilder().setCustomId(`galeria:comentar-modal:${interaction.message.id}`).setTitle("Comentar na foto").addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("comentario").setLabel(`Comentário (até ${GALLERY_COMMENT_MAX_LENGTH} caracteres)`).setStyle(TextInputStyle.Paragraph).setMaxLength(GALLERY_COMMENT_MAX_LENGTH).setRequired(true)));
     await interaction.showModal(modal);
   } else if (action === "instagram") {
     if (interaction.user.id === post.ownerId) {
@@ -175,10 +203,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
       await interaction.reply({ content: "Instagram da pessoa que publicou a foto:", components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(`@${post.instagramHandle}`).setURL(`https://www.instagram.com/${post.instagramHandle}`).setStyle(ButtonStyle.Link))], ephemeral: true });
     } else await interaction.reply({ content: "A pessoa que publicou esta foto ainda não informou o Instagram.", ephemeral: true });
   } else if (action === "detalhes") {
-    const likes = post.likes.slice(0, 50).map((id) => `<@${id}>`).join("\n") || "Nenhuma curtida";
-    const comments = post.comments.slice(-10).map((comment) => `<@${comment.userId}>: ${comment.content}`).join("\n") || "Nenhum comentário";
-    const embed = new EmbedBuilder().setColor(0xeb459e).setTitle("Detalhes da foto").addFields({ name: `Curtidas ・ ${post.likes.length}`, value: likes }, { name: `Comentários ・ ${post.comments.length}`, value: comments });
-    await interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
+    await interaction.reply({ components: galleryDetailsComponents(post), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
   } else if (action === "excluir") {
     if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode excluir a publicação.", ephemeral: true }); return true; }
     await interaction.reply({ components: deleteConfirmationComponents(interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"] });
