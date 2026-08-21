@@ -418,7 +418,7 @@ export async function handleAiInteraction(interaction: Interaction): Promise<boo
   if (interaction.isChatInputCommand() && (interaction.commandName === "teste-ai" || interaction.commandName === "fim-teste-ai")) {
     const enabled = interaction.commandName === "teste-ai";
     await setAiTestMode(enabled, interaction.user.id);
-    await interaction.reply({ content: enabled ? `modo de testes ativado, IA ${PRISMA_AI_VERSION}, canal de teste <#${config.prismaAi.testChannelId}>` : "modo de testes desativado, voltei a responder no canal principal", ephemeral: true });
+    await interaction.reply({ content: enabled ? `modo de testes ativado, IA ${PRISMA_AI_VERSION}, canal de teste <#${config.prismaAi.testChannelId}>` : "modo de testes desativado, voltei a responder no canal principal", flags: ["Ephemeral"] });
     return true;
   }
   return false;

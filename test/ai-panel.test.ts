@@ -33,15 +33,14 @@ test("painel adaptativo remove personalidade e humor manuais", () => {
   assert.ok(!ids.includes("prisma-ai:personality"));
 });
 
-test("painel privado mantém informações, separadores e botões no mesmo contêiner", () => {
+test("painel privado exibe somente a frase de percepção da Prisma", () => {
   const container = userPanelComponents(mockUser, settings, defaultRelationship("123"))[0];
   assert.equal(container.type, 17);
   assert.ok(container.components.filter((component) => component.type === 14).length >= 3);
   assert.ok(container.components.some((component) => component.type === 1));
   const serialized = JSON.stringify(container);
-  assert.match(serialized, /Afinidade/);
-  assert.match(serialized, /Confiança/);
-  assert.match(serialized, /Sintonia/);
+  assert.match(serialized, /Ainda estou conhecendo você e formando minha impressão\./);
+  assert.doesNotMatch(serialized, /Vínculo com a Prisma|interações registradas|Afinidade|Confiança|Sintonia/);
   assert.doesNotMatch(serialized, /Somente você pode ver/);
 });
 
@@ -58,11 +57,11 @@ test("painel público possui somente a entrada para o painel privado", () => {
 
 test("resume o sobre mim no painel sem alterar o texto armazenado", () => {
   const aboutMe = "Amo a Ariana Grande e Olivia Rodrigo são minhas cantoras favoritas";
-  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia Rodrigo são...");
+  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia...");
   assert.equal(shortAboutMe("Curto RPG"), "Curto RPG");
 });
 
-test("exibe evolução e confiança zeradas no início", () => {
+test("calcula a evolução internamente sem exibi-la junto da percepção", () => {
   assert.equal(relationshipPercentage(defaultRelationship("123")), 0);
   assert.equal(relationshipPercentage({
     ...defaultRelationship("123"),
@@ -71,8 +70,11 @@ test("exibe evolução e confiança zeradas no início", () => {
     trust: 100,
     banter: 100,
   }), 100);
-  const serialized = JSON.stringify(userPanelComponents(mockUser, settings, defaultRelationship("123"))[0]);
-  assert.match(serialized, /\*\*Afinidade\*\*　0%/);
-  assert.match(serialized, /\*\*Confiança\*\*　0%/);
-  assert.match(serialized, /\*\*Sintonia\*\*　0%/);
+  const relationship = {
+    ...defaultRelationship("123"),
+    relationshipSummary: "Eu vejo você como alguém divertido e gosto da nossa conversa leve.",
+  };
+  const serialized = JSON.stringify(userPanelComponents(mockUser, settings, relationship)[0]);
+  assert.match(serialized, /Eu vejo você como alguém divertido e gosto da nossa conversa leve\./);
+  assert.doesNotMatch(serialized, /Afinidade|Confiança|Sintonia|%/);
 });

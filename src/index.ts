@@ -104,7 +104,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (error) {
     console.error(`[INTERACAO] Falha ao processar ${interaction.id}:`, error);
     if (interaction.isRepliable()) {
-      const errorMessage = { content: "Não consegui concluir esta ação. A equipe foi avisada.", ephemeral: true } as const;
+      const errorMessage = { content: "Não consegui concluir esta ação. A equipe foi avisada.", flags: ["Ephemeral"] } as const;
       if (interaction.replied || interaction.deferred) await interaction.followUp(errorMessage).catch(() => undefined);
       else await interaction.reply(errorMessage).catch(() => undefined);
     }

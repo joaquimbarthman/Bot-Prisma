@@ -144,27 +144,27 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     if (!messageId) return false;
     if (action === "instagram-modal") {
       const post = await getGalleryPost(messageId);
-      if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
-      if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode definir o Instagram.", ephemeral: true }); return true; }
+      if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
+      if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode definir o Instagram.", flags: ["Ephemeral"] }); return true; }
       const instagramHandle = normalizeInstagramHandle(interaction.fields.getTextInputValue("instagram"));
-      if (!instagramHandle) { await interaction.reply({ content: "Digite apenas um usuário válido do Instagram, como @prisma.ia.", ephemeral: true }); return true; }
+      if (!instagramHandle) { await interaction.reply({ content: "Digite apenas um usuário válido do Instagram, como @prisma.ia.", flags: ["Ephemeral"] }); return true; }
       const updated = await updateGalleryInstagram(messageId, instagramHandle);
-      if (!updated) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+      if (!updated) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
       await refreshGalleryPost(messageId, interaction.client, updated).catch((error) => console.error("[GALERIA] Falha ao atualizar Instagram:", error));
-      await interaction.reply({ content: "Instagram atualizado.", ephemeral: true });
+      await interaction.reply({ content: "Instagram atualizado.", flags: ["Ephemeral"] });
       return true;
     }
     if (action !== "comentar-modal") return false;
     const content = interaction.fields.getTextInputValue("comentario").trim().replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, GALLERY_COMMENT_MAX_LENGTH);
-    if (!content) { await interaction.reply({ content: "Escreva um comentário antes de enviar.", ephemeral: true }); return true; }
+    if (!content) { await interaction.reply({ content: "Escreva um comentário antes de enviar.", flags: ["Ephemeral"] }); return true; }
     if (await blockedGalleryComment(content)) {
-      await interaction.reply({ content: "Esse comentário não pode ser publicado. Mantenha a conversa respeitosa.", ephemeral: true });
+      await interaction.reply({ content: "Esse comentário não pode ser publicado. Mantenha a conversa respeitosa.", flags: ["Ephemeral"] });
       return true;
     }
     const post = await addGalleryComment(messageId, interaction.user.id, content);
-    if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+    if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
     await refreshGalleryPost(messageId, interaction.client, post).catch((error) => console.error("[GALERIA] Falha ao atualizar comentários:", error));
-    await interaction.reply({ content: "Comentário adicionado.", ephemeral: true });
+    await interaction.reply({ content: "Comentário adicionado.", flags: ["Ephemeral"] });
     return true;
   }
   const [, action, targetMessageId] = interaction.customId.split(":");
@@ -186,11 +186,11 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     return true;
   }
   const post = await getGalleryPost(interaction.message.id);
-  if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+  if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
   if (action === "curtir") {
     const result = await toggleGalleryLike(interaction.message.id, interaction.user.id);
     if (result.post) await interaction.update({ components: componentsWithGalleryButtons(interaction.message, result.post) });
-    else await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true });
+    else await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] });
   } else if (action === "comentar") {
     const modal = new ModalBuilder().setCustomId(`galeria:comentar-modal:${interaction.message.id}`).setTitle("Comentar na foto").addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("comentario").setLabel(`Comentário (até ${GALLERY_COMMENT_MAX_LENGTH} caracteres)`).setStyle(TextInputStyle.Paragraph).setMaxLength(GALLERY_COMMENT_MAX_LENGTH).setRequired(true)));
     await interaction.showModal(modal);
@@ -200,12 +200,12 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
         .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("instagram").setLabel("Seu @ do Instagram").setStyle(TextInputStyle.Short).setPlaceholder("@seuusuario").setValue(post.instagramHandle ? `@${post.instagramHandle}` : "").setMaxLength(31).setRequired(true)));
       await interaction.showModal(modal);
     } else if (post.instagramHandle) {
-      await interaction.reply({ content: "Instagram da pessoa que publicou a foto:", components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(`@${post.instagramHandle}`).setURL(`https://www.instagram.com/${post.instagramHandle}`).setStyle(ButtonStyle.Link))], ephemeral: true });
-    } else await interaction.reply({ content: "A pessoa que publicou esta foto ainda não informou o Instagram.", ephemeral: true });
+      await interaction.reply({ content: "Instagram da pessoa que publicou a foto:", components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(`@${post.instagramHandle}`).setURL(`https://www.instagram.com/${post.instagramHandle}`).setStyle(ButtonStyle.Link))], flags: ["Ephemeral"] });
+    } else await interaction.reply({ content: "A pessoa que publicou esta foto ainda não informou o Instagram.", flags: ["Ephemeral"] });
   } else if (action === "detalhes") {
     await interaction.reply({ components: galleryDetailsComponents(post), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
   } else if (action === "excluir") {
-    if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode excluir a publicação.", ephemeral: true }); return true; }
+    if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode excluir a publicação.", flags: ["Ephemeral"] }); return true; }
     await interaction.reply({ components: deleteConfirmationComponents(interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"] });
   }
   return true;

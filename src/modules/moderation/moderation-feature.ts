@@ -116,8 +116,8 @@ export async function handleModerationButton(interaction: ButtonInteraction): Pr
   if (!interaction.inGuild() || !interaction.guild) return true;
   const [, action, userId] = interaction.customId.split(":");
   const permission = action === "banir" ? PermissionFlagsBits.BanMembers : PermissionFlagsBits.ModerateMembers;
-  if (!interaction.memberPermissions?.has(permission)) { await interaction.reply({ content: "Somente moderadores podem usar estes botões.", ephemeral: true }); return true; }
-  await interaction.deferReply({ ephemeral: true });
+  if (!interaction.memberPermissions?.has(permission)) { await interaction.reply({ content: "Somente moderadores podem usar estes botões.", flags: ["Ephemeral"] }); return true; }
+  await interaction.deferReply({ flags: ["Ephemeral"] });
   const member = await interaction.guild.members.fetch(userId).catch(() => null);
   try {
     if (action === "banir") {
@@ -139,10 +139,10 @@ export async function handleModerationCommand(interaction: ChatInputCommandInter
   if (interaction.commandName === "avisos") {
     const warnings = await getWarnings(interaction.guildId, user.id); const reputation = await getReputation(interaction.guildId, user.id);
     const text = warnings.length ? warnings.slice(-10).map((warning, index) => `${index + 1}. <t:${Math.floor(new Date(warning.at).getTime() / 1000)}:d> — ${warning.reason}`).join("\n") : "Nenhum aviso.";
-    await interaction.reply({ content: `**Avisos de ${user.tag}: ${warnings.length}** · **Reputação: ${reputation}%**\n${text}`, ephemeral: true });
+    await interaction.reply({ content: `**Avisos de ${user.tag}: ${warnings.length}** · **Reputação: ${reputation}%**\n${text}`, flags: ["Ephemeral"] });
   } else if (interaction.commandName === "limpar-avisos") {
     await clearWarnings(interaction.guildId, user.id); await resetReputation(interaction.guildId, user.id);
     const member = await interaction.guild?.members.fetch(user.id).catch(() => null); if (member) await forgiveMember(member).catch(console.error);
-    await interaction.reply({ content: `Os avisos de ${user.tag} foram removidos, a reputação voltou para 100% e o castigo foi retirado.`, ephemeral: true });
+    await interaction.reply({ content: `Os avisos de ${user.tag} foram removidos, a reputação voltou para 100% e o castigo foi retirado.`, flags: ["Ephemeral"] });
   }
 }

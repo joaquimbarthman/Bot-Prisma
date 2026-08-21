@@ -254,7 +254,7 @@ export async function startReportModule(client: Client): Promise<void> {
 
 async function openReport(interaction: ButtonInteraction): Promise<void> {
   if (!interaction.inGuild() || !interaction.guild) return;
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: ["Ephemeral"] });
   const existing = await findOpenReport(interaction.guild, interaction.user.id);
   if (existing) { await interaction.editReply(`Você já possui um atendimento aberto em <#${existing.id}>.`); return; }
   const botId = interaction.client.user.id;
@@ -279,24 +279,24 @@ async function openReport(interaction: ButtonInteraction): Promise<void> {
 
 async function handleStaffAction(interaction: ButtonInteraction, action: string): Promise<void> {
   if (!interaction.inGuild() || !interaction.channel || interaction.channel.type !== ChannelType.GuildText || !interaction.member || !("roles" in interaction.member)) return;
-  if (!isStaff(interaction.member as GuildMember)) { await interaction.reply({ content: "Apenas a equipe responsável pode usar este painel.", ephemeral: true }); return; }
+  if (!isStaff(interaction.member as GuildMember)) { await interaction.reply({ content: "Apenas a equipe responsável pode usar este painel.", flags: ["Ephemeral"] }); return; }
   const channel = interaction.channel as TextChannel;
   const userId = reportUserId(channel);
-  if (!userId || !isReportChannelName(channel.name)) { await interaction.reply({ content: "Este canal não possui um atendimento válido.", ephemeral: true }); return; }
+  if (!userId || !isReportChannelName(channel.name)) { await interaction.reply({ content: "Este canal não possui um atendimento válido.", flags: ["Ephemeral"] }); return; }
   if (!(action === "resolved" || action === "unresolved" || action === "close")) return;
   const state: ReportState = { userId, status: "pending" };
   const finalStatus: ReportStatus = action === "close" ? "closed" : action;
   await interaction.update({ components: reportComponents(state.userId, finalStatus) });
   const log = await interaction.guild!.channels.fetch(config.reports.logChannelId).catch(() => null);
   if (!log?.isSendable()) {
-    await interaction.followUp({ content: "Não encontrei o canal de registros de atendimento. Este canal não será apagado.", ephemeral: true });
+    await interaction.followUp({ content: "Não encontrei o canal de registros de atendimento. Este canal não será apagado.", flags: ["Ephemeral"] });
     await interaction.message.edit({ components: reportComponents(state.userId, "pending") });
     return;
   }
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
   const transcript = await reportTranscript(channel);
   await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
-  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 10 segundos.", ephemeral: true });
+  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 10 segundos.", flags: ["Ephemeral"] });
   setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), 10_000).unref();
 }
 
