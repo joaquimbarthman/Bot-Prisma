@@ -19,7 +19,7 @@ import { config } from "../../config.js";
 import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
-import { safeAboutMe, type PrismaRelationship } from "./state.js";
+import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
 import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
 
 export function publicPanelComponents(): APIContainerComponent[] {
@@ -103,6 +103,15 @@ function normalizedRelationshipScore(value: number, initialValue: number): numbe
   return Math.round(((value - initialValue) / (100 - initialValue)) * 100);
 }
 
+function progressBar(value: number): string {
+  const filled = Math.round(Math.max(0, Math.min(100, value)) / 10);
+  return `${"▰".repeat(filled)}${"▱".repeat(10 - filled)}`;
+}
+
+function sentenceCase(value: string): string {
+  return value ? value.charAt(0).toLocaleUpperCase("pt-BR") + value.slice(1) : value;
+}
+
 export function shortAboutMe(value: string, maximum = 30): string {
   const text = value.trim();
   if (text.length <= maximum) return text;
@@ -114,6 +123,8 @@ export function shortAboutMe(value: string, maximum = 30): string {
 
 export function userPanelComponents(user: Interaction["user"], settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
   const status = (enabled: boolean) => enabled ? "🟢 Ativada" : "⚪ Desativada";
+  const relationshipScore = relationshipPercentage(relationship);
+  const relationshipLabel = sentenceCase(qualitativeRelationship(relationship));
   const relationshipView = relationship.relationshipSummary
     || "Ainda estou conhecendo você e formando minha impressão.";
   return [{
@@ -135,7 +146,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: relationshipView,
+        content: `### Vínculo com a Prisma\n**${relationshipLabel}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n> ${relationshipView}\n\n-# ${relationship.interactionCount} interações registradas`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
