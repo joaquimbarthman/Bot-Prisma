@@ -3,6 +3,7 @@ import path from "node:path";
 import { config } from "../../config.js";
 
 type MasterConfig = {
+  identity?: { name?: string; description?: string; language?: string };
   prisma?: {
     identity?: { name?: string; description?: string; language?: string };
   };
@@ -20,9 +21,9 @@ let identity = fallbackIdentity;
 try {
   const master = JSON.parse(readFileSync(path.resolve(config.prismaAi.personalityConfigPath), "utf8")) as MasterConfig;
   identity = {
-    name: master.prisma?.identity?.name?.trim() || fallbackIdentity.name,
-    description: master.prisma?.identity?.description?.trim() || fallbackIdentity.description,
-    language: master.prisma?.identity?.language?.trim() || fallbackIdentity.language,
+    name: master.identity?.name?.trim() || master.prisma?.identity?.name?.trim() || fallbackIdentity.name,
+    description: master.identity?.description?.trim() || master.prisma?.identity?.description?.trim() || fallbackIdentity.description,
+    language: master.identity?.language?.trim() || master.prisma?.identity?.language?.trim() || fallbackIdentity.language,
   };
   console.log("[PRISMA-IA] Personalidade-base adaptativa carregada.");
 } catch (error) {

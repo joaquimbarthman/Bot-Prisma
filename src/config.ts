@@ -64,6 +64,13 @@ export const config = {
     sourceBotId: process.env.BUMP_SOURCE_BOT_ID?.trim() || "302050872383242240",
     intervalHours: integer("BUMP_REMINDER_INTERVAL_HOURS", 2),
   },
+  pairedRoleGrant: {
+    requiredRoleIds: [
+      process.env.PAIRED_ROLE_FIRST_ID?.trim() || "1538253635392376862",
+      process.env.PAIRED_ROLE_SECOND_ID?.trim() || "1538022012591538176",
+    ] as const,
+    targetRoleId: process.env.PAIRED_ROLE_TARGET_ID?.trim() || "1538257302606319716",
+  },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),
   prismaAi: {
@@ -75,7 +82,7 @@ export const config = {
     accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
     webSearchEnabled: boolean("AI_WEB_SEARCH_ENABLED", true),
-    personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/personality/prisma-personality.json",
+    personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/personality/prisma.json",
     soulPath: process.env.PRISMA_SOUL_PATH?.trim() || "data/personality/prisma.json",
     reasoningEffort: process.env.AI_REASONING_EFFORT?.trim() || "minimal",
     maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),

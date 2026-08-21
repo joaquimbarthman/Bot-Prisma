@@ -12,6 +12,7 @@ import { handleReportInteraction, startReportModule } from "./modules/reports/in
 import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
+import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 
 validateConfig();
 
@@ -33,6 +34,11 @@ client.once(Events.ClientReady, async (ready) => {
   await startLfgModule(ready);
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) {
+    const pairedRoleCount = await syncPairedRoleGrants(guild).catch((error) => {
+      console.error("[CARGO-DUPLO] Falha ao sincronizar concessões:", error);
+      return 0;
+    });
+    console.log(`[CARGO-DUPLO] ${pairedRoleCount} membro(s) processado(s) nesta inicialização.`);
     await syncBoosterAccessRoles(guild).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
     await syncPunishmentPermissions(guild).catch((error) => console.error("[CASTIGO] Falha ao sincronizar permissões:", error));
   }
@@ -66,6 +72,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
 
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   if (config.guildId && newMember.guild.id !== config.guildId) return;
+  await grantPairedRoleOnce(newMember).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar ${newMember.id}:`, error));
   await grantAccessRoleToBooster(newMember).catch((error) => console.error(`[PRISMA-IA] Falha ao conceder cargo ao Booster ${newMember.id}:`, error));
   if (startedBoosting(oldMember, newMember)) {
     await grantVerifiedRoleToBooster(newMember).catch((error) => console.error(`[BOOSTER] Falha ao conceder cargo de verificado ao Booster ${newMember.id}:`, error));
@@ -74,6 +81,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
 client.on(Events.GuildMemberAdd, async (member) => {
   if (config.guildId && member.guild.id !== config.guildId) return;
+  await grantPairedRoleOnce(member).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar novo membro ${member.id}:`, error));
   await grantAccessRoleToBooster(member).catch((error) => console.error(`[PRISMA-IA] Falha ao verificar cargo do novo membro ${member.id}:`, error));
 });
 
