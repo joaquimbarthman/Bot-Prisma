@@ -2,7 +2,7 @@ import { Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits, REST,
 import { commands } from "./commands.js";
 import { config, validateConfig } from "./config.js";
 import { setupCustomEmojis } from "./emoji-manager.js";
-import { handleGalleryButton, handleGalleryMessage, refreshGalleryButtons } from "./modules/gallery/index.js";
+import { handleGalleryInteraction, handleGalleryMessage, refreshGalleryButtons } from "./modules/gallery/index.js";
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./modules/moderation/moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
@@ -11,7 +11,7 @@ import { handleVerificationInteraction, handleVerificationMessage, startVerifica
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
-import { startBumpReminder } from "./modules/bump-reminder/index.js";
+import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 
 validateConfig();
 
@@ -79,6 +79,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
 client.on(Events.MessageCreate, async (message) => {
   try {
+    void handleBumpMessage(client, message);
     if (message.author.bot) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
@@ -95,8 +96,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (await handleReportInteraction(interaction)) return;
     if (await handleVerificationInteraction(interaction)) return;
     if (await handleAiInteraction(interaction)) return;
+    if (await handleGalleryInteraction(interaction)) return;
     if (interaction.isButton()) {
-      if (await handleGalleryButton(interaction)) return;
       if (await handleModerationButton(interaction)) return;
     }
     if (interaction.isChatInputCommand()) await handleModerationCommand(interaction);

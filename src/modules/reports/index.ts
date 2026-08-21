@@ -13,6 +13,7 @@ import {
   type Client,
   type Guild,
   type GuildMember,
+  type Message,
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
@@ -68,6 +69,18 @@ function statusLabel(status: ReportStatus): string {
   return "⏳ Aguardando análise";
 }
 
+function reportDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp)).replace(",", " às");
+}
+
 function reportComponents(userId: string, status: ReportStatus): APIContainerComponent[] {
   return [{
     type: ComponentType.Container,
@@ -75,7 +88,7 @@ function reportComponents(userId: string, status: ReportStatus): APIContainerCom
     components: [
       {
         type: ComponentType.TextDisplay,
-        content: `<@${userId}> <@&${config.reports.staffRoleId}>\n## Atendimento privado\nOlá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.\n\n**Status**\n${statusLabel(status)}\n\n-# Somente você e a equipe responsável podem acessar este canal.`,
+        content: `## Atendimento privado\nOlá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.\n\n**Status**\n${statusLabel(status)}\n\n-# Somente você e a equipe de <@&${config.reports.staffRoleId}> podem acessar este canal.`,
       },
       {
         type: ComponentType.Separator,
@@ -83,6 +96,64 @@ function reportComponents(userId: string, status: ReportStatus): APIContainerCom
         spacing: SeparatorSpacingSize.Small,
       },
       staffButtons(status).toJSON(),
+    ],
+  }];
+}
+
+function transcriptChunks(value: string): string[] {
+  const maxLength = 3_500;
+  const chunks: string[] = [];
+  let remaining = value;
+  while (remaining.length > maxLength && chunks.length < 8) {
+    const splitAt = remaining.lastIndexOf("\n", maxLength);
+    const end = splitAt > 0 ? splitAt : maxLength;
+    chunks.push(remaining.slice(0, end));
+    remaining = remaining.slice(end).replace(/^\n/, "");
+  }
+  if (remaining) chunks.push(remaining.slice(0, maxLength));
+  return chunks;
+}
+
+async function reportTranscript(channel: TextChannel): Promise<string | null> {
+  const messages: Message[] = [];
+  let before: string | undefined;
+  while (messages.length < 1_000) {
+    const batch = await channel.messages.fetch({ limit: 100, before });
+    if (!batch.size) break;
+    messages.push(...batch.values());
+    before = batch.last()?.id;
+    if (batch.size < 100 || !before) break;
+  }
+  const entries = messages.reverse()
+    .filter((message) => !message.author.bot && message.content.trim())
+    .map((message) => ({
+      name: message.author.username,
+      content: message.content.trim().replace(/```/g, "'''"),
+    }));
+  return entries.length ? entries.map((entry) => `${entry.name}: ${entry.content}`).join("\n\n") : null;
+}
+
+function reportLogComponents(userId: string, staffId: string, status: ReportStatus, createdAt: number, transcript: string | null): APIContainerComponent[] {
+  const accentColor = status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : 0x99aab5;
+  return [{
+    type: ComponentType.Container,
+    accent_color: accentColor,
+    components: [
+      { type: ComponentType.TextDisplay, content: `## Atendimento encerrado\n> ${statusLabel(status)}` },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      {
+        type: ComponentType.TextDisplay,
+        content: `**Solicitante** ・ <@${userId}>\n**Encerrado por** ・ <@${staffId}>`,
+      },
+      ...(transcript ? [
+        { type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+        ...transcriptChunks(transcript).map((chunk) => ({
+          type: ComponentType.TextDisplay as ComponentType.TextDisplay,
+          content: `\`\`\`text\n${chunk}\n\`\`\``,
+        })),
+      ] : []),
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content: `-# Aberto em ${reportDateTime(createdAt * 1000)} ・ Fechado em ${reportDateTime(Date.now())}` },
     ],
   }];
 }
@@ -223,19 +294,8 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
     return;
   }
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
-  await log.send({
-    embeds: [new EmbedBuilder()
-      .setColor(finalStatus === "resolved" ? 0x57f287 : finalStatus === "unresolved" ? 0xed4245 : 0x99aab5)
-      .setTitle("Atendimento encerrado")
-      .addFields(
-        { name: "Solicitante", value: `<@${state.userId}>`, inline: true },
-        { name: "Status", value: statusLabel(finalStatus), inline: true },
-        { name: "Encerrada por", value: `<@${interaction.user.id}>`, inline: true },
-        { name: "Aberta em", value: `<t:${createdAt}:F>` },
-      )
-      .setTimestamp()],
-    allowedMentions: { parse: [] },
-  });
+  const transcript = await reportTranscript(channel);
+  await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
   await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 10 segundos.", ephemeral: true });
   setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), 10_000).unref();
 }

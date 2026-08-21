@@ -1,52 +1,71 @@
-import { AttachmentBuilder, ComponentType, EmbedBuilder, PermissionFlagsBits, SeparatorSpacingSize, type APIContainerComponent, type ButtonInteraction, type Client, type Message, type TextChannel } from "discord.js";
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, ModalBuilder, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "../../config.js";
-import { galleryButtons, galleryReportButtons } from "../../emoji-manager.js";
-import { beginGalleryReport, cancelGalleryReport, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, verifyGalleryPost } from "./store.js";
+import { aiPanelEmojis, galleryButtons } from "../../emoji-manager.js";
+import { aiModeration } from "../moderation/ai.js";
+import { localModeration, normalizeText, shouldUseAi } from "../moderation/filter.js";
+import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
 import { addPhotoFrame } from "./image.js";
 
-function galleryTimestamp(timestamp: number): string {
-  const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: config.prismaAi.timezone,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(timestamp));
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("day")}/${value("month")}/${value("year")} ・ ${value("hour")}:${value("minute")}`;
+function normalizeInstagramHandle(value: string): string | null {
+  const handle = value.trim().replace(/^@/, "");
+  return /^[a-z0-9._]{1,30}$/i.test(handle) ? handle : null;
 }
 
-function galleryPostComponents(userId: string, mediaUrl: string, caption: string, timestamp: number, likes: number, reportDisabled = false): APIContainerComponent[] {
-  const legend = caption ? `### ${caption.slice(0, 4000)}\n-# Galeria da comunidade - ${galleryTimestamp(timestamp)}` : `-# Galeria da comunidade - ${galleryTimestamp(timestamp)}`;
-  return [{
-    type: ComponentType.Container,
-    components: [
-      { type: ComponentType.TextDisplay, content: `### <@${userId}>` },
-      { type: ComponentType.MediaGallery, items: [{ media: { url: mediaUrl } }] },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content: legend },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      galleryButtons(likes, reportDisabled).toJSON(),
-    ],
-  }];
+function hasHomophobicTerm(content: string): boolean {
+  const normalized = normalizeText(content);
+  return /\b(?:viad(?:o|a|ao|ona|inh[ao]?)|bich(?:a|ona|inha)|boiol[ao]|baitol[ao]|maric[ao]|sapat(?:ao|ona)|travec[oa])s?\b/i.test(normalized);
 }
 
-function componentsWithGalleryButtons(message: Message, likes: number, reportDisabled: boolean) {
+async function blockedGalleryComment(content: string): Promise<boolean> {
+  if (localModeration(content).flagged || hasHomophobicTerm(content)) return true;
+  if (!shouldUseAi(content)) return false;
+  const result = await aiModeration(content);
+  return result.flagged && /(?:^|,)\s*hate(?:\/|,|$)/i.test(result.category ?? "");
+}
+
+function deleteConfirmationComponents(messageId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {
+  const content = result === "confirmed"
+    ? "## Publicação apagada\nA foto foi removida da galeria."
+    : result === "cancelled"
+      ? "## Exclusão cancelada\nA publicação continua na galeria."
+      : "## Apagar publicação\nTem certeza de que deseja apagar esta foto? Essa ação não pode ser desfeita.";
+  const components: APIContainerComponent["components"] = [{ type: ComponentType.TextDisplay, content }];
+  if (!result) components.push(
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`galeria:excluir-confirm:${messageId}`).setLabel("Apagar").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`galeria:excluir-cancel:${messageId}`).setLabel("Cancelar").setEmoji(aiPanelEmojis.close ?? "✖️").setStyle(ButtonStyle.Secondary),
+    ).toJSON(),
+  );
+  return [{ type: ComponentType.Container, accent_color: result === "confirmed" ? 0x57f287 : result === "cancelled" ? 0x99aab5 : 0xed4245, components }];
+}
+
+function galleryPostComponents(userId: string, mediaUrl: string, caption: string, post: GalleryPost): APIContainerComponent[] {
+  return [{ type: ComponentType.Container, components: [
+    { type: ComponentType.TextDisplay, content: `> -# <@${userId}>` },
+    ...(caption ? [{ type: ComponentType.TextDisplay as const, content: caption.slice(0, 150) }] : []),
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    { type: ComponentType.MediaGallery, items: [{ media: { url: mediaUrl } }] },
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+  ] }];
+}
+
+function componentsWithGalleryButtons(message: Message, post: GalleryPost) {
   const container = message.components.find((component) => component.type === ComponentType.Container);
-  if (!container) return [galleryButtons(likes, reportDisabled)];
+  if (!container) return galleryButtons(post.likes.length, post.comments.length);
   const data = container.toJSON() as APIContainerComponent;
-  return [{
-    ...data,
-    components: data.components.map((component) => {
-      if (component.type === ComponentType.ActionRow) return galleryButtons(likes, reportDisabled).toJSON();
-      if (component.type === ComponentType.TextDisplay && typeof component.content === "string") {
-        return { ...component, content: component.content.replace(/(Galeria da comunidade - ).*$/m, `$1${galleryTimestamp(message.createdTimestamp)}`) };
-      }
-      return component;
-    }),
-  }];
+  return [{ ...data, components: [
+    ...data.components.filter((component) => component.type !== ComponentType.ActionRow),
+    ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+  ] }];
+}
+
+async function refreshGalleryPost(messageId: string, client: Client, post: GalleryPost): Promise<void> {
+  const channel = await client.channels.fetch(config.galleryChannelId).catch(() => null);
+  if (!channel?.isTextBased()) return;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (message) await message.edit({ components: componentsWithGalleryButtons(message, post) });
 }
 
 export async function refreshGalleryButtons(client: Client): Promise<void> {
@@ -60,14 +79,8 @@ export async function refreshGalleryButtons(client: Client): Promise<void> {
     const imageUrl = message.embeds[0]?.image?.url ?? message.attachments.first()?.url;
     if (!isComponentsV2 && imageUrl) {
       const caption = message.embeds[0]?.description?.replace(/^###\s*/, "") ?? "";
-      await message.edit({
-        embeds: [],
-        components: galleryPostComponents(post.ownerId, imageUrl, caption, message.createdTimestamp, post.likes.length, post.reportDisabled ?? false),
-        flags: ["IsComponentsV2"],
-      }).catch((error) => console.error(`[GALERIA] Falha ao migrar a publicação ${messageId}:`, error));
-    } else {
-      await message.edit({ components: componentsWithGalleryButtons(message, post.likes.length, post.reportDisabled ?? false) }).catch((error) => console.error(`[GALERIA] Falha ao atualizar os botões de ${messageId}:`, error));
-    }
+      await message.edit({ embeds: [], components: galleryPostComponents(post.ownerId, imageUrl, caption, post), flags: ["IsComponentsV2"] }).catch((error) => console.error(`[GALERIA] Falha ao migrar a publicação ${messageId}:`, error));
+    } else await message.edit({ components: componentsWithGalleryButtons(message, post) }).catch((error) => console.error(`[GALERIA] Falha ao atualizar os botões de ${messageId}:`, error));
     refreshed += 1;
   }
   console.log(`[GALERIA] Botões sincronizados em ${refreshed} publicações.`);
@@ -83,11 +96,8 @@ export async function handleGalleryMessage(message: Message): Promise<boolean> {
     const framed = await addPhotoFrame(Buffer.from(await response.arrayBuffer()));
     const filename = `foto-${message.author.id}.png`;
     const caption = message.content.trim();
-    const post = await message.channel.send({
-      files: [new AttachmentBuilder(framed, { name: filename })],
-      components: galleryPostComponents(message.author.id, `attachment://${filename}`, caption, Date.now(), 0),
-      flags: ["IsComponentsV2"],
-    });
+    const galleryPost: GalleryPost = { ownerId: message.author.id, likes: [], comments: [] };
+    const post = await message.channel.send({ files: [new AttachmentBuilder(framed, { name: filename })], components: galleryPostComponents(message.author.id, `attachment://${filename}`, caption, galleryPost), flags: ["IsComponentsV2"] });
     await createGalleryPost(post.id, message.author.id);
     await message.delete().catch(() => undefined);
     console.log(`[GALERIA] Foto publicada por ${message.author.tag} (${post.id}).`);
@@ -99,90 +109,79 @@ export async function handleGalleryMessage(message: Message): Promise<boolean> {
   return true;
 }
 
-export async function handleGalleryButton(interaction: ButtonInteraction): Promise<boolean> {
-  if (interaction.customId.startsWith("galeria-moderacao:")) return handleGalleryModerationButton(interaction);
-  if (!interaction.customId.startsWith("galeria:")) return false;
-  const action = interaction.customId.split(":")[1];
-  const post = await getGalleryPost(interaction.message.id);
-  if (!post) {
-    await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true });
-    return true;
-  }
-  if (action === "curtir") {
-    const result = await toggleGalleryLike(interaction.message.id, interaction.user.id);
-    await interaction.update({ components: componentsWithGalleryButtons(interaction.message, result.post?.likes.length ?? 0, result.post?.reportDisabled ?? false) });
-  } else if (action === "detalhes") {
-    const likes = post.likes.slice(0, 50).map((id) => `<@${id}>`).join("\n");
-    const extra = post.likes.length > 50 ? `\n+${post.likes.length - 50}` : "";
-    const embed = new EmbedBuilder().setColor(0xeb459e).setTitle(`Curtidas ・ ${post.likes.length}`)
-      .setDescription(post.likes.length ? `${likes}${extra}` : "Nenhuma curtida");
-    await interaction.reply({ embeds: [embed], ephemeral: true });
-  } else if (action === "excluir") {
-    if (interaction.user.id !== post.ownerId) {
-      await interaction.reply({ content: "Somente quem publicou a foto pode excluí-la.", ephemeral: true });
+export async function handleGalleryInteraction(interaction: Interaction): Promise<boolean> {
+  if (!(interaction.isButton() || interaction.isModalSubmit()) || !interaction.customId.startsWith("galeria:")) return false;
+  if (interaction.isModalSubmit()) {
+    const [, action, messageId] = interaction.customId.split(":");
+    if (!messageId) return false;
+    if (action === "instagram-modal") {
+      const post = await getGalleryPost(messageId);
+      if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+      if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode definir o Instagram.", ephemeral: true }); return true; }
+      const instagramHandle = normalizeInstagramHandle(interaction.fields.getTextInputValue("instagram"));
+      if (!instagramHandle) { await interaction.reply({ content: "Digite apenas um usuário válido do Instagram, como @prisma.ia.", ephemeral: true }); return true; }
+      const updated = await updateGalleryInstagram(messageId, instagramHandle);
+      if (!updated) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+      await refreshGalleryPost(messageId, interaction.client, updated).catch((error) => console.error("[GALERIA] Falha ao atualizar Instagram:", error));
+      await interaction.reply({ content: "Instagram atualizado.", ephemeral: true });
       return true;
     }
-    await interaction.reply({ content: "Publicação excluída.", ephemeral: true });
-    await deleteGalleryPost(interaction.message.id);
-    await interaction.message.delete();
-  } else if (action === "denunciar") {
-    if (interaction.user.id === post.ownerId) { await interaction.reply({ content: "Você não pode denunciar sua própria publicação.", ephemeral: true }); return true; }
-    const state = await beginGalleryReport(interaction.message.id);
-    if (state === "pending") { await interaction.reply({ content: "Esta publicação já possui uma denúncia aguardando análise.", ephemeral: true }); return true; }
-    if (state === "disabled") { await interaction.reply({ content: "Esta publicação já foi verificada pela moderação.", ephemeral: true }); return true; }
-    if (state === "missing") { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
-    await interaction.deferReply({ ephemeral: true });
-    try {
-      const configured = config.galleryReportChannelId ? await interaction.client.channels.fetch(config.galleryReportChannelId).catch(() => null) : null;
-      const fallback = interaction.guild?.channels.cache.find((channel) => channel.name === "aviso-prisma");
-      const reportChannel = (configured ?? fallback) as TextChannel | undefined;
-      if (!reportChannel?.isSendable()) throw new Error("Canal aviso-prisma não encontrado ou sem permissão de envio.");
-      const original = interaction.message.embeds[0];
-      const report = new EmbedBuilder()
-        .setColor(0xfee75c).setAuthor({ name: "Central de Segurança • Prisma", iconURL: interaction.client.user.displayAvatarURL() })
-        .setTitle("⚠️ Denúncia de publicação")
-        .setDescription("Uma imagem da galeria da comunidade aguarda análise da moderação.")
-        .addFields(
-          { name: "👤 Publicação de", value: `<@${post.ownerId}>`, inline: true },
-          { name: "⚠️ Denunciado por", value: `<@${interaction.user.id}>`, inline: true },
-          { name: "💭 Publicação", value: `[Abrir imagem](${interaction.message.url})` },
-        )
-        .setFooter({ text: `Publicação ${interaction.message.id}` }).setTimestamp();
-      if (original?.image?.url) report.setImage(original.image.url);
-      await reportChannel.send({ embeds: [report], components: [galleryReportButtons(interaction.channelId, interaction.message.id)] });
-      await interaction.editReply("Denúncia enviada à moderação. Obrigado por avisar.");
-    } catch (error) {
-      await cancelGalleryReport(interaction.message.id);
-      console.error("[GALERIA] Falha ao enviar denúncia:", error);
-      await interaction.editReply("Não consegui enviar a denúncia. Avise um moderador.");
+    if (action !== "comentar-modal") return false;
+    const content = interaction.fields.getTextInputValue("comentario").trim().replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, 150);
+    if (!content) { await interaction.reply({ content: "Escreva um comentário antes de enviar.", ephemeral: true }); return true; }
+    if (await blockedGalleryComment(content)) {
+      await interaction.reply({ content: "Esse comentário não pode ser publicado. Mantenha a conversa respeitosa.", ephemeral: true });
+      return true;
     }
+    const post = await addGalleryComment(messageId, interaction.user.id, content);
+    if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+    await refreshGalleryPost(messageId, interaction.client, post).catch((error) => console.error("[GALERIA] Falha ao atualizar comentários:", error));
+    await interaction.reply({ content: "Comentário adicionado.", ephemeral: true });
+    return true;
   }
-  return true;
-}
-
-async function handleGalleryModerationButton(interaction: ButtonInteraction): Promise<boolean> {
-  if (!interaction.inGuild() || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-    await interaction.reply({ content: "Somente moderadores podem revisar denúncias.", ephemeral: true }); return true;
+  const [, action, targetMessageId] = interaction.customId.split(":");
+  if (action === "excluir-cancel" && targetMessageId) {
+    await interaction.update({ components: deleteConfirmationComponents(targetMessageId, "cancelled") });
+    return true;
   }
-  const [, action, channelId, messageId] = interaction.customId.split(":");
-  await interaction.deferReply({ ephemeral: true });
-  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased() || !channel.isSendable()) { await interaction.editReply("O canal da publicação não está disponível."); return true; }
-  const publication = await channel.messages.fetch(messageId).catch(() => null);
-  const post = await getGalleryPost(messageId);
-  if (!post || !publication) { await deleteGalleryPost(messageId); await interaction.message.edit({ components: [] }); await interaction.editReply("A publicação já não existe."); return true; }
-
-  if (action === "verificar") {
-    const verified = await verifyGalleryPost(messageId);
-    await publication.edit({ components: componentsWithGalleryButtons(publication, verified?.likes.length ?? post.likes.length, true) });
-    const reviewed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x57f287).setFooter({ text: `Verificado por ${interaction.user.tag}` });
-    await interaction.message.edit({ embeds: [reviewed], components: [] });
-    await interaction.editReply("Publicação verificada. O botão de denúncia foi removido.");
-  } else if (action === "apagar") {
-    await publication.delete(); await deleteGalleryPost(messageId);
-    const removed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xed4245).setFooter({ text: `Apagada por ${interaction.user.tag}` });
-    await interaction.message.edit({ embeds: [removed], components: [] });
-    await interaction.editReply("Publicação apagada da galeria.");
+  if (action === "excluir-confirm" && targetMessageId) {
+    const targetPost = await getGalleryPost(targetMessageId);
+    if (!targetPost || interaction.user.id !== targetPost.ownerId) {
+      await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "## Não foi possível apagar\nEssa publicação não existe mais ou não pertence a você." }] }] });
+      return true;
+    }
+    const channel = await interaction.client.channels.fetch(config.galleryChannelId).catch(() => null);
+    const publication = channel?.isTextBased() ? await channel.messages.fetch(targetMessageId).catch(() => null) : null;
+    await deleteGalleryPost(targetMessageId);
+    await publication?.delete().catch((error) => console.error("[GALERIA] Falha ao apagar publicação:", error));
+    await interaction.update({ components: deleteConfirmationComponents(targetMessageId, "confirmed") });
+    return true;
+  }
+  const post = await getGalleryPost(interaction.message.id);
+  if (!post) { await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true }); return true; }
+  if (action === "curtir") {
+    const result = await toggleGalleryLike(interaction.message.id, interaction.user.id);
+    if (result.post) await interaction.update({ components: componentsWithGalleryButtons(interaction.message, result.post) });
+    else await interaction.reply({ content: "Esta publicação não está mais registrada.", ephemeral: true });
+  } else if (action === "comentar") {
+    const modal = new ModalBuilder().setCustomId(`galeria:comentar-modal:${interaction.message.id}`).setTitle("Comentar na foto").addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("comentario").setLabel("Comentário (até 150 caracteres)").setStyle(TextInputStyle.Paragraph).setMaxLength(150).setRequired(true)));
+    await interaction.showModal(modal);
+  } else if (action === "instagram") {
+    if (interaction.user.id === post.ownerId) {
+      const modal = new ModalBuilder().setCustomId(`galeria:instagram-modal:${interaction.message.id}`).setTitle("Instagram da foto")
+        .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("instagram").setLabel("Seu @ do Instagram").setStyle(TextInputStyle.Short).setPlaceholder("@seuusuario").setValue(post.instagramHandle ? `@${post.instagramHandle}` : "").setMaxLength(31).setRequired(true)));
+      await interaction.showModal(modal);
+    } else if (post.instagramHandle) {
+      await interaction.reply({ content: "Instagram da pessoa que publicou a foto:", components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(`@${post.instagramHandle}`).setURL(`https://www.instagram.com/${post.instagramHandle}`).setStyle(ButtonStyle.Link))], ephemeral: true });
+    } else await interaction.reply({ content: "A pessoa que publicou esta foto ainda não informou o Instagram.", ephemeral: true });
+  } else if (action === "detalhes") {
+    const likes = post.likes.slice(0, 50).map((id) => `<@${id}>`).join("\n") || "Nenhuma curtida";
+    const comments = post.comments.slice(-10).map((comment) => `<@${comment.userId}>: ${comment.content}`).join("\n") || "Nenhum comentário";
+    const embed = new EmbedBuilder().setColor(0xeb459e).setTitle("Detalhes da foto").addFields({ name: `Curtidas ・ ${post.likes.length}`, value: likes }, { name: `Comentários ・ ${post.comments.length}`, value: comments });
+    await interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
+  } else if (action === "excluir") {
+    if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode excluir a publicação.", ephemeral: true }); return true; }
+    await interaction.reply({ components: deleteConfirmationComponents(interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"] });
   }
   return true;
 }

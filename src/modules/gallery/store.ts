@@ -3,7 +3,8 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "../../config.js";
 
-export type GalleryPost = { ownerId: string; likes: string[]; reportPending?: boolean; reportDisabled?: boolean };
+export type GalleryComment = { userId: string; content: string; createdAt: string };
+export type GalleryPost = { ownerId: string; likes: string[]; comments: GalleryComment[]; instagramHandle?: string };
 type Database = Record<string, GalleryPost>;
 const file = path.resolve(config.dataDir, "gallery.json");
 let queue = Promise.resolve();
@@ -15,8 +16,18 @@ function fromRemote(row: Record<string, unknown>): GalleryPost {
   return {
     ownerId: String(row.owner_id),
     likes: Array.isArray(row.likes) ? row.likes.filter((value): value is string => typeof value === "string") : [],
-    reportPending: row.report_pending === true,
-    reportDisabled: row.report_disabled === true,
+    comments: Array.isArray(row.comments)
+      ? row.comments.filter((value): value is GalleryComment => !!value && typeof value === "object" && typeof value.userId === "string" && typeof value.content === "string" && typeof value.createdAt === "string")
+      : [],
+    instagramHandle: typeof row.instagram_handle === "string" ? row.instagram_handle : undefined,
+  };
+}
+
+function normalized(post: GalleryPost): GalleryPost {
+  return {
+    ...post,
+    likes: Array.isArray(post.likes) ? post.likes : [],
+    comments: Array.isArray(post.comments) ? post.comments : [],
   };
 }
 
@@ -25,8 +36,8 @@ function toRemote(messageId: string, post: GalleryPost) {
     message_id: messageId,
     owner_id: post.ownerId,
     likes: post.likes,
-    report_pending: post.reportPending ?? false,
-    report_disabled: post.reportDisabled ?? false,
+    comments: post.comments,
+    instagram_handle: post.instagramHandle ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -43,13 +54,13 @@ async function save(data: Database): Promise<void> {
   await rename(temporary, file);
 }
 
-export async function createGalleryPost(messageId: string, ownerId: string): Promise<void> {
+export async function createGalleryPost(messageId: string, ownerId: string, instagramHandle?: string): Promise<void> {
   if (supabase) {
-    const { error } = await supabase.from("gallery_posts").upsert(toRemote(messageId, { ownerId, likes: [] }), { onConflict: "message_id" });
+    const { error } = await supabase.from("gallery_posts").upsert(toRemote(messageId, { ownerId, likes: [], comments: [], instagramHandle }), { onConflict: "message_id" });
     if (!error) return;
     console.error("[GALERIA] Não foi possível salvar a publicação no Supabase:", error.message);
   }
-  queue = queue.then(async () => { const db = await read(); db[messageId] = { ownerId, likes: [] }; await save(db); });
+  queue = queue.then(async () => { const db = await read(); db[messageId] = { ownerId, likes: [], comments: [], instagramHandle }; await save(db); });
   await queue;
 }
 
@@ -59,7 +70,9 @@ export async function getGalleryPost(messageId: string): Promise<GalleryPost | u
     if (!error) return data ? fromRemote(data) : undefined;
     console.error("[GALERIA] Não foi possível ler a publicação no Supabase:", error.message);
   }
-  await queue; return (await read())[messageId];
+  await queue;
+  const post = (await read())[messageId];
+  return post ? normalized(post) : undefined;
 }
 
 export async function listGalleryPosts(): Promise<Array<[string, GalleryPost]>> {
@@ -69,7 +82,10 @@ export async function listGalleryPosts(): Promise<Array<[string, GalleryPost]>> 
     console.error("[GALERIA] Não foi possível listar publicações no Supabase:", error.message);
   }
   await queue;
-  return Object.entries(await read()).map(([messageId, post]) => [messageId, { ...post, likes: [...post.likes] }]);
+  return Object.entries(await read()).map(([messageId, post]) => {
+    const value = normalized(post);
+    return [messageId, { ...value, likes: [...value.likes], comments: [...value.comments] }];
+  });
 }
 
 export async function toggleGalleryLike(messageId: string, userId: string): Promise<{ liked: boolean; post?: GalleryPost }> {
@@ -91,52 +107,54 @@ export async function toggleGalleryLike(messageId: string, userId: string): Prom
     const liked = index === -1;
     if (liked) post.likes.push(userId);
     else post.likes.splice(index, 1);
-    result = { liked, post: { ...post, likes: [...post.likes] } };
+    result = { liked, post: { ...post, likes: [...post.likes], comments: [...(post.comments ?? [])] } };
     await save(db);
   });
   await queue; return result;
 }
 
-export async function beginGalleryReport(messageId: string): Promise<"created" | "pending" | "disabled" | "missing"> {
-  if (supabase) {
-    const post = await getGalleryPost(messageId);
-    if (!post) return "missing";
-    if (post.reportDisabled) return "disabled";
-    if (post.reportPending) return "pending";
-    const { error } = await supabase.from("gallery_posts").update({ report_pending: true, updated_at: new Date().toISOString() }).eq("message_id", messageId);
-    return error ? "missing" : "created";
-  }
-  let result: "created" | "pending" | "disabled" | "missing" = "missing";
-  queue = queue.then(async () => {
-    const db = await read(); const post = db[messageId];
-    if (!post) return;
-    if (post.reportDisabled) { result = "disabled"; return; }
-    if (post.reportPending) { result = "pending"; return; }
-    post.reportPending = true; result = "created"; await save(db);
-  });
-  await queue; return result;
-}
-
-export async function cancelGalleryReport(messageId: string): Promise<void> {
-  if (supabase) { await supabase.from("gallery_posts").update({ report_pending: false, updated_at: new Date().toISOString() }).eq("message_id", messageId); return; }
-  queue = queue.then(async () => { const db = await read(); if (db[messageId]) db[messageId].reportPending = false; await save(db); });
-  await queue;
-}
-
-export async function verifyGalleryPost(messageId: string): Promise<GalleryPost | undefined> {
+export async function addGalleryComment(messageId: string, userId: string, content: string): Promise<GalleryPost | undefined> {
+  const comment: GalleryComment = { userId, content, createdAt: new Date().toISOString() };
   if (supabase) {
     const post = await getGalleryPost(messageId);
     if (!post) return undefined;
-    const next = { ...post, reportPending: false, reportDisabled: true };
+    const next = { ...post, comments: [...post.comments, comment] };
     const { error } = await supabase.from("gallery_posts").upsert(toRemote(messageId, next), { onConflict: "message_id" });
-    return error ? undefined : next;
+    if (!error) return next;
+    console.error("[GALERIA] Não foi possível salvar comentário no Supabase:", error.message);
   }
   let result: GalleryPost | undefined;
   queue = queue.then(async () => {
-    const db = await read(); const post = db[messageId]; if (!post) return;
-    post.reportPending = false; post.reportDisabled = true; result = { ...post, likes: [...post.likes] }; await save(db);
+    const db = await read(); const post = db[messageId];
+    if (!post) return;
+    post.comments ??= [];
+    post.comments.push(comment);
+    result = { ...post, likes: [...post.likes], comments: [...post.comments] };
+    await save(db);
   });
-  await queue; return result;
+  await queue;
+  return result;
+}
+
+export async function updateGalleryInstagram(messageId: string, instagramHandle: string): Promise<GalleryPost | undefined> {
+  if (supabase) {
+    const post = await getGalleryPost(messageId);
+    if (!post) return undefined;
+    const next = { ...post, instagramHandle };
+    const { error } = await supabase.from("gallery_posts").upsert(toRemote(messageId, next), { onConflict: "message_id" });
+    if (!error) return next;
+    console.error("[GALERIA] Não foi possível salvar Instagram no Supabase:", error.message);
+  }
+  let result: GalleryPost | undefined;
+  queue = queue.then(async () => {
+    const db = await read(); const post = db[messageId];
+    if (!post) return;
+    post.instagramHandle = instagramHandle;
+    result = normalized(post);
+    await save(db);
+  });
+  await queue;
+  return result;
 }
 
 export async function deleteGalleryPost(messageId: string): Promise<void> {

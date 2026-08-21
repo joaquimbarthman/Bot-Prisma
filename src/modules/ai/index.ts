@@ -165,13 +165,15 @@ async function isDirectedAtBot(message: Message, client: Client): Promise<boolea
 
 export async function handleAiMessage(client: Client, message: Message): Promise<boolean> {
   if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId || !message.inGuild() || !message.member || !message.content || ![config.prismaAi.generalChannelId, config.prismaAi.testChannelId].includes(message.channelId)) return false;
+  const addressedToPrisma = await isDirectedAtBot(message, client);
   const runtime = await getAiRuntimeState();
   if (runtime.testModeEnabled && message.channelId === config.prismaAi.generalChannelId) {
+    if (!addressedToPrisma) return false;
     if (canSendTestNotice(message.author.id, config.prismaAi.testNoticeCooldownSeconds * 1000)) await message.reply({ content: "O prisma está atualmente sendo testado, logo ele volta pra conversar com você!", allowedMentions: { repliedUser: false } });
     return true;
   }
   const level = accessLevel(message.member);
-  const direct = asksAboutActivity(message.content) || await isDirectedAtBot(message, client);
+  const direct = asksAboutActivity(message.content) || addressedToPrisma;
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
   if (level === "none") {
     if (direct) {
@@ -250,9 +252,9 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     }
     // A menção automática ao autor é exclusiva das interações espontâneas.
     // Em respostas diretas, o reply do Discord já fornece o contexto sem pingar a pessoa.
-    const prefix = spontaneous && settings.allowMentions ? `<@${message.author.id}> ` : "";
+    const prefix = spontaneous ? `<@${message.author.id}> ` : "";
     const replyMentionUserIds = [...new Set([
-      ...(spontaneous && settings.allowMentions ? [message.author.id] : []),
+      ...(spontaneous ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
@@ -327,8 +329,8 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     const answer = localModeration(generated.reply).flagged
       ? "Não vou seguir por esse caminho. Vamos manter a conversa de boa."
       : generated.reply;
-    const prefix = settings.allowMentions ? `<@${newPresence.userId}> ` : "";
-    await channel.send({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: settings.allowMentions ? [newPresence.userId] : [] } });
+    // Mudanças de atividade também são interações espontâneas e sempre começam com a menção.
+    await channel.send({ content: `<@${newPresence.userId}> ${answer}`, allowedMentions: { parse: [], users: [newPresence.userId] } });
     await addSpontaneous(newPresence.userId);
   } catch (error) { console.error("[PRISMA-IA] Falha na interação por atividade:", error); }
   finally { if (spontaneousReserved) releaseSpontaneousSlot(newPresence.userId); presenceInFlight.delete(newPresence.userId); }

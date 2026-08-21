@@ -1,8 +1,33 @@
 import { getPrismaProfile, upsertPrismaMemory, upsertPrismaProfile, updateEmotionalState, type PrismaMemory, type PrismaProfile } from "./store.js";
+import type { PrismaEmotionalUpdate } from "./emotional-state.js";
 
 type LearnInput = { userId: string; guildId: string; displayName: string; content: string; reply: string };
 
 function unique(values: string[]): string[] { return [...new Set(values.map(value => value.trim()).filter(Boolean))].slice(0, 12); }
+
+/** Ajusta o tom da Prisma a partir do que a pessoa expressou, sem fazer diagnóstico. */
+export function emotionalUpdateFromMessage(content: string): PrismaEmotionalUpdate {
+  const update: PrismaEmotionalUpdate = {};
+  if (/\b(?:obrigad[oa]|amei|adorei|te adoro|você é incr[ií]vel|me ajudou|kkkk|kkk)\b/i.test(content)) {
+    Object.assign(update, { happiness: 58, affection: 42, confidence: 54 });
+  }
+  if (/\b(?:olha isso|tenho uma ideia|bora jogar|finalmente)\b|!{2,}/i.test(content)) {
+    Object.assign(update, { curiosity: 60, excitement: 60, energy: 58 });
+  }
+  if (/\b(?:aff|que saco|n[aã]o aguento|deu errado|t[oô] irritad[oa])\b/i.test(content)) {
+    Object.assign(update, { irritation: 35, energy: 42 });
+  }
+  if (/\b(?:t[oô] trist[ea]|dia ruim|desanimad[oa]|n[aã]o tenho vontade)\b/i.test(content)) {
+    Object.assign(update, { sadness: 48, energy: 42, affection: 40 });
+  }
+  if (/\b(?:tanto faz|sei l[aá]|chato)\b/i.test(content)) {
+    Object.assign(update, { boredom: 35, excitement: 22 });
+  }
+  if (/\b(?:cala a boca|idiota|burr[ao]|lixo)\b/i.test(content)) {
+    Object.assign(update, { irritation: 50, anger: 35 });
+  }
+  return update;
+}
 
 function memoryCandidate(userId: string, content: string): PrismaMemory | null {
   const preference = content.match(/\b(?:eu )?(?:gosto|amo|curto|prefiro) (?:muito )?(?:de |do |da )?(.{3,80})/i);
@@ -27,8 +52,8 @@ export async function learnFromInteraction(input: LearnInput): Promise<void> {
     };
     await upsertPrismaProfile(profile);
     if (memory) await upsertPrismaMemory(memory);
-    if (/\b(?:obrigad[oa]|amei|adorei|kkkk|kkk)\b/i.test(input.content)) await updateEmotionalState(input.userId, { happiness: 58, affection: 36 });
-    else if (/\b(?:cala a boca|idiota|burra|lixo)\b/i.test(input.content)) await updateEmotionalState(input.userId, { irritation: 20, anger: 12 });
+    // Mesmo sem gatilhos, o update vazio cria o estado padrão na primeira conversa.
+    await updateEmotionalState(input.userId, emotionalUpdateFromMessage(input.content));
   } catch (error) {
     console.error("[PRISMA-LEARNING] Falha não bloqueante ao aprender interação:", error);
   }

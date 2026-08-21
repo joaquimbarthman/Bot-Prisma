@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type Client } from "disco
 import path from "node:path";
 import { config } from "./config.js";
 
-const galleryEmojis: { empty?: string; full?: string; details?: string; trash?: string; warning?: string } = {};
+const galleryEmojis: { empty?: string; full?: string; details?: string; trash?: string; warning?: string; instagram?: string; comment?: string } = {};
 const moderationEmojis: { block?: string; check?: string } = {};
 const verificationEmojis: { start?: string } = {};
 const lfgEmojis: { check?: string; close?: string; sound?: string; trash?: string; warning?: string; gamepad?: string } = {};
@@ -72,12 +72,14 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       emojis.find((emoji) => emoji.name === name)
       ?? guild.emojis.create({ attachment: path.resolve("assets", file), name, reason });
 
-    const [empty, full, details, trash, warning, block, check, verificationStart, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose, lfgSound, lfgGamepad] = await Promise.all([
+    const [empty, full, details, trash, warning, instagram, comment, block, check, verificationStart, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose, lfgSound, lfgGamepad] = await Promise.all([
       ensure("coracao_vazio_branco", "heart.png", "Ícone branco da galeria"),
       ensure("coracao_cheio_branco", "heart-fill.png", "Ícone branco da galeria"),
       ensure("icone_detalhes_branco", "line.png", "Ícone branco da galeria"),
       ensure("icone_lixo_branco", "trash.png", "Ícone branco da galeria"),
       ensure("icone_denuncia_branco", "sinal-de-aviso.png", "Ícone de denúncia da galeria"),
+      ensure("icone_instagram", "instagram.png", "Ícone do botão de Instagram da galeria"),
+      ensure("icone_comentar", "comente.png", "Ícone do botão de comentar da galeria"),
       ensure("icone_banir_branco", "block.png", "Ícone do painel de moderação"),
       ensure("icone_confiar_branco", "check.png", "Ícone do painel de moderação"),
       ensure("verificacao_iniciar", "verificar.png", "Ícone do painel de verificação"),
@@ -91,7 +93,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       ensure("lfg_som_musical", "som-musical.png", "Ícone do botão de lobby LFG"),
       ensure("lfg_controle", "controle-de-video-game.png", "Ícone do botão de criar grupo LFG"),
     ]);
-    Object.assign(galleryEmojis, { empty: empty.id, full: full.id, details: details.id, trash: trash.id, warning: warning.id });
+    Object.assign(galleryEmojis, { empty: empty.id, full: full.id, details: details.id, trash: trash.id, warning: warning.id, instagram: instagram.id, comment: comment.id });
     Object.assign(moderationEmojis, { block: block.id, check: check.id });
     Object.assign(verificationEmojis, { start: verificationStart.id });
     Object.assign(lfgEmojis, { check: check.id, close: aiClose.id, sound: lfgSound.id, trash: trash.id, warning: warning.id, gamepad: lfgGamepad.id });
@@ -102,21 +104,15 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
   }
 }
 
-export function galleryButtons(likes: number, reportDisabled = false): ActionRowBuilder<ButtonBuilder> {
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+export function galleryButtons(likes: number, comments: number): ActionRowBuilder<ButtonBuilder>[] {
+  const mainRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("galeria:curtir").setLabel(` ${likes}`).setEmoji(likes > 0 ? galleryEmojis.full ?? "♥" : galleryEmojis.empty ?? "♡").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("galeria:detalhes").setLabel(" ").setEmoji(galleryEmojis.details ?? "⋯").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("galeria:excluir").setLabel(" ").setEmoji(galleryEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("galeria:comentar").setLabel(` ${comments}`).setEmoji(galleryEmojis.comment ?? "💬").setStyle(ButtonStyle.Secondary),
   );
-  if (!reportDisabled) row.addComponents(new ButtonBuilder().setCustomId("galeria:denunciar").setLabel(" ").setEmoji(galleryEmojis.warning ?? "⚠️").setStyle(ButtonStyle.Secondary));
-  return row;
-}
-
-export function galleryReportButtons(channelId: string, messageId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`galeria-moderacao:verificar:${channelId}:${messageId}`).setLabel("・ Verificado").setEmoji(moderationEmojis.check ?? "✅").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`galeria-moderacao:apagar:${channelId}:${messageId}`).setLabel("・ Apagar").setEmoji(galleryEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
-  );
+  mainRow.addComponents(new ButtonBuilder().setCustomId("galeria:instagram").setEmoji(galleryEmojis.instagram ?? "📷").setStyle(ButtonStyle.Secondary));
+  mainRow.addComponents(new ButtonBuilder().setCustomId("galeria:detalhes").setEmoji(galleryEmojis.details ?? "⋯").setStyle(ButtonStyle.Secondary));
+  mainRow.addComponents(new ButtonBuilder().setCustomId("galeria:excluir").setEmoji(galleryEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger));
+  return [mainRow];
 }
 
 export function moderationButtons(userId: string): ActionRowBuilder<ButtonBuilder> {

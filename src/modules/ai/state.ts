@@ -93,8 +93,8 @@ export function safeRelationshipSummary(value: unknown): string | null | undefin
 }
 
 export function safeAboutMe(value: unknown): string | null | undefined {
+  if (typeof value === "string" && value.length > 300) return undefined;
   const safe = safeRelationshipSummary(value);
-  if (typeof safe === "string" && safe.length > 160) return undefined;
   return safe;
 }
 

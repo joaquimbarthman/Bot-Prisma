@@ -24,7 +24,6 @@ export const config = {
   clientId: process.env.DISCORD_CLIENT_ID ?? "",
   guildId: process.env.DISCORD_GUILD_ID,
   modLogChannelId: process.env.MOD_LOG_CHANNEL_ID,
-  galleryReportChannelId: process.env.GALLERY_REPORT_CHANNEL_ID?.trim() || process.env.MOD_LOG_CHANNEL_ID?.trim(),
   monitoredChannelIds: new Set(
     (process.env.MONITORED_CHANNEL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
   ),
@@ -62,6 +61,7 @@ export const config = {
   bumpReminder: {
     channelId: process.env.BUMP_REMINDER_CHANNEL_ID?.trim() || "1537991941512237067",
     moderationRoleId: process.env.BUMP_REMINDER_ROLE_ID?.trim() || "1538337494355935302",
+    sourceBotId: process.env.BUMP_SOURCE_BOT_ID?.trim() || "302050872383242240",
     intervalHours: integer("BUMP_REMINDER_INTERVAL_HOURS", 2),
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
@@ -75,8 +75,8 @@ export const config = {
     accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
     webSearchEnabled: boolean("AI_WEB_SEARCH_ENABLED", true),
-    personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/prisma-personality.json",
-    soulPath: process.env.PRISMA_SOUL_PATH?.trim() || "personality/prisma.json",
+    personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/personality/prisma-personality.json",
+    soulPath: process.env.PRISMA_SOUL_PATH?.trim() || "data/personality/prisma.json",
     reasoningEffort: process.env.AI_REASONING_EFFORT?.trim() || "minimal",
     maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),
     historyMaxMessages: integer("AI_HISTORY_MAX_MESSAGES", 10),

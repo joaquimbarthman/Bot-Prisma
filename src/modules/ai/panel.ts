@@ -20,7 +20,7 @@ import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
-import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type UserSettings } from "./store.js";
+import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
 
 export function publicPanelComponents(): APIContainerComponent[] {
   return [{
@@ -135,10 +135,26 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Suas preferências\n**Apelido**　${settings.nickname || "Não definido"}\n**Sobre mim**　${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória**　${settings.memoryEnabled ? "🟢 Ativada" : "⚪ Desativada"}\n**Interações espontâneas**　${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
+        content: `### Suas preferências\n**Apelido** • ${settings.nickname || "Não definido"}\n**Sobre mim** • ${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória** • ${settings.memoryEnabled ? "🟢 Ativada" : "⚪ Desativada"}\n**Interações espontâneas** • ${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       ...userPanelButtons(settings).map((row) => row.toJSON()),
+    ],
+  }];
+}
+
+function memoriesViewComponents(memories: PrismaMemory[]): APIContainerComponent[] {
+  const memoryList = memories.slice(0, 12).map((memory, index) => `> **${String(index + 1).padStart(2, "0")}**　${memory.content}`).join("\n");
+  const content = memories.length
+    ? `### Memórias salvas　${memories.length}\n\n${memoryList}`
+    : "### Ainda não há memórias salvas\n\nConverse com a Prisma sobre coisas de que você gosta, interesses ou preferências. Quando algo for útil para conversas futuras, poderá virar uma memória.";
+  return [{
+    type: ComponentType.Container,
+    accent_color: 0x7c5cff,
+    components: [
+      { type: ComponentType.TextDisplay, content: "## Memórias da Prisma\nInformações que foram aprendidas nas suas conversas." },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content },
     ],
   }];
 }
@@ -201,11 +217,12 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   const selfServiceDeletion = ["clear-history", "reset-relationship", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove", "view-memories", "forget", "forget-confirm", "delete-all", "delete-all-confirm"].includes(action);
   const resetConfirmation = interaction.isButton() && ["reset-only", "reset-with-history", "reset-cancel"].includes(action);
   const opensModal = interaction.isButton() && (action === "nickname" || action === "about-me");
+  const opensMemoriesView = interaction.isButton() && action === "view-memories";
   const updatesPanel = (interaction.isButton() && ["clear-history", "nickname-remove", "memory", "spontaneous"].includes(action))
     || (interaction.isModalSubmit() && ["nickname-save", "about-me-save"].includes(action));
   if (resetConfirmation) await interaction.deferUpdate();
   else if (updatesPanel) await interaction.deferUpdate();
-  else if (!opensModal && action !== "open" && action !== "reset-relationship") await interaction.deferReply({ flags: ["Ephemeral"] });
+  else if (!opensModal && !opensMemoriesView && action !== "open" && action !== "reset-relationship") await interaction.deferReply({ flags: ["Ephemeral"] });
 
   const member = await authorizedMember(interaction);
   if (!selfServiceDeletion && (!member || accessLevel(member) === "none")) {
@@ -228,7 +245,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
       .setLabel("Conte algo curto sobre você")
       .setPlaceholder("Ex.: curto RPG e sou do interior")
       .setStyle(TextInputStyle.Paragraph)
-      .setMaxLength(160)
+      .setMaxLength(300)
       .setRequired(true);
     if (settings.aboutMe) input.setValue(settings.aboutMe);
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
@@ -283,7 +300,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     const content = memories.length
       ? `## O que a Prisma lembra\n${memories.map((memory, index) => `${index + 1}. ${memory.content}`).join("\n")}`
       : "A Prisma ainda não tem memórias duráveis suas.";
-    await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    await interaction.reply({ components: memoriesViewComponents(memories), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "forget" || action === "delete-all") {

@@ -127,7 +127,7 @@ function requestedAtDisplay(value: string): string {
 
 function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
   const details = [
-    `**Solicitado em**　　　　　 **Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
+    `**Solicitado em**　　　　　　**Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
   ];
   if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
   if (state.name) details.push(`**Nome informado**\n${state.name}`);
@@ -137,7 +137,7 @@ function staffPanelComponents(state: State, showButtons = true): APIContainerCom
       type: ComponentType.Section,
       components: [{
         type: ComponentType.TextDisplay,
-        content: `## Atendimento de verificação\n**Solicitante:** <@${state.userId}> ・ ${safePrivateValue(state.username ?? "usuário")}\n\nAguarde uma pessoa da equipe assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.\n\n-# <@&${verification.staffRoleId}> novo atendimento aguardando análise.`,
+        content: `## Atendimento de verificação\n**Solicitante:** <@${state.userId}> \n\nAguarde uma pessoa da equipe assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.\n\n-# <@&${verification.staffRoleId}> novo atendimento aguardando análise.`,
       }],
       accessory: {
         type: ComponentType.Thumbnail,
@@ -313,23 +313,52 @@ async function sendCollectionPrompt(channel: TextChannel, userId: string, step: 
   await setChannelState(channel, { step, promptId: prompt.id });
 }
 
+function verificationDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp)).replace(",", " às");
+}
+
 async function sendLog(client: Client, state: State, staff: GuildMember, channelId: string, result: "Aprovada" | "Recusada" | "Encerrada", reason?: string, data?: CollectedData): Promise<void> {
   const channel = await client.channels.fetch(verification.logChannelId!).catch(() => null);
   if (!channel?.isSendable()) { console.error("[VERIFICACAO] Canal de logs indisponível."); return; }
   const verifiedMember = await staff.guild.members.fetch(state.userId).catch(() => null);
   const verificationChannel = await client.channels.fetch(channelId).catch(() => null);
   const channelName = verificationChannel && "name" in verificationChannel ? verificationChannel.name : "verificacao";
-  const embed = new EmbedBuilder().setColor(result === "Aprovada" ? 0x57f287 : result === "Recusada" ? 0xed4245 : 0x99aab5)
-    .setTitle(`Verificação ${result.toLowerCase()}`).addFields(
-      { name: "👤 Usuário", value: `<@${state.userId}> • ${safePrivateValue(verifiedMember?.user.username ?? "usuário não encontrado")}` },
-      { name: "🛡️ Staff", value: `<@${staff.id}> • ${safePrivateValue(staff.user.username)}` },
-      { name: "📌 Resultado", value: result, inline: true },
-      { name: "💬 Canal", value: `#${channelName}`, inline: true },
-    ).setTimestamp();
-  if (data?.name) embed.addFields({ name: "Nome informado", value: data.name });
-  if (data?.birthDate) embed.addFields({ name: "Data de nascimento", value: data.birthDate });
-  if (reason) embed.addFields({ name: "📝 Motivo", value: reason.slice(0, 1000) });
-  await channel.send({ embeds: [embed] });
+  const accentColor = result === "Aprovada" ? 0x57f287 : result === "Recusada" ? 0xed4245 : 0x99aab5;
+  const resultLabel = result === "Aprovada" ? "✅ Aprovada" : result === "Recusada" ? "🚫 Recusada" : "🔒 Encerrada";
+  const privateData = [
+    data?.name && `Nome ・ ${data.name}`,
+    data?.birthDate && `Nascimento ・ ${data.birthDate}`,
+  ].filter(Boolean).join("\n");
+  const safeReason = reason?.slice(0, 1000).replace(/```/g, "'''");
+  await channel.send({
+    components: [{
+      type: ComponentType.Container,
+      accent_color: accentColor,
+      components: [
+        { type: ComponentType.TextDisplay, content: `## Verificação ${result.toLowerCase()}\n> ${resultLabel}` },
+        { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+        { type: ComponentType.TextDisplay, content: `**Usuário** ・ <@${state.userId}>\n**Responsável** ・ <@${staff.id}>` },
+        ...(privateData ? [{ type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: `**Dados informados**\n${privateData}` }] : []),
+        ...(safeReason ? [
+          { type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+          { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: "**Motivo**" },
+          { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: `\`\`\`text\n${safeReason}\n\`\`\`` },
+        ] : []),
+        { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+        { type: ComponentType.TextDisplay, content: `-# Aberto em ${verificationDateTime(Date.parse(state.createdAt))} ・ Fechado em ${verificationDateTime(Date.now())}` },
+      ],
+    }],
+    flags: ["IsComponentsV2"],
+    allowedMentions: { parse: [] },
+  });
 }
 
 async function scheduleDeletion(channel: TextChannel): Promise<void> {
