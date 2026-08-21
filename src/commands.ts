@@ -13,4 +13,7 @@ export const commands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder().setName("fim-teste-ai").setDescription("Desativa o modo de testes da Prisma IA")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder().setName("set-pensamento").setDescription("Define o pensamento atual da Prisma")
+    .addStringOption((option) => option.setName("texto").setDescription("Pensamento exibido no status da Prisma").setMinLength(1).setMaxLength(128).setRequired(true)),
+  new SlashCommandBuilder().setName("clear-pensamento").setDescription("Apaga o pensamento atual da Prisma"),
 ].map((command) => command.toJSON());

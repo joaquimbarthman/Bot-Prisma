@@ -59,6 +59,7 @@ const stateQueues = new Map<string, Promise<void>>();
 const stateRevisions = new Map<string, number>();
 const historyQueues = new Map<string, Promise<void>>();
 const historyRevisions = new Map<string, number>();
+const prismaThoughtPrefix = "PRISMA-THOUGHT:";
 
 function remoteFailure(operation: string, error: unknown): void {
   console.error(`[SUPABASE] ${operation} falhou; operação mantida em modo seguro:`, error);
@@ -512,9 +513,57 @@ export async function listPrismaOperatorRules(ownerId: string): Promise<PrismaOp
   if (supabase) {
     const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true });
     if (error) { remoteFailure("ler regras do operador", error.message); return []; }
-    return (data ?? []).map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string }));
+    return (data ?? [])
+      .map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string }))
+      .filter((item) => !item.rule.startsWith(prismaThoughtPrefix));
   }
-  return withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId));
+  return withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId && !item.rule.startsWith(prismaThoughtPrefix)));
+}
+
+function normalizePrismaThought(value: string): string {
+  return value.replace(/[@<>`\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 128);
+}
+
+export async function getPrismaThought(ownerId: string): Promise<string | null> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_operator_rules").select("rule").eq("owner_id", ownerId).like("rule", `${prismaThoughtPrefix}%`).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) { remoteFailure("ler pensamento da Prisma", error.message); return null; }
+    const rule = data?.rule as string | undefined;
+    return rule?.startsWith(prismaThoughtPrefix) ? rule.slice(prismaThoughtPrefix.length) || null : null;
+  }
+  return withLocal((db) => {
+    const item = [...(db.operatorRules ?? [])].reverse().find((rule) => rule.ownerId === ownerId && rule.rule.startsWith(prismaThoughtPrefix));
+    return item?.rule.slice(prismaThoughtPrefix.length) || null;
+  });
+}
+
+export async function setPrismaThought(ownerId: string, value: string): Promise<string> {
+  const thought = normalizePrismaThought(value);
+  if (!thought) throw new Error("O pensamento precisa ter algum texto válido.");
+  const encoded = `${prismaThoughtPrefix}${thought}`;
+  if (supabase) {
+    const { error: insertError } = await supabase.from("prisma_operator_rules").upsert({ owner_id: ownerId, rule: encoded }, { onConflict: "owner_id,rule", ignoreDuplicates: true });
+    if (insertError) { remoteFailure("salvar pensamento da Prisma", insertError.message); throw new Error("Não foi possível salvar o pensamento agora."); }
+    const { error: deleteError } = await supabase.from("prisma_operator_rules").delete().eq("owner_id", ownerId).like("rule", `${prismaThoughtPrefix}%`).neq("rule", encoded);
+    if (deleteError) remoteFailure("remover pensamentos antigos da Prisma", deleteError.message);
+    return thought;
+  }
+  return withLocal((db) => {
+    const rules = (db.operatorRules ?? []).filter((item) => item.ownerId !== ownerId || !item.rule.startsWith(prismaThoughtPrefix));
+    db.operatorRules = [...rules, { ownerId, rule: encoded, createdAt: new Date().toISOString() }];
+    return thought;
+  }, true);
+}
+
+export async function clearPrismaThought(ownerId: string): Promise<void> {
+  if (supabase) {
+    const { error } = await supabase.from("prisma_operator_rules").delete().eq("owner_id", ownerId).like("rule", `${prismaThoughtPrefix}%`);
+    if (error) { remoteFailure("apagar pensamento da Prisma", error.message); throw new Error("Não foi possível apagar o pensamento agora."); }
+    return;
+  }
+  await withLocal((db) => {
+    db.operatorRules = (db.operatorRules ?? []).filter((item) => item.ownerId !== ownerId || !item.rule.startsWith(prismaThoughtPrefix));
+  }, true);
 }
 
 export async function savePrismaOperatorRule(ownerId: string, rule: string): Promise<boolean> {

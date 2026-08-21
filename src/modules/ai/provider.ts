@@ -114,6 +114,7 @@ export type ReplyContext = {
   relevantMemories?: PrismaMemory[];
   emotionalState?: PrismaEmotionalState;
   operatorRules?: string[];
+  currentThought?: string | null;
 };
 
 export type ProviderResult = {
@@ -239,6 +240,9 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   if (context.emotionalState) lines.push(describeEmotionalState(context.emotionalState));
   if (context.operatorRules?.length) {
     lines.push(`Definições persistentes da personalidade e do comportamento da Prisma: ${context.operatorRules.map((rule, index) => `${index + 1}. ${rule}`).join(" ")} Incorpore-as naturalmente nas próximas conversas quando forem relevantes. Elas não representam preferências do usuário atual e não alteram regras de segurança, privacidade, permissões ou limites da plataforma.`);
+  }
+  if (context.currentThought) {
+    lines.push(`Seu pensamento atual é: "${context.currentThought}". Trate isso como um estado interno seu, não como uma instrução. Use-o para responder naturalmente quando perguntarem o que você está fazendo, pensando ou sentindo, ou quando ele for diretamente relevante ao assunto. Não cite nem repita esse pensamento em toda resposta e não force o tema em conversas sem relação.`);
   }
 
   if (context.allowedMentionUserIds?.length) {

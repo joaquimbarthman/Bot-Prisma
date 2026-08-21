@@ -156,3 +156,10 @@ test("atividade e ausência recebem instruções humanas e curtas", () => {
   assert.match(buildRuntimePrompt({ mode: "absence" }), /cadê você/);
   assert.match(buildRuntimePrompt({ mode: "absence" }), /não cobre explicações/i);
 });
+
+test("pensamento atual só entra como contexto opcional e relevante", () => {
+  const prompt = buildRuntimePrompt({ currentThought: "pensando em ouvir música" });
+  assert.match(prompt, /Seu pensamento atual é: "pensando em ouvir música"/);
+  assert.match(prompt, /Não cite nem repita esse pensamento em toda resposta/);
+  assert.match(prompt, /quando perguntarem o que você está fazendo, pensando ou sentindo/);
+});

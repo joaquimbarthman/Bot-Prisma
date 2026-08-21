@@ -5,7 +5,7 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, getPrismaState, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, spontaneousCountToday, updateSettings } from "./store.js";
+import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
@@ -35,6 +35,16 @@ export function startAiCleanup(client: Client): void {
   setInterval(() => cleanupExpired().catch(console.error), 60 * 60_000).unref();
   setTimeout(() => sendOccasionalAbsenceMessage(client).catch(console.error), 5 * 60_000).unref();
   setInterval(() => sendOccasionalAbsenceMessage(client).catch(console.error), 60 * 60_000).unref();
+  getPrismaThought(config.prismaAi.operatorUserId)
+    .then((thought) => applyPrismaThought(client, thought))
+    .catch((error) => console.error("[PRISMA-IA] Falha ao restaurar pensamento:", error));
+}
+
+function applyPrismaThought(client: Client, thought: string | null): void {
+  client.user?.setPresence({
+    activities: thought ? [{ name: thought, state: thought, type: ActivityType.Custom }] : [],
+    status: "online",
+  });
 }
 
 async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
@@ -58,7 +68,8 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
     try {
       const history = settings.memoryEnabled ? await recentHistory(member.id, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
       const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
-      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories });
+      const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
+      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories, currentThought });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
       await channel.send({ content: `<@${member.id}> ${answer}`, allowedMentions: { parse: [], users: [member.id] } });
       await addSpontaneous(member.id);
@@ -280,6 +291,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
     const operatorRules = await listPrismaOperatorRules(config.prismaAi.operatorUserId);
+    const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
@@ -288,6 +300,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       relevantMemories,
       emotionalState,
       operatorRules: operatorRules.map((item) => item.rule),
+      currentThought,
     };
     const requestedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
@@ -390,6 +403,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     if (!channel?.isSendable()) return;
     const prismaState = await getPrismaState(newPresence.userId);
     const history = settings.memoryEnabled ? await recentHistory(newPresence.userId, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
+    const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
     const generated = await generateReply(
       newPresence.userId,
       settings,
@@ -401,6 +415,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
         currentAuthorName: newPresence.member.displayName,
         currentAuthorId: newPresence.userId,
         activityDescription: activity.description,
+        currentThought,
       },
     );
     const answer = localModeration(generated.reply).flagged
@@ -414,6 +429,22 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
 
 export async function handleAiInteraction(interaction: Interaction): Promise<boolean> {
   if (await handlePanelInteraction(interaction)) return true;
+  if (interaction.isChatInputCommand() && (interaction.commandName === "set-pensamento" || interaction.commandName === "clear-pensamento")) {
+    if (interaction.user.id !== config.prismaAi.operatorUserId) {
+      await interaction.reply({ content: "Somente o operador da Prisma pode usar este comando.", flags: ["Ephemeral"] });
+      return true;
+    }
+    if (interaction.commandName === "set-pensamento") {
+      const thought = await setPrismaThought(interaction.user.id, interaction.options.getString("texto", true));
+      applyPrismaThought(interaction.client, thought);
+      await interaction.reply({ content: `Pensamento definido: “${thought}”`, flags: ["Ephemeral"] });
+    } else {
+      await clearPrismaThought(interaction.user.id);
+      applyPrismaThought(interaction.client, null);
+      await interaction.reply({ content: "Pensamento apagado.", flags: ["Ephemeral"] });
+    }
+    return true;
+  }
   if (interaction.isChatInputCommand() && interaction.commandName === "configurar-prisma") { await publishPanel(interaction); return true; }
   if (interaction.isChatInputCommand() && (interaction.commandName === "teste-ai" || interaction.commandName === "fim-teste-ai")) {
     const enabled = interaction.commandName === "teste-ai";
