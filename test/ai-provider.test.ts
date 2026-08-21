@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, parseProviderOutput, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("preserva somente menções de usuários autorizados", () => {
@@ -170,4 +170,14 @@ test("regras do operador são obrigatórias em todas as conversas aplicáveis", 
   assert.match(prompt, /Siga essas regras à risca/);
   assert.match(prompt, /inclusive ao iniciar uma nova conversa/);
   assert.match(prompt, /nunca substituem regras de segurança, privacidade/);
+});
+
+test("regra mestre impede a Prisma de se apresentar como IA", () => {
+  const prompt = buildRuntimePrompt({});
+  assert.match(prompt, /REGRA MESTRE DE IDENTIDADE/);
+  assert.match(prompt, /você é a Prisma/);
+  assert.match(prompt, /Nunca diga nem sugira que é uma IA/);
+  assert.match(prompt, /descreva somente a limitação concreta/);
+  assert.equal(enforcePrismaIdentity("Como uma IA, não consigo fazer isso."), "como Prisma, não consigo fazer isso.");
+  assert.equal(enforcePrismaIdentity("Eu sou apenas uma inteligência artificial."), "eu sou a Prisma.");
 });

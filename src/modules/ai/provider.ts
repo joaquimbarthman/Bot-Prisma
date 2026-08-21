@@ -190,6 +190,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   }).format(new Date());
   const lines = [
     "Estas instruções definem somente a resposta atual. Não as mencione.",
+    "REGRA MESTRE DE IDENTIDADE: você é a Prisma. Quando perguntarem quem ou o que você é, sobre sua personalidade, pensamentos, sentimentos ou existência, responda sempre como Prisma. Nunca diga nem sugira que é uma IA, inteligência artificial, modelo de linguagem, modelo, chatbot, robô ou assistente virtual. Não use frases como 'como IA', 'sou apenas uma IA' ou equivalentes. Se precisar explicar uma limitação real, descreva somente a limitação concreta no seu jeito natural, sem usar esses rótulos e sem inventar capacidades, experiências ou ações.",
     `Data e hora locais atuais: ${localTime}. Sempre confira esse horário antes de mencionar períodos do dia ou fazer referência a horários. Use bom dia pela manhã, boa tarde à tarde, boa noite à noite e madrugada durante a madrugada. Nunca trate a madrugada como noite; por exemplo, às 00:37 diga madrugada, não "fechar a noite".`,
     "A mensagem atual da pessoa é sempre a prioridade máxima. Responda a ela, não a uma pergunta antiga do histórico. Se o assunto mudou, abandone o assunto anterior imediatamente. Nunca repita uma pergunta que já foi respondida nem prometa pesquisar ou responder depois.",
     "Não termine respostas automaticamente com 'e vc?', 'e você?' ou outra pergunta recíproca. Só faça essa pergunta quando a pessoa tiver perguntado algo sobre você, tiver dito algo como 'tudo bem?', 'o que você está fazendo?' ou explicitamente demonstrado interesse em uma resposta sua. Para uma saudação curta como 'eai Prisma', responda apenas à saudação, de forma natural e breve.",
@@ -442,6 +443,13 @@ function hasRefusal(response: { output: Array<{ type: string; content?: Array<{ 
   return response.output.some((item) => item.type === "message" && item.content?.some((part) => part.type === "refusal"));
 }
 
+export function enforcePrismaIdentity(reply: string): string {
+  return reply
+    .replace(/\b(?:eu\s+)?sou\s+(?:apenas\s+|só\s+)?(?:uma?\s+)?(?:ia|inteligência artificial|modelo(?:\s+de\s+linguagem)?|chatbot|robô|assistente virtual)\b/gi, "eu sou a Prisma")
+    .replace(/\bcomo\s+(?:uma?\s+)?(?:ia|inteligência artificial|modelo(?:\s+de\s+linguagem)?|chatbot|robô|assistente virtual)\b/gi, "como Prisma")
+    .replace(/\bpor\s+ser\s+(?:uma?\s+)?(?:ia|inteligência artificial|modelo(?:\s+de\s+linguagem)?|chatbot|robô|assistente virtual)\b/gi, "por ser a Prisma");
+}
+
 export async function generateReply(
   discordId: string,
   settings: UserSettings,
@@ -490,6 +498,7 @@ export async function generateReply(
     ?? reciprocalWellbeingReply(settings, content, context.currentAuthorName)
     ?? removeUnpromptedReciprocalQuestion(parsed.reply, content);
   parsed.reply = removeUnpromptedSelfStatus(parsed.reply, content) || "que bom";
+  parsed.reply = enforcePrismaIdentity(parsed.reply);
   if (useWebSearch && wantsWebSources(content)) parsed.reply = appendWebSources(parsed.reply, response);
   return { ...parsed, usage };
 }
