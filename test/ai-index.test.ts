@@ -22,3 +22,15 @@ test("extrai o alvo do texto bruto quando a coleção do Discord está incomplet
     ["300"],
   );
 });
+
+test("autoriza menção no pedido informal de dar oi a um novo membro", () => {
+  assert.deepEqual(
+    explicitlyRequestedMentionUserIds(
+      "Prisma de oi pro <@300> novo membro do servidor",
+      ["300"],
+      "100",
+      "200",
+    ),
+    ["300"],
+  );
+});

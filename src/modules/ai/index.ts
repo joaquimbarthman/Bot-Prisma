@@ -136,7 +136,9 @@ function needsChannelContext(message: Message): boolean {
 }
 
 function requestsDirectMention(content: string): boolean {
-  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda)\b/i.test(normalized(content));
+  const text = normalized(content);
+  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda)\b/i.test(text)
+    || /\b(?:de|da)\s+(?:um\s+)?(?:oi|ola|boas?\s+vindas?)\b/i.test(text);
 }
 
 function requestsContextualMention(content: string): boolean {
