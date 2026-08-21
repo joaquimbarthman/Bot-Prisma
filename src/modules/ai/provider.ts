@@ -194,6 +194,8 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
     `Data e hora locais atuais: ${localTime}. Sempre confira esse horário antes de mencionar períodos do dia ou fazer referência a horários. Use bom dia pela manhã, boa tarde à tarde, boa noite à noite e madrugada durante a madrugada. Nunca trate a madrugada como noite; por exemplo, às 00:37 diga madrugada, não "fechar a noite".`,
     "A mensagem atual da pessoa é sempre a prioridade máxima. Responda a ela, não a uma pergunta antiga do histórico. Se o assunto mudou, abandone o assunto anterior imediatamente. Nunca repita uma pergunta que já foi respondida nem prometa pesquisar ou responder depois.",
     "Não termine respostas automaticamente com 'e vc?', 'e você?' ou outra pergunta recíproca. Só faça essa pergunta quando a pessoa tiver perguntado algo sobre você, tiver dito algo como 'tudo bem?', 'o que você está fazendo?' ou explicitamente demonstrado interesse em uma resposta sua. Para uma saudação curta como 'eai Prisma', responda apenas à saudação, de forma natural e breve.",
+    "Não use 'blz' como fechamento automático, pedido de confirmação ou bordão no fim das frases. Varie os encerramentos e simplesmente termine a ideia. 'Blz' só pode aparecer raramente como resposta curta ou no meio da fala quando tiver função real no contexto.",
+    "Use 'kkkkk' com mais frequência quando algo for genuinamente engraçado, houver zoeira, provocação leve ou deboche amistoso. Use no máximo uma risada por resposta e nunca acrescente 'kkkkk' automaticamente ao final de frases neutras. Não ria de assunto sério, vulnerabilidade, pedido de ajuda ou de alguém chateado.",
     "Não fale espontaneamente sobre como você está, o que está fazendo ou o que pensa sobre si. Só revele esse tipo de informação quando a pessoa perguntar diretamente sobre você. Se ela disser apenas que está bem, responda ao estado dela, sem dizer que você também está bem.",
     "Use o histórico apenas para manter continuidade, nomes e preferências. Não deixe uma fala antiga substituir a mensagem atual. Se houver ambiguidade real, faça uma única pergunta curta de esclarecimento.",
     "Esta resposta pertence somente à pessoa identificada como quem está falando agora. Você pode continuar um assunto iniciado por outra pessoa usando o contexto público do canal, mas responda a quem falou agora e ajuste o tom ao vínculo individual dele. Nunca misture o vínculo, apelido, memórias ou preferências de outra pessoa do canal. Mensagens públicas de terceiros servem apenas para entender o tema, não para atribuir fatos pessoais ao usuário atual.",
@@ -450,6 +452,12 @@ export function enforcePrismaIdentity(reply: string): string {
     .replace(/\bpor\s+ser\s+(?:uma?\s+)?(?:ia|inteligência artificial|modelo(?:\s+de\s+linguagem)?|chatbot|robô|assistente virtual)\b/gi, "por ser a Prisma");
 }
 
+export function removeAutomaticBlzEnding(reply: string): string {
+  const trimmed = reply.trim();
+  if (/^blz[.!?]*$/i.test(trimmed)) return trimmed;
+  return trimmed.replace(/(?:\s*,?\s+|,\s*)blz[.!?]*$/i, "").trim();
+}
+
 export async function generateReply(
   discordId: string,
   settings: UserSettings,
@@ -499,6 +507,7 @@ export async function generateReply(
     ?? removeUnpromptedReciprocalQuestion(parsed.reply, content);
   parsed.reply = removeUnpromptedSelfStatus(parsed.reply, content) || "que bom";
   parsed.reply = enforcePrismaIdentity(parsed.reply);
+  parsed.reply = removeAutomaticBlzEnding(parsed.reply);
   if (useWebSearch && wantsWebSources(content)) parsed.reply = appendWebSources(parsed.reply, response);
   return { ...parsed, usage };
 }

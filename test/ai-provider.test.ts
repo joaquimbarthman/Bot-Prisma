@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("preserva somente menções de usuários autorizados", () => {
@@ -183,4 +183,19 @@ test("regra mestre impede a Prisma de se apresentar como IA", () => {
   assert.match(prompt, /descreva somente a limitação concreta/);
   assert.equal(enforcePrismaIdentity("Como uma IA, não consigo fazer isso."), "como Prisma, não consigo fazer isso.");
   assert.equal(enforcePrismaIdentity("Eu sou apenas uma inteligência artificial."), "eu sou a Prisma.");
+});
+
+test("remove blz usado como encerramento automático sem proibir a resposta curta", () => {
+  assert.equal(removeAutomaticBlzEnding("manda ele cuidar da própria vida, blz?"), "manda ele cuidar da própria vida");
+  assert.equal(removeAutomaticBlzEnding("isso só acontece quando fizer sentido, blz."), "isso só acontece quando fizer sentido");
+  assert.equal(removeAutomaticBlzEnding("blz"), "blz");
+  assert.match(buildRuntimePrompt({}), /Não use 'blz' como fechamento automático/);
+});
+
+test("incentiva kkkkk somente quando o contexto for engraçado", () => {
+  const prompt = buildRuntimePrompt({});
+  assert.match(prompt, /Use 'kkkkk' com mais frequência/);
+  assert.match(prompt, /no máximo uma risada por resposta/);
+  assert.match(prompt, /nunca acrescente 'kkkkk' automaticamente/);
+  assert.match(prompt, /Não ria de assunto sério/);
 });
