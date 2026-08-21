@@ -68,8 +68,11 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
     try {
       const history = settings.memoryEnabled ? await recentHistory(member.id, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
       const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
-      const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
-      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories, currentThought });
+      const [currentThought, operatorRules] = await Promise.all([
+        getPrismaThought(config.prismaAi.operatorUserId),
+        listPrismaOperatorRules(config.prismaAi.operatorUserId),
+      ]);
+      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories, currentThought, operatorRules: operatorRules.map((item) => item.rule) });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
       await channel.send({ content: `<@${member.id}> ${answer}`, allowedMentions: { parse: [], users: [member.id] } });
       await addSpontaneous(member.id);
@@ -290,8 +293,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
-    const operatorRules = await listPrismaOperatorRules(config.prismaAi.operatorUserId);
-    const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
+    const [currentThought, operatorRules] = await Promise.all([
+      getPrismaThought(config.prismaAi.operatorUserId),
+      listPrismaOperatorRules(config.prismaAi.operatorUserId),
+    ]);
     const replyContext: ReplyContext = {
       mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
@@ -403,7 +408,10 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     if (!channel?.isSendable()) return;
     const prismaState = await getPrismaState(newPresence.userId);
     const history = settings.memoryEnabled ? await recentHistory(newPresence.userId, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
-    const currentThought = await getPrismaThought(config.prismaAi.operatorUserId);
+    const [currentThought, operatorRules] = await Promise.all([
+      getPrismaThought(config.prismaAi.operatorUserId),
+      listPrismaOperatorRules(config.prismaAi.operatorUserId),
+    ]);
     const generated = await generateReply(
       newPresence.userId,
       settings,
@@ -416,6 +424,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
         currentAuthorId: newPresence.userId,
         activityDescription: activity.description,
         currentThought,
+        operatorRules: operatorRules.map((item) => item.rule),
       },
     );
     const answer = localModeration(generated.reply).flagged

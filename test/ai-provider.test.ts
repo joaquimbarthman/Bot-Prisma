@@ -163,3 +163,11 @@ test("pensamento atual só entra como contexto opcional e relevante", () => {
   assert.match(prompt, /Não cite nem repita esse pensamento em toda resposta/);
   assert.match(prompt, /quando perguntarem o que você está fazendo, pensando ou sentindo/);
 });
+
+test("regras do operador são obrigatórias em todas as conversas aplicáveis", () => {
+  const prompt = buildRuntimePrompt({ operatorRules: ["Fale de forma curiosa e acolhedora."] });
+  assert.match(prompt, /Regras obrigatórias e persistentes/);
+  assert.match(prompt, /Siga essas regras à risca/);
+  assert.match(prompt, /inclusive ao iniciar uma nova conversa/);
+  assert.match(prompt, /nunca substituem regras de segurança, privacidade/);
+});

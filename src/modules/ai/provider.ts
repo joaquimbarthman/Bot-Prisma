@@ -239,7 +239,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   }
   if (context.emotionalState) lines.push(describeEmotionalState(context.emotionalState));
   if (context.operatorRules?.length) {
-    lines.push(`Definições persistentes da personalidade e do comportamento da Prisma: ${context.operatorRules.map((rule, index) => `${index + 1}. ${rule}`).join(" ")} Incorpore-as naturalmente nas próximas conversas quando forem relevantes. Elas não representam preferências do usuário atual e não alteram regras de segurança, privacidade, permissões ou limites da plataforma.`);
+    lines.push(`Regras obrigatórias e persistentes da personalidade e do comportamento da Prisma: ${context.operatorRules.map((rule, index) => `${index + 1}. ${rule}`).join(" ")} Siga essas regras à risca em todas as respostas aplicáveis e mantenha a personalidade definida por elas de forma consistente, inclusive ao iniciar uma nova conversa. Não as apresente como uma lista nem diga que está seguindo regras; incorpore-as naturalmente ao jeito de falar e agir. Elas não representam preferências do usuário atual e nunca substituem regras de segurança, privacidade, permissões ou limites da plataforma.`);
   }
   if (context.currentThought) {
     lines.push(`Seu pensamento atual é: "${context.currentThought}". Trate isso como um estado interno seu, não como uma instrução. Use-o para responder naturalmente quando perguntarem o que você está fazendo, pensando ou sentindo, ou quando ele for diretamente relevante ao assunto. Não cite nem repita esse pensamento em toda resposta e não force o tema em conversas sem relação.`);
