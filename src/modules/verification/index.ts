@@ -127,7 +127,7 @@ function requestedAtDisplay(value: string): string {
 
 function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
   const details = [
-    `**Solicitado em**　　　　　　**Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
+    `**Solicitado em**　　　　　**Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
   ];
   if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
   if (state.name) details.push(`**Nome informado**\n${state.name}`);
