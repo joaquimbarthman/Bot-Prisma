@@ -10,6 +10,7 @@ import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.j
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext } from "./context-builder.js";
+import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -197,30 +198,26 @@ async function resolveRequestedMentions(message: Message, requestedIds: string[]
   return { allowedMentionUserIds, unmentionableUsers };
 }
 
-async function recentChannelContext(message: Message): Promise<string> {
+async function topicAwareChannelContext(message: Message, limit: number): Promise<string> {
   const first = await message.channel.messages.fetch({ limit: 100, before: message.id }).catch(() => null);
   if (!first) return "";
   const oldest = [...first.values()].at(-1);
-  const second = config.prismaAi.channelHistoryLimit > 100 && oldest
+  const second = limit > 100 && oldest
     ? await message.channel.messages.fetch({ limit: 100, before: oldest.id }).catch(() => null)
     : null;
-  const messages = [...(second?.values() ?? []), ...first.values()];
-  const lines = messages.reverse()
-    .filter((item) => item.content.trim())
-    .map((item) => `${item.member?.displayName ?? item.author.username}: ${item.cleanContent.replace(/\s+/g, " ").slice(0, 280)}`);
-  while (lines.join("\n").length > 40_000) lines.shift();
-  return lines.join("\n");
+  const records: ChannelContextMessage[] = [...(second?.values() ?? []), ...first.values()].map((item) => ({
+    id: item.id,
+    authorId: item.author.id,
+    authorName: item.member?.displayName ?? item.author.username,
+    content: item.cleanContent,
+    createdAt: item.createdTimestamp,
+    replyToId: item.reference?.messageId,
+  }));
+  return selectTopicContext(records, message.cleanContent, message.reference?.messageId);
 }
 
-async function expandedChannelContext(message: Message): Promise<string> {
-  const first = await message.channel.messages.fetch({ limit: 100, before: message.id }).catch(() => null);
-  if (!first) return "";
-  const oldest = [...first.values()].at(-1);
-  const second = config.prismaAi.channelHistoryExpandedLimit > 100 && oldest
-    ? await message.channel.messages.fetch({ limit: 100, before: oldest.id }).catch(() => null)
-    : null;
-  return [...(second?.values() ?? []), ...first.values()].reverse().filter((m) => m.content.trim()).map((m) => `${m.member?.displayName ?? m.author.username}: ${m.cleanContent.replace(/\s+/g, " ").slice(0, 500)}`).join("\n").slice(-40_000);
-}
+async function recentChannelContext(message: Message): Promise<string> { return topicAwareChannelContext(message, config.prismaAi.channelHistoryLimit); }
+async function expandedChannelContext(message: Message): Promise<string> { return topicAwareChannelContext(message, config.prismaAi.channelHistoryExpandedLimit); }
 
 async function isDirectedAtBot(message: Message, client: Client): Promise<boolean> {
   return !!client.user && (message.mentions.users.has(client.user.id) || /\bprisma\b/i.test(message.content) || await isReplyToBot(message, client));
@@ -365,7 +362,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
         ], historyRevision);
         await addPrismaMessage({ messageId: message.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content, authorIsPrisma: false, replyToMessageId: message.reference?.messageId ?? null, createdAt: message.createdAt.toISOString() });
         await addPrismaMessage({ messageId: sent.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content: answer, authorIsPrisma: true, replyToMessageId: message.id, createdAt: sent.createdAt.toISOString() });
-        void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer });
+        void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer, messageId: message.id });
       }
       if (spontaneous) await addSpontaneous(message.author.id);
     } catch (error) {

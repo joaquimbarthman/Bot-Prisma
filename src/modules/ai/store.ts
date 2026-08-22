@@ -26,7 +26,7 @@ export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperame
 export type UserSettings = { nickname: string; aboutMe: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
 export type PrismaProfile = { userId: string; displayName: string | null; profileSummary: string | null; communicationStyle: string | null; interests: string[]; knownPreferences: string[] };
-export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null };
+export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null; memoryKey?: string; occurrenceCount?: number; lastSeenAt?: string };
 export type PrismaMessage = { messageId: string; guildId: string; channelId: string; userId: string; content: string; authorIsPrisma: boolean; replyToMessageId?: string | null; createdAt: string };
 export type PrismaDailySummary = { userId: string; summaryDate: string; summary: string; updatedAt?: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
@@ -232,11 +232,17 @@ export async function getPrismaProfile(userId: string): Promise<PrismaProfile | 
 
 export async function getRelevantPrismaMemories(userId: string, limit = 8, currentMessage = ""): Promise<PrismaMemory[]> {
   const terms = new Set(currentMessage.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]{3,}/gu) ?? []);
-  const rank = (memory: PrismaMemory) => memory.importance * 2 + memory.confidence + [...terms].filter(term => memory.content.toLocaleLowerCase("pt-BR").includes(term)).length * 50;
+  const rank = (memory: PrismaMemory) => {
+    const lexical = [...terms].filter(term => memory.content.toLocaleLowerCase("pt-BR").includes(term)).length * 50;
+    const repetition = Math.min(20, Math.max(0, (memory.occurrenceCount ?? 1) - 1) * 4);
+    const seenAt = Date.parse(memory.lastSeenAt ?? "");
+    const recency = Number.isFinite(seenAt) ? Math.max(0, 15 - Math.floor((Date.now() - seenAt) / (30 * 24 * 60 * 60_000))) : 0;
+    return memory.importance * 2 + memory.confidence + lexical + repetition + recency;
+  };
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_memories").select("*").eq("user_id", userId).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(limit);
+    const { data, error } = await supabase.from("prisma_memories").select("*").eq("user_id", userId).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(Math.max(30, limit * 4));
     if (error) { remoteFailure("ler memórias", error.message); return []; }
-    return (data ?? []).map(row => ({ id: row.id, userId, memoryType: row.memory_type, content: row.content, importance: score(row.importance, 50), confidence: score(row.confidence, 60), sourceMessageId: row.source_message_id })).sort((a, b) => rank(b) - rank(a));
+    return (data ?? []).map(row => ({ id: row.id, userId, memoryType: row.memory_type, content: row.content, importance: score(row.importance, 50), confidence: score(row.confidence, 60), sourceMessageId: row.source_message_id, memoryKey: row.memory_key, occurrenceCount: Number(row.occurrence_count) || 1, lastSeenAt: row.last_seen_at })).sort((a, b) => rank(b) - rank(a)).slice(0, limit);
   }
   return withLocal(db => (db.memories ?? []).filter(memory => memory.userId === userId).sort((a,b) => rank(b) - rank(a)).slice(0, limit));
 }
@@ -263,9 +269,13 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   if (!content) return;
   const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60) };
   if (supabase) {
-    const { data: existing, error: readError } = await supabase.from("prisma_memories").select("id,importance,confidence").eq("user_id", candidate.userId).ilike("content", candidate.content).maybeSingle();
+    const lookup = supabase.from("prisma_memories").select("id,importance,confidence,occurrence_count").eq("user_id", candidate.userId);
+    const { data: existing, error: readError } = candidate.memoryKey
+      ? await lookup.eq("memory_key", candidate.memoryKey).maybeSingle()
+      : await lookup.ilike("content", candidate.content).maybeSingle();
     if (readError) { remoteFailure("procurar memória existente", readError.message); return; }
-    const row = { memory_type: candidate.memoryType, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.max(candidate.confidence, score(existing?.confidence, 0)), source_message_id: candidate.sourceMessageId ?? null, updated_at: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const row = { memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.min(100, Math.max(candidate.confidence, score(existing?.confidence, 0)) + (existing ? 5 : 0)), occurrence_count: (Number(existing?.occurrence_count) || 0) + 1, last_seen_at: now, source_message_id: candidate.sourceMessageId ?? null, updated_at: now };
     const { error } = existing
       ? await supabase.from("prisma_memories").update(row).eq("id", existing.id).eq("user_id", candidate.userId)
       : await supabase.from("prisma_memories").insert({ user_id: candidate.userId, ...row });
@@ -274,9 +284,9 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   }
   await withLocal(db => {
     const memories = db.memories ??= [];
-    const current = memories.find(item => item.userId === candidate.userId && item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR"));
-    if (current) Object.assign(current, candidate, { importance: Math.max(current.importance, candidate.importance), confidence: Math.max(current.confidence, candidate.confidence) });
-    else memories.push(candidate);
+    const current = memories.find(item => item.userId === candidate.userId && (candidate.memoryKey ? item.memoryKey === candidate.memoryKey : item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR")));
+    if (current) Object.assign(current, candidate, { importance: Math.max(current.importance, candidate.importance), confidence: Math.min(100, Math.max(current.confidence, candidate.confidence) + 5), occurrenceCount: (current.occurrenceCount ?? 1) + 1, lastSeenAt: new Date().toISOString() });
+    else memories.push({ ...candidate, occurrenceCount: 1, lastSeenAt: new Date().toISOString() });
   }, true);
 }
 
