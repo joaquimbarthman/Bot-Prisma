@@ -326,7 +326,12 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     };
     if (asksFavoriteSongPart(content)) {
       replyContext.lyricsResearchAttempted = true;
-      replyContext.lyricsResearch = await researchLyrics(content, history);
+      replyContext.lyricsResearch = await researchLyrics(
+        content,
+        history,
+        fetch,
+        currentActivity?.description ? [currentActivity.description] : [],
+      );
     }
     const requestedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,

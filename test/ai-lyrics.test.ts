@@ -7,8 +7,43 @@ test("reconhece pergunta sobre a parte preferida de uma música", () => {
   assert.equal(asksFavoriteSongPart("qual sua música favorita?"), false);
 });
 
+test("reconhece formas naturais e indiretas de pedir um trecho", () => {
+  const examples = [
+    "o que mais te pega nessa letra?",
+    "tem alguma frase que te marca nela?",
+    "escolhe uma frase bonita dessa música",
+    "em qual momento ela fica melhor?",
+    "qual palavra dessa canção você acha mais bonita?",
+    "cita um verso dela que chama sua atenção",
+  ];
+  for (const example of examples) assert.equal(asksFavoriteSongPart(example), true, example);
+});
+
+test("não confunde preferência geral de música com pedido de trecho", () => {
+  assert.equal(asksFavoriteSongPart("qual é sua música favorita?"), false);
+  assert.equal(asksFavoriteSongPart("você gosta dessa música?"), false);
+  assert.equal(asksFavoriteSongPart("qual foi a melhor parte do seu dia?"), false);
+});
+
 test("prioriza o título citado na pergunta ao montar a busca", () => {
   assert.equal(lyricsSearchQueries('qual parte de "we can\'t be friends" você mais gosta?')[0], "we can't be friends");
+});
+
+test("resolve 'dela' pela música e artista da atividade atual", () => {
+  const queries = lyricsSearchQueries(
+    "qual parte vc mais gosta dela?",
+    [],
+    ['ouvindo "Honeybee" de Olivia Rodrigo'],
+  );
+  assert.equal(queries[0], "Honeybee Olivia Rodrigo");
+  assert.equal(queries.includes("dela"), false);
+});
+
+test("resolve referência indireta pelo histórico recente antes de termos vagos", () => {
+  const history = [{ discordId: "1", channelId: "2", role: "assistant" as const, content: 'vc tá ouvindo “Honeybee”, da Olivia Rodrigo, agr', createdAt: new Date().toISOString() }];
+  const queries = lyricsSearchQueries("qual parte vc mais gosta dela?", history);
+  assert.match(queries[0], /Honeybee/i);
+  assert.equal(queries.includes("dela"), false);
 });
 
 test("consulta somente o LRCLIB e remove timestamps da letra sincronizada", async () => {

@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v3.3";
+export const PRISMA_AI_VERSION = "v3.4";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Reconhecimento mais natural de perguntas sobre letras, entendendo referências indiretas como 'dela' e pedidos como 'o que mais te pega nessa letra', além de preservar corretamente títulos com apóstrofos.",
   "Pesquisa obrigatória de letras no LRCLIB quando perguntam qual parte, trecho ou verso de uma música a Prisma mais aprecia, usando somente a letra encontrada para fundamentar a resposta sem inventar versos.",
   "Memória mais inteligente, capaz de reconhecer mais tipos de informação, listas, gostos musicais e respostas curtas que continuam uma pergunta anterior.",
   "Memórias organizadas por assunto, com validade, confirmação, substituição de informações antigas e limite para evitar acúmulo sem controle.",
