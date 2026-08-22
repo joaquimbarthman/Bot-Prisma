@@ -458,8 +458,10 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("prisma_emotional_states").select("user_id").limit(1),
     supabase.from("prisma_daily_summaries").select("id").limit(1),
     supabase.from("prisma_operator_rules").select("id").limit(1),
+    supabase.from("gallery_posts").select("message_id").limit(1),
+    supabase.from("lfg_sessions").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules"];
+  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);

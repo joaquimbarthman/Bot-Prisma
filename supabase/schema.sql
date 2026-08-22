@@ -3,6 +3,7 @@ begin;
 create table if not exists public.user_settings (
   discord_id text primary key,
   nickname text not null default '',
+  about_me text not null default '',
   personality text not null default 'prisma_default',
   humor_level integer not null default 1 check (humor_level between 1 and 5),
   allow_mentions boolean not null default true,
@@ -19,6 +20,20 @@ create table if not exists public.prisma_operator_rules (
   created_at timestamptz not null default now(),
   unique (owner_id, rule)
 );
+
+-- Garante compatibilidade ao reaplicar o schema sobre instalações anteriores.
+alter table public.user_settings
+  add column if not exists about_me text not null default '';
+alter table public.user_settings drop constraint if exists user_settings_about_me_length;
+alter table public.user_settings
+  add constraint user_settings_about_me_length check (char_length(about_me) <= 160);
+
+update public.prisma_operator_rules
+set rule = left(rule, 350)
+where char_length(rule) > 350;
+alter table public.prisma_operator_rules drop constraint if exists prisma_operator_rules_rule_check;
+alter table public.prisma_operator_rules
+  add constraint prisma_operator_rules_rule_check check (char_length(rule) between 5 and 350);
 
 -- personality e humor_level permanecem temporariamente apenas para compatibilidade
 -- com deploys antigos. O fluxo adaptativo não lê nem grava essas colunas.
@@ -299,6 +314,59 @@ create table if not exists public.prisma_emotional_states (
   updated_at timestamptz not null default now()
 );
 
+-- Publicações da galeria. Curtidas e comentários ficam no próprio post porque
+-- o módulo atual persiste esses dados como arrays JSON.
+create table if not exists public.gallery_posts (
+  message_id text primary key,
+  owner_id text not null,
+  likes jsonb not null default '[]'::jsonb,
+  comments jsonb not null default '[]'::jsonb,
+  instagram_handle text,
+  report_pending boolean not null default false,
+  report_disabled boolean not null default false,
+  updated_at timestamptz not null default now(),
+  constraint gallery_posts_likes_array check (jsonb_typeof(likes) = 'array'),
+  constraint gallery_posts_comments_array check (jsonb_typeof(comments) = 'array')
+);
+
+alter table public.gallery_posts
+  add column if not exists comments jsonb not null default '[]'::jsonb,
+  add column if not exists instagram_handle text,
+  add column if not exists report_pending boolean not null default false,
+  add column if not exists report_disabled boolean not null default false;
+alter table public.gallery_posts drop constraint if exists gallery_posts_likes_array;
+alter table public.gallery_posts
+  add constraint gallery_posts_likes_array check (jsonb_typeof(likes) = 'array');
+alter table public.gallery_posts drop constraint if exists gallery_posts_comments_array;
+alter table public.gallery_posts
+  add constraint gallery_posts_comments_array check (jsonb_typeof(comments) = 'array');
+create index if not exists gallery_posts_owner_idx on public.gallery_posts (owner_id);
+
+-- Sessões do sistema de procura de grupos (LFG).
+create table if not exists public.lfg_sessions (
+  id uuid primary key,
+  guild_id text not null,
+  channel_id text not null,
+  message_id text,
+  role_mention_message_id text,
+  creator_id text not null,
+  game text not null check (game in ('fortnite', 'valorant', 'roblox', 'overwatch', 'league_of_legends', 'minecraft', 'marvel_rivals', 'dead_by_daylight')),
+  max_players smallint not null check (max_players between 2 and 12),
+  participants jsonb not null default '[]'::jsonb check (jsonb_typeof(participants) = 'array'),
+  note text not null default '' check (char_length(note) <= 500),
+  auto_voice_enabled boolean not null default false,
+  voice_channel_id text,
+  temporary_role_id text,
+  status text not null default 'open' check (status in ('open', 'completed', 'closed', 'expired', 'deleted')),
+  delete_voice_when_empty boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists lfg_sessions_guild_status_idx on public.lfg_sessions (guild_id, status);
+create index if not exists lfg_sessions_creator_status_idx on public.lfg_sessions (creator_id, status);
+create index if not exists lfg_sessions_expires_idx on public.lfg_sessions (expires_at);
+
 -- Migração compatível para instalações que usavam os nomes e a escala antigos.
 update public.user_settings set personality = case personality
   when 'padrao' then 'prisma_default'
@@ -314,6 +382,7 @@ alter table public.user_settings add constraint user_settings_humor_level_check 
 alter table public.user_settings alter column humor_level set default 1;
 
 alter table public.user_settings enable row level security;
+alter table public.prisma_operator_rules enable row level security;
 alter table public.conversation_history enable row level security;
 alter table public.ai_usage enable row level security;
 alter table public.ai_events enable row level security;
@@ -324,6 +393,24 @@ alter table public.prisma_memories enable row level security;
 alter table public.prisma_messages enable row level security;
 alter table public.prisma_daily_summaries enable row level security;
 alter table public.prisma_emotional_states enable row level security;
+alter table public.gallery_posts enable row level security;
+alter table public.lfg_sessions enable row level security;
+
+-- O bot usa exclusivamente a chave service_role no backend. Não há políticas
+-- para clientes públicos, e estas revogações deixam essa intenção explícita.
+revoke all on table public.user_settings, public.prisma_operator_rules,
+  public.prisma_relationships, public.prisma_temperament,
+  public.conversation_history, public.ai_usage, public.ai_events,
+  public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
+  public.prisma_daily_summaries, public.prisma_emotional_states,
+  public.gallery_posts, public.lfg_sessions from anon, authenticated;
+grant all on table public.user_settings, public.prisma_operator_rules,
+  public.prisma_relationships, public.prisma_temperament,
+  public.conversation_history, public.ai_usage, public.ai_events,
+  public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
+  public.prisma_daily_summaries, public.prisma_emotional_states,
+  public.gallery_posts, public.lfg_sessions to service_role;
+grant usage, select on all sequences in schema public to service_role;
 
 drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);
 
