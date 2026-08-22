@@ -38,9 +38,23 @@ Preencha `OPENAI_API_KEY` para ativar a análise de assédio, ameaças e discurs
 
 O módulo isolado fica em `src/modules/ai/`. Somente membros com o cargo definido em `AI_ACCESS_ROLE_ID` podem gerar chamadas. Boosters recebem esse cargo automaticamente; o bot precisa de **Gerenciar cargos** e seu cargo deve ficar acima do cargo de acesso na hierarquia. Configure `AI_GENERAL_CHANNEL_ID` e `AI_PANEL_CHANNEL_ID`, reinicie o bot e use `/configurar-prisma` para publicar o painel único.
 
-Com `SUPABASE_URL` e `SUPABASE_SECRET_KEY`, preferências, relacionamento adaptativo, temperamento, histórico temporário, métricas e interações espontâneas usam o Supabase. Em instalações novas, execute `supabase/schema.sql`; em bancos existentes, execute as migrations pendentes de `supabase/migrations/` no SQL Editor antes de publicar o novo código.
+Com `SUPABASE_URL` e `SUPABASE_SECRET_KEY`, preferências, relacionamento adaptativo, estado emocional/temperamento por pessoa, histórico temporário, métricas e interações espontâneas usam o Supabase. Em instalações novas, execute `supabase/schema.sql`; em bancos existentes, execute as migrations pendentes de `supabase/migrations/` no SQL Editor antes de publicar o novo código.
 
 A personalidade-base da Prisma é fixa e fica versionada em `data/personality/prisma.json` (caminho substituível por `PRISMA_SOUL_PATH`). O arquivo reúne as regras de tom e a referência das regras executadas por `buildRuntimePrompt()` em formato JSON. Usuários não escolhem presets nem scores emocionais: familiaridade, calor, paciência, brincadeira, confiança e temperamento evoluem gradualmente a partir das conversas. O texto do histórico expira em 48 horas, enquanto o resumo da relação, até cinco marcos não sensíveis e o estilo preferido persistem sob validação rígida e cooldown de sete dias. O painel permite apagar o histórico, remover o apelido ou reiniciar a relação, inclusive depois de perder o acesso à IA.
+
+`prisma_memories` é a fonte oficial das preferências e estilos aprendidos. `prisma_user_profiles` funciona somente como cache consolidado dessas memórias; configurações escolhidas pela própria pessoa continuam em `user_settings`, e `prisma_relationships` guarda apenas a evolução do vínculo e seus marcos.
+
+Os campos `interests` e `known_preferences` não são persistidos no perfil: são derivados das memórias ativas durante a leitura. A migration converte valores legados em memórias antes de remover os arrays, evitando perda de dados.
+
+Memórias possuem ciclo de vida: somente registros `active` entram no contexto; mudanças de opinião arquivam a versão anterior como `superseded`, ligam-na à nova por `superseded_by` e preservam quando ela foi confirmada. Registros com `valid_until` vencido passam para `forgotten` durante a limpeza automática.
+
+A validade é renovada quando surge nova evidência: eventos duram 30 dias, projetos 180 dias, memórias sociais/relacionais 365 dias e preferências, interesses, estilos de comunicação e piadas internas 730 dias. Emoções não usam esse prazo porque possuem decaimento próprio.
+
+As mensagens têm ciclos distintos: `conversation_history` retém somente 48 horas para contexto imediato e `prisma_messages` funciona como fila, apagada assim que o dia é resumido. Em `prisma_period_summaries`, os diários com mais de 7 dias viram semanais, os semanais com mais de 90 dias viram mensais e os mensais permanecem por 365 dias.
+
+Para limitar o crescimento do banco, memórias `forgotten` são removidas 180 dias depois da mudança de status e versões `superseded` são removidas depois de 365 dias. Memórias `active` nunca são apagadas diretamente pela retenção: primeiro vencem e passam para `forgotten`.
+
+No Supabase, `save_prisma_daily_summary` salva o resumo e remove as mensagens da fila na mesma transação. `enforce_prisma_retention` centraliza a limpeza periódica das tabelas; o código mantém um fallback compatível enquanto as migrations ainda não tiverem sido aplicadas.
 
 Sem as duas variáveis do Supabase, o módulo usa `data/ai-module.json` em modo local explícito. Com Supabase configurado, uma falha remota não recorre a cópias locais antigas: histórico, preferências e limites falham de forma conservadora. O arquivo local contém dados de usuários, usa permissão restrita e nunca deve ser versionado. O contexto enviado é limitado por 48 horas, quantidade de mensagens e caracteres. Custos são estimados com os preços e cotação definidos no `.env`, e novas chamadas são bloqueadas ao atingir `AI_MONTHLY_BUDGET_BRL`.
 

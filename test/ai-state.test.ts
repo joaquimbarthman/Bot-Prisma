@@ -88,17 +88,18 @@ test("resumo existente não muda antes do intervalo de sete dias", () => {
 
 test("salva marcos e estilo preferido seguros no mesmo cooldown da memória", () => {
   const now = new Date("2026-08-17T12:00:00.000Z");
+  const update = validateStateUpdate({
+    recent_milestone_candidates: ["Costuma compartilhar conquistas em jogos.", "Prefere conversas descontraídas."],
+    preferred_style_candidate: "curto, direto e descontraído",
+  });
   const result = applyValidatedStateUpdate(
     { relationship: { ...defaultRelationship("123"), interactionCount: 4 }, temperament: defaultTemperament("123") },
-    {
-      recent_milestone_candidates: ["Costuma compartilhar conquistas em jogos.", "Prefere conversas descontraídas."],
-      preferred_style_candidate: "curto, direto e descontraído",
-    },
+    update,
     now,
   );
 
   assert.deepEqual(result.relationship.recentMilestones, ["Costuma compartilhar conquistas em jogos.", "Prefere conversas descontraídas."]);
-  assert.equal(result.relationship.preferredStyle, "curto, direto e descontraído");
+  assert.equal(update.preferredStyleCandidate, "curto, direto e descontraído");
   assert.equal(result.relationship.summaryUpdatedAt, now.toISOString());
 
   const blocked = applyValidatedStateUpdate(result, {
@@ -106,7 +107,7 @@ test("salva marcos e estilo preferido seguros no mesmo cooldown da memória", ()
     preferred_style_candidate: "mais acolhedor",
   }, new Date("2026-08-18T12:00:00.000Z"));
   assert.deepEqual(blocked.relationship.recentMilestones, result.relationship.recentMilestones);
-  assert.equal(blocked.relationship.preferredStyle, result.relationship.preferredStyle);
+  assert.equal(blocked.relationship.summaryUpdatedAt, result.relationship.summaryUpdatedAt);
 });
 
 test("descarta marcos e estilo com dados sensíveis ou instruções", () => {

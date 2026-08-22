@@ -1,1 +1,1 @@
-export const PRISMA_AI_VERSION = "v2.5";
+export const PRISMA_AI_VERSION = "v2.8";

@@ -9,7 +9,6 @@ import {
   defaultRelationship,
   defaultTemperament,
   prismaMoods,
-  safePreferredStyle,
   safeAboutMe,
   safeRecentMilestones,
   safeRelationshipSummary,
@@ -26,9 +25,10 @@ export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperame
 export type UserSettings = { nickname: string; aboutMe: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
 export type PrismaProfile = { userId: string; displayName: string | null; profileSummary: string | null; communicationStyle: string | null; interests: string[]; knownPreferences: string[] };
-export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null; memoryKey?: string; occurrenceCount?: number; lastSeenAt?: string };
+export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null; memoryKey?: string; occurrenceCount?: number; lastSeenAt?: string; status?: "active" | "superseded" | "forgotten"; supersededBy?: number | null; validUntil?: string | null; lastConfirmedAt?: string };
 export type PrismaMessage = { messageId: string; guildId: string; channelId: string; userId: string; content: string; authorIsPrisma: boolean; replyToMessageId?: string | null; createdAt: string };
 export type PrismaDailySummary = { userId: string; summaryDate: string; summary: string; updatedAt?: string };
+export type PrismaPeriodSummary = { userId: string; periodType: "weekly" | "monthly"; periodStart: string; periodEnd: string; summary: string; updatedAt?: string };
 export type PrismaDailyBatch = { userId: string; summaryDate: string; messages: PrismaMessage[] };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 export type PrismaOperatorRule = { id?: number; ownerId: string; rule: string; createdAt: string };
@@ -46,6 +46,7 @@ type Database = {
   emotionalStates?: Record<string, PrismaEmotionalState>;
   prismaMessages?: PrismaMessage[];
   dailySummaries?: PrismaDailySummary[];
+  periodSummaries?: PrismaPeriodSummary[];
   operatorRules?: PrismaOperatorRule[];
   selfLearnings?: PrismaSelfLearning[];
 };
@@ -134,7 +135,6 @@ function fromRelationship(id: string, row: Record<string, unknown> | null, now: 
     patience: score(row.patience, fallback.patience),
     banter: score(row.banter, fallback.banter),
     trust: score(row.trust, fallback.trust),
-    preferredStyle: safePreferredStyle(row.preferred_style ?? row.preferredStyle) ?? null,
     relationshipSummary: safeRelationshipSummary(row.relationship_summary ?? row.relationshipSummary) ?? null,
     recentMilestones: safeRecentMilestones(row.recent_milestones ?? row.recentMilestones) ?? [],
     summaryUpdatedAt: typeof (row.summary_updated_at ?? row.summaryUpdatedAt) === "string" ? String(row.summary_updated_at ?? row.summaryUpdatedAt) : null,
@@ -167,7 +167,6 @@ function stateRpcParameters(state: PrismaUserState) {
     p_patience: state.relationship.patience,
     p_banter: state.relationship.banter,
     p_trust: state.relationship.trust,
-    p_preferred_style: state.relationship.preferredStyle ?? null,
     p_relationship_summary: state.relationship.relationshipSummary ?? null,
     p_recent_milestones: state.relationship.recentMilestones ?? [],
     p_interaction_count: state.relationship.interactionCount,
@@ -206,6 +205,7 @@ async function withLocal<T>(operation: (db: Database) => Promise<T> | T, save = 
 async function readLocal(): Promise<Database> {
   try {
     const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Database>;
+    const legacyWeekly = (parsed as Partial<Database> & { weeklySummaries?: Array<{ userId: string; weekStart: string; weekEnd: string; summary: string; updatedAt?: string }> }).weeklySummaries ?? [];
     return {
       settings: parsed.settings ?? {},
       relationships: parsed.relationships ?? {},
@@ -214,12 +214,12 @@ async function readLocal(): Promise<Database> {
       usage: parsed.usage ?? [],
       spontaneous: parsed.spontaneous ?? [],
       profiles: parsed.profiles ?? {}, memories: parsed.memories ?? [],
-      emotionalStates: parsed.emotionalStates ?? {}, prismaMessages: parsed.prismaMessages ?? [], dailySummaries: parsed.dailySummaries ?? [],
+      emotionalStates: parsed.emotionalStates ?? {}, prismaMessages: parsed.prismaMessages ?? [], dailySummaries: parsed.dailySummaries ?? [], periodSummaries: parsed.periodSummaries ?? legacyWeekly.map((item) => ({ userId: item.userId, periodType: "weekly", periodStart: item.weekStart, periodEnd: item.weekEnd, summary: item.summary, updatedAt: item.updatedAt })),
       selfLearnings: parsed.selfLearnings ?? [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [], profiles: {}, memories: [], emotionalStates: {}, prismaMessages: [], dailySummaries: [], selfLearnings: [] };
+      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [], profiles: {}, memories: [], emotionalStates: {}, prismaMessages: [], dailySummaries: [], periodSummaries: [], selfLearnings: [] };
     }
     throw error;
   }
@@ -227,11 +227,29 @@ async function readLocal(): Promise<Database> {
 
 export async function getPrismaProfile(userId: string): Promise<PrismaProfile | null> {
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_user_profiles").select("*").eq("user_id", userId).maybeSingle();
-    if (error) { remoteFailure("ler perfil aprendido", error.message); return null; }
-    return data ? { userId, displayName: data.display_name, profileSummary: data.profile_summary, communicationStyle: data.communication_style, interests: data.interests ?? [], knownPreferences: data.known_preferences ?? [] } : null;
+    const [profileResult, memoriesResult] = await Promise.all([
+      supabase.from("prisma_user_profiles").select("display_name,profile_summary,communication_style").eq("user_id", userId).maybeSingle(),
+      supabase.from("prisma_memories").select("memory_type,content").eq("user_id", userId).eq("status", "active").or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).in("memory_type", ["interest", "preference", "communication"]),
+    ]);
+    if (profileResult.error || memoriesResult.error) { remoteFailure("ler perfil aprendido", profileResult.error?.message ?? memoriesResult.error?.message); return null; }
+    if (!profileResult.data) return null;
+    const facets = profileFacetsFromMemories((memoriesResult.data ?? []).map((row) => ({ userId, memoryType: row.memory_type, content: row.content, importance: 50, confidence: 60 })));
+    return { userId, displayName: profileResult.data.display_name, profileSummary: profileResult.data.profile_summary, communicationStyle: profileResult.data.communication_style, ...facets };
   }
-  return withLocal(db => db.profiles?.[userId] ?? null);
+  return withLocal(db => {
+    const profile = db.profiles?.[userId];
+    if (!profile) return null;
+    return { ...profile, ...profileFacetsFromMemories((db.memories ?? []).filter((item) => item.userId === userId && (item.status ?? "active") === "active" && (!item.validUntil || Date.parse(item.validUntil) > Date.now()))) };
+  });
+}
+
+export function profileFacetsFromMemories(memories: PrismaMemory[]): Pick<PrismaProfile, "interests" | "knownPreferences"> {
+  const uniqueText = (values: string[]) => [...new Map(values.map((value) => [value.toLocaleLowerCase("pt-BR"), value])).values()].slice(0, 12);
+  const interestText = (content: string) => content.replace(/^(?:Gosta de|Acompanha ou joga)\s+/i, "").replace(/\.$/, "");
+  return {
+    interests: uniqueText(memories.filter((item) => item.memoryType === "interest" && !/^Não gosta/i.test(item.content)).map((item) => interestText(item.content))),
+    knownPreferences: uniqueText(memories.filter((item) => item.memoryType === "preference" || item.memoryType === "communication").map((item) => item.content.replace(/\.$/, ""))),
+  };
 }
 
 export async function getRelevantPrismaMemories(userId: string, limit = 8, currentMessage = ""): Promise<PrismaMemory[]> {
@@ -244,11 +262,11 @@ export async function getRelevantPrismaMemories(userId: string, limit = 8, curre
     return memory.importance * 2 + memory.confidence + lexical + repetition + recency;
   };
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_memories").select("*").eq("user_id", userId).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(Math.max(30, limit * 4));
+    const { data, error } = await supabase.from("prisma_memories").select("*").eq("user_id", userId).eq("status", "active").or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).order("importance", { ascending: false }).order("updated_at", { ascending: false }).limit(Math.max(30, limit * 4));
     if (error) { remoteFailure("ler memórias", error.message); return []; }
-    return (data ?? []).map(row => ({ id: row.id, userId, memoryType: row.memory_type, content: row.content, importance: score(row.importance, 50), confidence: score(row.confidence, 60), sourceMessageId: row.source_message_id, memoryKey: row.memory_key, occurrenceCount: Number(row.occurrence_count) || 1, lastSeenAt: row.last_seen_at })).sort((a, b) => rank(b) - rank(a)).slice(0, limit);
+    return (data ?? []).map(row => ({ id: row.id, userId, memoryType: row.memory_type, content: row.content, importance: score(row.importance, 50), confidence: score(row.confidence, 60), sourceMessageId: row.source_message_id, memoryKey: row.memory_key, occurrenceCount: Number(row.occurrence_count) || 1, lastSeenAt: row.last_seen_at, status: row.status, supersededBy: row.superseded_by, validUntil: row.valid_until, lastConfirmedAt: row.last_confirmed_at })).sort((a, b) => rank(b) - rank(a)).slice(0, limit);
   }
-  return withLocal(db => (db.memories ?? []).filter(memory => memory.userId === userId).sort((a,b) => rank(b) - rank(a)).slice(0, limit));
+  return withLocal(db => (db.memories ?? []).filter(memory => memory.userId === userId && (memory.status ?? "active") === "active" && (!memory.validUntil || Date.parse(memory.validUntil) > Date.now())).sort((a,b) => rank(b) - rank(a)).slice(0, limit));
 }
 
 function safeMemoryText(value: unknown, maximum = 300): string | null {
@@ -258,10 +276,20 @@ function safeMemoryText(value: unknown, maximum = 300): string | null {
   return text;
 }
 
+/** Validade padrão renovada sempre que uma informação recebe nova evidência. */
+export function defaultMemoryValidUntil(memoryType: string, now = new Date()): string {
+  const days = memoryType === "event" ? 30
+    : memoryType === "project" ? 180
+      : memoryType === "social" || memoryType === "relationship" ? 365
+        : memoryType === "preference" || memoryType === "interest" || memoryType === "communication" || memoryType === "inside_joke" ? 730
+          : 365;
+  return new Date(now.getTime() + days * 24 * 60 * 60_000).toISOString();
+}
+
 export async function upsertPrismaProfile(profile: PrismaProfile & { guildId?: string | null }): Promise<void> {
   const now = new Date().toISOString();
   if (supabase) {
-    const { error } = await supabase.from("prisma_user_profiles").upsert({ user_id: profile.userId, guild_id: profile.guildId ?? null, display_name: profile.displayName, profile_summary: safeMemoryText(profile.profileSummary), communication_style: safeMemoryText(profile.communicationStyle, 160), interests: profile.interests.slice(0, 12), known_preferences: profile.knownPreferences.slice(0, 12), last_interaction_at: now, updated_at: now }, { onConflict: "user_id" });
+    const { error } = await supabase.from("prisma_user_profiles").upsert({ user_id: profile.userId, guild_id: profile.guildId ?? null, display_name: profile.displayName, profile_summary: safeMemoryText(profile.profileSummary), communication_style: safeMemoryText(profile.communicationStyle, 160), last_interaction_at: now, updated_at: now }, { onConflict: "user_id" });
     if (error) remoteFailure("salvar perfil aprendido", error.message);
     return;
   }
@@ -271,15 +299,28 @@ export async function upsertPrismaProfile(profile: PrismaProfile & { guildId?: s
 export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   const content = safeMemoryText(memory.content);
   if (!content) return;
-  const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60) };
+  const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60), validUntil: memory.validUntil ?? defaultMemoryValidUntil(memory.memoryType) };
   if (supabase) {
-    const lookup = supabase.from("prisma_memories").select("id,importance,confidence,occurrence_count").eq("user_id", candidate.userId);
+    const lookup = supabase.from("prisma_memories").select("id,content,importance,confidence,occurrence_count,source_message_id,valid_until").eq("user_id", candidate.userId).eq("status", "active");
     const { data: existing, error: readError } = candidate.memoryKey
       ? await lookup.eq("memory_key", candidate.memoryKey).maybeSingle()
       : await lookup.ilike("content", candidate.content).maybeSingle();
     if (readError) { remoteFailure("procurar memória existente", readError.message); return; }
     const now = new Date().toISOString();
-    const row = { memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.min(100, Math.max(candidate.confidence, score(existing?.confidence, 0)) + (existing ? 5 : 0)), occurrence_count: (Number(existing?.occurrence_count) || 0) + 1, last_seen_at: now, source_message_id: candidate.sourceMessageId ?? null, updated_at: now };
+    if (existing && existing.content.toLocaleLowerCase("pt-BR") !== candidate.content.toLocaleLowerCase("pt-BR")) {
+      const { error: archiveError } = await supabase.from("prisma_memories").update({ status: "superseded", valid_until: now, updated_at: now }).eq("id", existing.id).eq("user_id", candidate.userId).eq("status", "active");
+      if (archiveError) { remoteFailure("arquivar memória substituída", archiveError.message); return; }
+      const { data: inserted, error: insertError } = await supabase.from("prisma_memories").insert({ user_id: candidate.userId, memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: candidate.importance, confidence: candidate.confidence, occurrence_count: 1, last_seen_at: now, last_confirmed_at: now, valid_until: candidate.validUntil ?? null, status: "active", source_message_id: candidate.sourceMessageId ?? null, updated_at: now }).select("id").single();
+      if (insertError) {
+        await supabase.from("prisma_memories").update({ status: "active", valid_until: null, updated_at: now }).eq("id", existing.id).eq("user_id", candidate.userId);
+        remoteFailure("salvar nova versão da memória", insertError.message); return;
+      }
+      const { error: linkError } = await supabase.from("prisma_memories").update({ superseded_by: inserted.id }).eq("id", existing.id).eq("user_id", candidate.userId);
+      if (linkError) remoteFailure("vincular histórico da memória", linkError.message);
+      return;
+    }
+    const repeatedEvidence = Boolean(existing) && (!candidate.sourceMessageId || existing?.source_message_id !== candidate.sourceMessageId);
+    const row = { memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.min(100, Math.max(candidate.confidence, score(existing?.confidence, 0)) + (repeatedEvidence ? 5 : 0)), occurrence_count: (Number(existing?.occurrence_count) || 0) + (repeatedEvidence || !existing ? 1 : 0), last_seen_at: now, last_confirmed_at: repeatedEvidence || !existing ? now : undefined, valid_until: candidate.validUntil ?? existing?.valid_until ?? null, status: "active", source_message_id: candidate.sourceMessageId ?? existing?.source_message_id ?? null, updated_at: now };
     const { error } = existing
       ? await supabase.from("prisma_memories").update(row).eq("id", existing.id).eq("user_id", candidate.userId)
       : await supabase.from("prisma_memories").insert({ user_id: candidate.userId, ...row });
@@ -288,9 +329,19 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   }
   await withLocal(db => {
     const memories = db.memories ??= [];
-    const current = memories.find(item => item.userId === candidate.userId && (candidate.memoryKey ? item.memoryKey === candidate.memoryKey : item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR")));
-    if (current) Object.assign(current, candidate, { importance: Math.max(current.importance, candidate.importance), confidence: Math.min(100, Math.max(current.confidence, candidate.confidence) + 5), occurrenceCount: (current.occurrenceCount ?? 1) + 1, lastSeenAt: new Date().toISOString() });
-    else memories.push({ ...candidate, occurrenceCount: 1, lastSeenAt: new Date().toISOString() });
+    const current = memories.find(item => item.userId === candidate.userId && (item.status ?? "active") === "active" && (candidate.memoryKey ? item.memoryKey === candidate.memoryKey : item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR")));
+    if (current) {
+      if (current.content.toLocaleLowerCase("pt-BR") !== candidate.content.toLocaleLowerCase("pt-BR")) {
+        const now = new Date().toISOString();
+        const nextId = Math.max(0, ...memories.map(item => item.id ?? 0)) + 1;
+        Object.assign(current, { status: "superseded", validUntil: now, supersededBy: nextId, lastSeenAt: now });
+        memories.push({ ...candidate, id: nextId, status: "active", occurrenceCount: 1, lastSeenAt: now, lastConfirmedAt: now });
+        return;
+      }
+      const repeatedEvidence = !candidate.sourceMessageId || current.sourceMessageId !== candidate.sourceMessageId;
+      Object.assign(current, candidate, { status: "active", importance: Math.max(current.importance, candidate.importance), confidence: Math.min(100, Math.max(current.confidence, candidate.confidence) + (repeatedEvidence ? 5 : 0)), occurrenceCount: (current.occurrenceCount ?? 1) + (repeatedEvidence ? 1 : 0), lastSeenAt: new Date().toISOString(), lastConfirmedAt: repeatedEvidence ? new Date().toISOString() : current.lastConfirmedAt });
+    }
+    else memories.push({ ...candidate, id: Math.max(0, ...memories.map(item => item.id ?? 0)) + 1, status: "active", occurrenceCount: 1, lastSeenAt: new Date().toISOString(), lastConfirmedAt: new Date().toISOString() });
   }, true);
 }
 
@@ -321,7 +372,7 @@ export async function deletePrismaUserData(userId: string, scope: "history" | "m
   }
   await withLocal(db => {
     if (scope === "history" || scope === "all") { db.history = db.history.filter(item => item.discordId !== userId); db.prismaMessages = (db.prismaMessages ?? []).filter(item => item.userId !== userId); }
-    if (scope === "memories" || scope === "all") { if (db.profiles) delete db.profiles[userId]; db.memories = (db.memories ?? []).filter(item => item.userId !== userId); db.dailySummaries = (db.dailySummaries ?? []).filter(item => item.userId !== userId); }
+    if (scope === "memories" || scope === "all") { if (db.profiles) delete db.profiles[userId]; db.memories = (db.memories ?? []).filter(item => item.userId !== userId); db.dailySummaries = (db.dailySummaries ?? []).filter(item => item.userId !== userId); db.periodSummaries = (db.periodSummaries ?? []).filter(item => item.userId !== userId); }
     if (scope === "relationship" || scope === "all") { delete db.relationships[userId]; delete db.temperaments[userId]; if (db.emotionalStates) delete db.emotionalStates[userId]; }
   }, true);
 }
@@ -388,9 +439,12 @@ export async function saveDailySummaryAndDeleteMessages(batch: PrismaDailyBatch,
   const messageIds = batch.messages.map((message) => message.messageId);
   const now = new Date().toISOString();
   if (supabase) {
+    const { error: rpcError } = await supabase.rpc("save_prisma_daily_summary", { p_user_id: batch.userId, p_summary_date: batch.summaryDate, p_summary: safe, p_message_ids: messageIds });
+    if (!rpcError) return true;
+    if (!/save_prisma_daily_summary|schema cache|function .*does not exist/i.test(rpcError.message)) { remoteFailure("consolidar resumo diário", rpcError.message); return false; }
     const { error: summaryError } = await supabase.from("prisma_daily_summaries").upsert({ user_id: batch.userId, summary_date: batch.summaryDate, summary: safe, updated_at: now }, { onConflict: "user_id,summary_date" });
     if (summaryError) { remoteFailure("salvar resumo diário", summaryError.message); return false; }
-    const { error: deleteError } = await supabase.from("prisma_messages").delete().in("message_id", messageIds);
+    const { error: deleteError } = await supabase.from("prisma_messages").delete().eq("user_id", batch.userId).in("message_id", messageIds);
     if (deleteError) { remoteFailure("apagar mensagens já resumidas", deleteError.message); return false; }
     return true;
   }
@@ -407,11 +461,20 @@ export async function saveDailySummaryAndDeleteMessages(batch: PrismaDailyBatch,
 
 export async function recentDailySummaries(userId: string, limit = 7): Promise<PrismaDailySummary[]> {
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_daily_summaries").select("user_id,summary_date,summary,updated_at").eq("user_id", userId).order("summary_date", { ascending: false }).limit(limit);
-    if (error) { remoteFailure("ler resumos diários", error.message); return []; }
-    return (data ?? []).map((row) => ({ userId: row.user_id, summaryDate: row.summary_date, summary: row.summary, updatedAt: row.updated_at }));
+    const [dailyResult, weeklyResult] = await Promise.all([
+      supabase.from("prisma_daily_summaries").select("user_id,summary_date,summary,updated_at").eq("user_id", userId).order("summary_date", { ascending: false }).limit(limit),
+      supabase.from("prisma_period_summaries").select("user_id,period_type,period_end,summary,updated_at").eq("user_id", userId).order("period_end", { ascending: false }).limit(limit),
+    ]);
+    if (dailyResult.error || weeklyResult.error) { remoteFailure("ler resumos consolidados", dailyResult.error?.message ?? weeklyResult.error?.message); return []; }
+    return [
+      ...(dailyResult.data ?? []).map((row) => ({ userId: row.user_id, summaryDate: row.summary_date, summary: row.summary, updatedAt: row.updated_at })),
+      ...(weeklyResult.data ?? []).map((row) => ({ userId: row.user_id, summaryDate: row.period_end, summary: `Resumo ${row.period_type === "monthly" ? "mensal" : "semanal"}: ${row.summary}`, updatedAt: row.updated_at })),
+    ].sort((a, b) => b.summaryDate.localeCompare(a.summaryDate)).slice(0, limit);
   }
-  return withLocal((db) => (db.dailySummaries ?? []).filter((item) => item.userId === userId).sort((a, b) => b.summaryDate.localeCompare(a.summaryDate)).slice(0, limit));
+  return withLocal((db) => [
+    ...(db.dailySummaries ?? []).filter((item) => item.userId === userId),
+    ...(db.periodSummaries ?? []).filter((item) => item.userId === userId).map((item) => ({ userId: item.userId, summaryDate: item.periodEnd, summary: `Resumo ${item.periodType === "monthly" ? "mensal" : "semanal"}: ${item.summary}`, updatedAt: item.updatedAt })),
+  ].sort((a, b) => b.summaryDate.localeCompare(a.summaryDate)).slice(0, limit));
 }
 
 export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">): Promise<void> {
@@ -471,7 +534,7 @@ async function readRemotePrismaState(id: string, now: Date): Promise<{ state: Pr
   if (!supabase) return null;
   const [relationshipResult, temperamentResult] = await Promise.all([
     supabase.from("prisma_relationships").select("*").eq("discord_id", id).maybeSingle(),
-    supabase.from("prisma_temperament").select("*").eq("discord_id", id).maybeSingle(),
+    supabase.from("prisma_emotional_states").select("*").eq("user_id", id).maybeSingle(),
   ]);
   if (relationshipResult.error || temperamentResult.error) {
     remoteFailure("ler estado relacional", relationshipResult.error?.message ?? temperamentResult.error?.message);
@@ -510,7 +573,6 @@ async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> 
     patience: params.p_patience,
     banter: params.p_banter,
     trust: params.p_trust,
-    preferred_style: params.p_preferred_style,
     relationship_summary: params.p_relationship_summary,
     recent_milestones: params.p_recent_milestones,
     interaction_count: params.p_interaction_count,
@@ -523,15 +585,15 @@ async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> 
     const { recent_milestones: _ignored, ...legacyRelationship } = relationship;
     relationshipResult = await supabase.from("prisma_relationships").upsert(legacyRelationship, { onConflict: "discord_id" });
   }
-  const temperamentResult = await supabase.from("prisma_temperament").upsert({
-    discord_id: params.p_discord_id,
+  const temperamentResult = await supabase.from("prisma_emotional_states").upsert({
+    user_id: params.p_discord_id,
     mood: params.p_mood,
     energy: params.p_energy,
     sarcasm: params.p_sarcasm,
     affection: params.p_affection,
     last_interaction_at: params.p_last_interaction_at,
     updated_at: params.p_temperament_updated_at,
-  }, { onConflict: "discord_id" });
+  }, { onConflict: "user_id" });
   if (relationshipResult.error || temperamentResult.error) {
     remoteFailure("fallback direto do estado relacional", relationshipResult.error?.message ?? temperamentResult.error?.message);
     return false;
@@ -554,18 +616,18 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("ai_usage").select("id").limit(1),
     supabase.from("ai_events").select("id").limit(1),
     supabase.from("prisma_relationships").select("discord_id").limit(1),
-    supabase.from("prisma_temperament").select("discord_id").limit(1),
     supabase.from("prisma_user_profiles").select("user_id").limit(1),
     supabase.from("prisma_memories").select("id").limit(1),
     supabase.from("prisma_messages").select("id").limit(1),
     supabase.from("prisma_emotional_states").select("user_id").limit(1),
     supabase.from("prisma_daily_summaries").select("id").limit(1),
+    supabase.from("prisma_period_summaries").select("id").limit(1),
     supabase.from("prisma_operator_rules").select("id").limit(1),
     supabase.from("gallery_posts").select("message_id").limit(1),
     supabase.from("lfg_sessions").select("id").limit(1),
     supabase.from("prisma_self_learnings").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
+  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_period_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
@@ -704,12 +766,15 @@ export async function applyPrismaStateUpdate(id: string, baseState: PrismaUserSt
     if (supabase) {
       const remote = await readRemotePrismaState(id, now);
       if (!remote || (baseState.revision ?? 0) !== (stateRevisions.get(id) ?? 0)) return false;
-      return writeRemotePrismaState(applyValidatedStateUpdate(remote.state, update, now));
+      const saved = await writeRemotePrismaState(applyValidatedStateUpdate(remote.state, update, now));
+      if (saved && update.preferredStyleCandidate) await upsertPrismaMemory({ userId: id, memoryType: "communication", memoryKey: "communication-style:inferred", content: `Prefere respostas ${update.preferredStyleCandidate}.`, importance: 62, confidence: 65 });
+      return saved;
     }
     const current = await localPrismaState(id, now, true);
     if ((baseState.revision ?? 0) !== (stateRevisions.get(id) ?? 0)) return false;
     const next = applyValidatedStateUpdate(current, update, now);
     await withLocal((db) => { db.relationships[id] = next.relationship; db.temperaments[id] = next.temperament; }, true);
+    if (update.preferredStyleCandidate) await upsertPrismaMemory({ userId: id, memoryType: "communication", memoryKey: "communication-style:inferred", content: `Prefere respostas ${update.preferredStyleCandidate}.`, importance: 62, confidence: 65 });
     return true;
   });
 }
@@ -863,21 +928,77 @@ export async function addSpontaneous(id: string): Promise<void> {
 export async function cleanupExpired(): Promise<void> {
   const historyCutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString();
   const usageCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString();
-  const summaryCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const dailyCutoff = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const weeklyCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const monthlyCutoff = new Date(Date.now() - 365 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const forgottenCutoff = new Date(Date.now() - 180 * 24 * 60 * 60_000).toISOString();
+  const supersededCutoff = new Date(Date.now() - 365 * 24 * 60 * 60_000).toISOString();
   if (supabase) {
-    const results = await Promise.all([
-      supabase.from("conversation_history").delete().lt("created_at", historyCutoff),
-      supabase.from("ai_events").delete().lt("created_at", historyCutoff),
-      supabase.from("ai_usage").delete().lt("created_at", usageCutoff),
-      supabase.from("prisma_daily_summaries").delete().lt("summary_date", summaryCutoff),
-    ]);
-    const error = results.find((result) => result.error)?.error;
-    if (error) remoteFailure("limpeza automática", error.message);
+    const { error: retentionError } = await supabase.rpc("enforce_prisma_retention", { p_now: new Date().toISOString() });
+    if (retentionError && !/enforce_prisma_retention|schema cache|function .*does not exist/i.test(retentionError.message)) remoteFailure("aplicar retenção", retentionError.message);
+    if (retentionError) {
+      const { error: consolidationError } = await supabase.rpc("consolidate_prisma_summaries", { p_daily_before: dailyCutoff, p_weekly_before: weeklyCutoff });
+      if (consolidationError) remoteFailure("consolidar resumos por período", consolidationError.message);
+      const results = await Promise.all([
+        supabase.from("conversation_history").delete().lt("created_at", historyCutoff),
+        supabase.from("ai_events").delete().lt("created_at", historyCutoff),
+        supabase.from("ai_usage").delete().lt("created_at", usageCutoff),
+        supabase.from("prisma_period_summaries").delete().lt("period_end", monthlyCutoff),
+        supabase.from("prisma_memories").update({ status: "forgotten", updated_at: new Date().toISOString() }).eq("status", "active").not("valid_until", "is", null).lte("valid_until", new Date().toISOString()),
+        supabase.from("prisma_memories").delete().eq("status", "forgotten").lt("updated_at", forgottenCutoff),
+        supabase.from("prisma_memories").delete().eq("status", "superseded").lt("updated_at", supersededCutoff),
+      ]);
+      const error = results.find((result) => result.error)?.error;
+      if (error) remoteFailure("limpeza automática", error.message);
+    }
   }
   await withLocal((db) => {
+    const oldDaily = (db.dailySummaries ?? []).filter((item) => item.summaryDate < dailyCutoff);
+    const periods = db.periodSummaries ??= [];
+    const groups = new Map<string, PrismaDailySummary[]>();
+    for (const item of oldDaily) {
+      const date = new Date(`${item.summaryDate}T00:00:00.000Z`);
+      const day = date.getUTCDay() || 7;
+      date.setUTCDate(date.getUTCDate() - day + 1);
+      const weekStart = date.toISOString().slice(0, 10);
+      const key = `${item.userId}:${weekStart}`;
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    for (const [key, items] of groups) {
+      const [userId, weekStart] = key.split(":");
+      const end = new Date(`${weekStart}T00:00:00.000Z`); end.setUTCDate(end.getUTCDate() + 6);
+      const summary = items.sort((a, b) => a.summaryDate.localeCompare(b.summaryDate)).map((item) => `${item.summaryDate}: ${item.summary}`).join("\n").slice(0, 4_000);
+      const periodEnd = end.toISOString().slice(0, 10);
+      const current = periods.find((item) => item.userId === userId && item.periodType === "weekly" && item.periodStart === weekStart);
+      if (current) Object.assign(current, { summary: `${current.summary}\n${summary}`.slice(0, 4_000), periodEnd, updatedAt: new Date().toISOString() });
+      else periods.push({ userId, periodType: "weekly", periodStart: weekStart, periodEnd, summary, updatedAt: new Date().toISOString() });
+    }
+    const oldWeekly = periods.filter((item) => item.periodType === "weekly" && item.periodEnd < weeklyCutoff);
+    const monthlyGroups = new Map<string, PrismaPeriodSummary[]>();
+    for (const item of oldWeekly) {
+      const monthStart = `${item.periodStart.slice(0, 7)}-01`;
+      const key = `${item.userId}:${monthStart}`;
+      monthlyGroups.set(key, [...(monthlyGroups.get(key) ?? []), item]);
+    }
+    for (const [key, items] of monthlyGroups) {
+      const [userId, periodStart] = key.split(":");
+      const end = new Date(`${periodStart}T00:00:00.000Z`); end.setUTCMonth(end.getUTCMonth() + 1); end.setUTCDate(0);
+      const periodEnd = end.toISOString().slice(0, 10);
+      const summary = items.sort((a, b) => a.periodStart.localeCompare(b.periodStart)).map((item) => `${item.periodStart}: ${item.summary}`).join("\n").slice(0, 8_000);
+      const current = periods.find((item) => item.userId === userId && item.periodType === "monthly" && item.periodStart === periodStart);
+      if (current) Object.assign(current, { summary: `${current.summary}\n${summary}`.slice(0, 8_000), periodEnd, updatedAt: new Date().toISOString() });
+      else periods.push({ userId, periodType: "monthly", periodStart, periodEnd, summary, updatedAt: new Date().toISOString() });
+    }
     db.history = db.history.filter((item) => item.createdAt >= historyCutoff);
     db.spontaneous = db.spontaneous.filter((item) => item.createdAt >= historyCutoff);
     db.usage = db.usage.filter((item) => item.createdAt >= usageCutoff);
-    db.dailySummaries = (db.dailySummaries ?? []).filter((item) => item.summaryDate >= summaryCutoff);
+    db.dailySummaries = (db.dailySummaries ?? []).filter((item) => item.summaryDate >= dailyCutoff);
+    db.periodSummaries = periods.filter((item) => item.periodType === "monthly" ? item.periodEnd >= monthlyCutoff : item.periodEnd >= weeklyCutoff);
+    for (const memory of db.memories ?? []) if ((memory.status ?? "active") === "active" && memory.validUntil && Date.parse(memory.validUntil) <= Date.now()) { memory.status = "forgotten"; memory.lastSeenAt = new Date().toISOString(); }
+    db.memories = (db.memories ?? []).filter((memory) => {
+      if (memory.status === "forgotten") { const seen = Date.parse(memory.lastSeenAt ?? memory.lastConfirmedAt ?? ""); return !Number.isFinite(seen) || seen >= Date.parse(forgottenCutoff); }
+      if (memory.status === "superseded") { const seen = Date.parse(memory.validUntil ?? memory.lastSeenAt ?? ""); return !Number.isFinite(seen) || seen >= Date.parse(supersededCutoff); }
+      return true;
+    });
   }, true);
 }

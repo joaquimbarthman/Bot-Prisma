@@ -59,7 +59,6 @@ create table if not exists public.prisma_relationships (
   patience smallint not null default 60 check (patience between 0 and 100),
   banter smallint not null default 30 check (banter between 0 and 100),
   trust smallint not null default 0 check (trust between 0 and 100),
-  preferred_style text,
   relationship_summary text check (char_length(relationship_summary) <= 300),
   recent_milestones jsonb not null default '[]'::jsonb check (jsonb_typeof(recent_milestones) = 'array' and jsonb_array_length(recent_milestones) <= 5),
   interaction_count integer not null default 0 check (interaction_count >= 0),
@@ -88,7 +87,6 @@ alter table public.prisma_relationships
   add column if not exists patience smallint not null default 60,
   add column if not exists banter smallint not null default 30,
   add column if not exists trust smallint not null default 0,
-  add column if not exists preferred_style text,
   add column if not exists relationship_summary text,
   add column if not exists recent_milestones jsonb not null default '[]'::jsonb,
   add column if not exists interaction_count integer not null default 0,
@@ -261,8 +259,6 @@ create table if not exists public.prisma_user_profiles (
   display_name text,
   profile_summary text,
   communication_style text,
-  interests jsonb not null default '[]'::jsonb,
-  known_preferences jsonb not null default '[]'::jsonb,
   first_interaction_at timestamptz not null default now(),
   last_interaction_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -280,20 +276,70 @@ create table if not exists public.prisma_memories (
   source_message_id text,
   occurrence_count integer not null default 1 check (occurrence_count >= 1),
   last_seen_at timestamptz not null default now(),
+  status text not null default 'active' check (status in ('active','superseded','forgotten')),
+  superseded_by bigint references public.prisma_memories(id) on delete set null,
+  valid_until timestamptz,
+  last_confirmed_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 alter table public.prisma_memories
   add column if not exists memory_key text,
   add column if not exists occurrence_count integer not null default 1,
-  add column if not exists last_seen_at timestamptz not null default now();
+  add column if not exists last_seen_at timestamptz not null default now(),
+  add column if not exists status text not null default 'active',
+  add column if not exists superseded_by bigint references public.prisma_memories(id) on delete set null,
+  add column if not exists valid_until timestamptz,
+  add column if not exists last_confirmed_at timestamptz not null default now();
 alter table public.prisma_memories drop constraint if exists prisma_memories_occurrence_count_check;
 alter table public.prisma_memories
   add constraint prisma_memories_occurrence_count_check check (occurrence_count >= 1);
+alter table public.prisma_memories drop constraint if exists prisma_memories_status_check;
+alter table public.prisma_memories
+  add constraint prisma_memories_status_check check (status in ('active','superseded','forgotten'));
 create index if not exists prisma_memories_user_idx on public.prisma_memories (user_id, updated_at desc);
 create index if not exists prisma_memories_user_type_idx on public.prisma_memories (user_id, memory_type);
-create unique index if not exists prisma_memories_user_content_uidx on public.prisma_memories (user_id, lower(content));
-create unique index if not exists prisma_memories_user_key_uidx on public.prisma_memories (user_id, memory_key) where memory_key is not null;
+drop index if exists public.prisma_memories_user_content_uidx;
+drop index if exists public.prisma_memories_user_key_uidx;
+create unique index if not exists prisma_memories_active_user_content_uidx on public.prisma_memories (user_id, lower(content)) where status = 'active';
+create unique index if not exists prisma_memories_active_user_key_uidx on public.prisma_memories (user_id, memory_key) where memory_key is not null and status = 'active';
+create index if not exists prisma_memories_user_status_idx on public.prisma_memories (user_id, status, updated_at desc);
+create index if not exists prisma_memories_active_valid_until_idx on public.prisma_memories (valid_until) where status = 'active' and valid_until is not null;
+create index if not exists prisma_memories_historical_retention_idx on public.prisma_memories (status, updated_at) where status in ('superseded','forgotten');
+
+create or replace function public.set_prisma_memory_valid_until()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $set_prisma_memory_valid_until$
+begin
+  if new.valid_until is null then
+    new.valid_until := now() + case
+      when new.memory_type = 'event' then interval '30 days'
+      when new.memory_type = 'project' then interval '180 days'
+      when new.memory_type in ('social', 'relationship') then interval '365 days'
+      when new.memory_type in ('preference', 'interest', 'communication', 'inside_joke') then interval '730 days'
+      else interval '365 days'
+    end;
+  end if;
+  return new;
+end
+$set_prisma_memory_valid_until$;
+drop trigger if exists prisma_memories_default_validity on public.prisma_memories;
+create trigger prisma_memories_default_validity
+before insert or update of memory_type on public.prisma_memories
+for each row execute function public.set_prisma_memory_valid_until();
+update public.prisma_memories
+set valid_until = now() + case
+  when memory_type = 'event' then interval '30 days'
+  when memory_type = 'project' then interval '180 days'
+  when memory_type in ('social', 'relationship') then interval '365 days'
+  when memory_type in ('preference', 'interest', 'communication', 'inside_joke') then interval '730 days'
+  else interval '365 days'
+end
+where status = 'active' and valid_until is null;
+revoke all on function public.set_prisma_memory_valid_until() from public, anon, authenticated;
+grant execute on function public.set_prisma_memory_valid_until() to service_role;
 
 create table if not exists public.prisma_messages (
   id bigint generated by default as identity primary key,
@@ -308,10 +354,34 @@ create table if not exists public.prisma_messages (
 );
 create index if not exists prisma_messages_user_created_idx on public.prisma_messages (user_id, created_at desc);
 create index if not exists prisma_messages_channel_created_idx on public.prisma_messages (channel_id, created_at desc);
+create index if not exists prisma_messages_created_idx on public.prisma_messages (created_at);
 
 alter table public.prisma_user_profiles
   add column if not exists guild_id text,
   add column if not exists created_at timestamptz not null default now();
+do $migrate_profile_arrays$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'prisma_user_profiles' and column_name = 'interests') then
+    execute $sql$
+      insert into public.prisma_memories (user_id, memory_key, memory_type, content, importance, confidence)
+      select p.user_id, 'legacy-interest:' || md5(i.value), 'interest', left('Gosta de ' || i.value || '.', 300), 50, 60
+      from public.prisma_user_profiles p cross join lateral jsonb_array_elements_text(p.interests) as i(value)
+      where char_length(trim(i.value)) between 3 and 280 on conflict do nothing
+    $sql$;
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'prisma_user_profiles' and column_name = 'known_preferences') then
+    execute $sql$
+      insert into public.prisma_memories (user_id, memory_key, memory_type, content, importance, confidence)
+      select p.user_id, 'legacy-preference:' || md5(pref.value), 'preference', left(pref.value, 300), 50, 60
+      from public.prisma_user_profiles p cross join lateral jsonb_array_elements_text(p.known_preferences) as pref(value)
+      where char_length(trim(pref.value)) between 3 and 300 on conflict do nothing
+    $sql$;
+  end if;
+end
+$migrate_profile_arrays$;
+alter table public.prisma_user_profiles
+  drop column if exists interests,
+  drop column if exists known_preferences;
 
 create table if not exists public.prisma_daily_summaries (
   id bigint generated by default as identity primary key,
@@ -324,8 +394,24 @@ create table if not exists public.prisma_daily_summaries (
 );
 create index if not exists prisma_daily_summaries_user_date_idx on public.prisma_daily_summaries (user_id, summary_date desc);
 
+create table if not exists public.prisma_period_summaries (
+  id bigint generated by default as identity primary key,
+  user_id text not null,
+  period_type text not null check (period_type in ('weekly','monthly')),
+  period_start date not null,
+  period_end date not null,
+  summary text not null check (char_length(summary) between 3 and 8000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, period_type, period_start),
+  check (period_end >= period_start)
+);
+create index if not exists prisma_period_summaries_user_end_idx on public.prisma_period_summaries (user_id, period_end desc);
+create index if not exists prisma_period_summaries_type_end_idx on public.prisma_period_summaries (period_type, period_end);
+
 create table if not exists public.prisma_emotional_states (
   user_id text primary key,
+  mood text not null default 'neutral' check (mood in ('neutral', 'playful', 'warm', 'calm', 'serious', 'energetic', 'annoyed')),
   happiness smallint not null default 50 check (happiness between 0 and 100),
   sadness smallint not null default 0 check (sadness between 0 and 100),
   anger smallint not null default 0 check (anger between 0 and 100),
@@ -336,8 +422,20 @@ create table if not exists public.prisma_emotional_states (
   boredom smallint not null default 0 check (boredom between 0 and 100),
   confidence smallint not null default 50 check (confidence between 0 and 100),
   energy smallint not null default 50 check (energy between 0 and 100),
+  sarcasm smallint not null default 35 check (sarcasm between 0 and 100),
+  last_interaction_at timestamptz,
   updated_at timestamptz not null default now()
 );
+alter table public.prisma_emotional_states
+  add column if not exists mood text not null default 'neutral',
+  add column if not exists sarcasm smallint not null default 35,
+  add column if not exists last_interaction_at timestamptz;
+alter table public.prisma_emotional_states drop constraint if exists prisma_emotional_states_mood_check;
+alter table public.prisma_emotional_states
+  add constraint prisma_emotional_states_mood_check check (mood in ('neutral', 'playful', 'warm', 'calm', 'serious', 'energetic', 'annoyed'));
+alter table public.prisma_emotional_states drop constraint if exists prisma_emotional_states_sarcasm_check;
+alter table public.prisma_emotional_states
+  add constraint prisma_emotional_states_sarcasm_check check (sarcasm between 0 and 100);
 
 -- Publicações da galeria. Curtidas e comentários ficam no próprio post porque
 -- o módulo atual persiste esses dados como arrays JSON.
@@ -418,6 +516,7 @@ alter table public.prisma_user_profiles enable row level security;
 alter table public.prisma_memories enable row level security;
 alter table public.prisma_messages enable row level security;
 alter table public.prisma_daily_summaries enable row level security;
+alter table public.prisma_period_summaries enable row level security;
 alter table public.prisma_emotional_states enable row level security;
 alter table public.gallery_posts enable row level security;
 alter table public.lfg_sessions enable row level security;
@@ -428,17 +527,18 @@ revoke all on table public.user_settings, public.prisma_operator_rules,
   public.prisma_relationships, public.prisma_temperament, public.prisma_self_learnings,
   public.conversation_history, public.ai_usage, public.ai_events,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
-  public.prisma_daily_summaries, public.prisma_emotional_states,
+  public.prisma_daily_summaries, public.prisma_period_summaries, public.prisma_emotional_states,
   public.gallery_posts, public.lfg_sessions from anon, authenticated;
 grant all on table public.user_settings, public.prisma_operator_rules,
   public.prisma_relationships, public.prisma_temperament, public.prisma_self_learnings,
   public.conversation_history, public.ai_usage, public.ai_events,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
-  public.prisma_daily_summaries, public.prisma_emotional_states,
+  public.prisma_daily_summaries, public.prisma_period_summaries, public.prisma_emotional_states,
   public.gallery_posts, public.lfg_sessions to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
 drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);
+drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);
 
 create or replace function public.apply_prisma_state(
   p_discord_id text,
@@ -447,7 +547,6 @@ create or replace function public.apply_prisma_state(
   p_patience smallint,
   p_banter smallint,
   p_trust smallint,
-  p_preferred_style text,
   p_relationship_summary text,
   p_recent_milestones jsonb,
   p_interaction_count integer,
@@ -481,7 +580,6 @@ begin
     patience,
     banter,
     trust,
-    preferred_style,
     relationship_summary,
     recent_milestones,
     interaction_count,
@@ -495,7 +593,6 @@ begin
     p_patience,
     p_banter,
     p_trust,
-    p_preferred_style,
     p_relationship_summary,
     p_recent_milestones,
     p_interaction_count,
@@ -509,15 +606,14 @@ begin
     patience = excluded.patience,
     banter = excluded.banter,
     trust = excluded.trust,
-    preferred_style = excluded.preferred_style,
     relationship_summary = excluded.relationship_summary,
     recent_milestones = excluded.recent_milestones,
     interaction_count = excluded.interaction_count,
     summary_updated_at = excluded.summary_updated_at,
     updated_at = excluded.updated_at;
 
-  insert into public.prisma_temperament (
-    discord_id,
+  insert into public.prisma_emotional_states (
+    user_id,
     mood,
     energy,
     sarcasm,
@@ -533,7 +629,7 @@ begin
     p_last_interaction_at,
     p_temperament_updated_at
   )
-  on conflict (discord_id) do update set
+  on conflict (user_id) do update set
     mood = excluded.mood,
     energy = excluded.energy,
     sarcasm = excluded.sarcasm,
@@ -561,17 +657,129 @@ begin
   end if;
 
   delete from public.prisma_relationships where discord_id = v_discord_id;
-  delete from public.prisma_temperament where discord_id = v_discord_id;
+  delete from public.prisma_emotional_states where user_id = v_discord_id;
   if coalesce(p_clear_history, false) then
     delete from public.conversation_history where discord_id = v_discord_id;
   end if;
 end
 $reset_prisma_state$;
 
-revoke all on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) from public, anon, authenticated;
+revoke all on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function public.reset_prisma_state(text, boolean) from public, anon, authenticated;
-grant execute on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) to service_role;
+grant execute on function public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, jsonb, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz) to service_role;
 grant execute on function public.reset_prisma_state(text, boolean) to service_role;
+
+create or replace function public.consolidate_prisma_summaries(p_daily_before date, p_weekly_before date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $consolidate_prisma_summaries$
+declare
+  v_weekly integer := 0;
+  v_monthly integer := 0;
+begin
+  if p_daily_before is null or p_weekly_before is null or p_weekly_before >= p_daily_before then
+    raise exception 'Cortes de consolidacao invalidos' using errcode = '22023';
+  end if;
+  insert into public.prisma_period_summaries (user_id, period_type, period_start, period_end, summary, updated_at)
+  select user_id, 'weekly',
+    date_trunc('week', summary_date::timestamp)::date as week_start,
+    (date_trunc('week', summary_date::timestamp)::date + 6) as week_end,
+    left(string_agg(to_char(summary_date, 'YYYY-MM-DD') || ': ' || summary, E'\n' order by summary_date), 4000),
+    now()
+  from public.prisma_daily_summaries
+  where summary_date < p_daily_before
+  group by user_id, date_trunc('week', summary_date::timestamp)::date
+  on conflict (user_id, period_type, period_start) do update set
+    summary = left(public.prisma_period_summaries.summary || E'\n' || excluded.summary, 4000),
+    period_end = excluded.period_end,
+    updated_at = excluded.updated_at;
+  get diagnostics v_weekly = row_count;
+  delete from public.prisma_daily_summaries where summary_date < p_daily_before;
+
+  insert into public.prisma_period_summaries (user_id, period_type, period_start, period_end, summary, updated_at)
+  select user_id, 'monthly', date_trunc('month', period_start::timestamp)::date,
+    (date_trunc('month', period_start::timestamp) + interval '1 month - 1 day')::date,
+    left(string_agg(to_char(period_start, 'YYYY-MM-DD') || ': ' || summary, E'\n' order by period_start), 8000), now()
+  from public.prisma_period_summaries
+  where period_type = 'weekly' and period_end < p_weekly_before
+  group by user_id, date_trunc('month', period_start::timestamp)::date
+  on conflict (user_id, period_type, period_start) do update set
+    summary = left(public.prisma_period_summaries.summary || E'\n' || excluded.summary, 8000),
+    period_end = excluded.period_end,
+    updated_at = excluded.updated_at;
+  get diagnostics v_monthly = row_count;
+  delete from public.prisma_period_summaries where period_type = 'weekly' and period_end < p_weekly_before;
+  return jsonb_build_object('weekly_upserted', v_weekly, 'monthly_upserted', v_monthly);
+end
+$consolidate_prisma_summaries$;
+revoke all on function public.consolidate_prisma_summaries(date, date) from public, anon, authenticated;
+grant execute on function public.consolidate_prisma_summaries(date, date) to service_role;
+
+create or replace function public.save_prisma_daily_summary(
+  p_user_id text,
+  p_summary_date date,
+  p_summary text,
+  p_message_ids text[]
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $save_prisma_daily_summary$
+declare
+  v_user_id text := nullif(pg_catalog.btrim(p_user_id), '');
+  v_deleted integer := 0;
+begin
+  if v_user_id is null or p_summary_date is null or p_summary is null or char_length(pg_catalog.btrim(p_summary)) not between 3 and 1200 or coalesce(array_length(p_message_ids, 1), 0) = 0 then
+    raise exception 'Parametros invalidos' using errcode = '22023';
+  end if;
+  insert into public.prisma_daily_summaries (user_id, summary_date, summary, updated_at)
+  values (v_user_id, p_summary_date, pg_catalog.btrim(p_summary), now())
+  on conflict (user_id, summary_date) do update set summary = excluded.summary, updated_at = excluded.updated_at;
+  delete from public.prisma_messages
+  where user_id = v_user_id and message_id = any(p_message_ids);
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end
+$save_prisma_daily_summary$;
+
+create or replace function public.enforce_prisma_retention(p_now timestamptz default now())
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $enforce_prisma_retention$
+declare
+  v_history integer := 0;
+  v_weekly integer := 0;
+  v_memories integer := 0;
+  v_historical integer := 0;
+begin
+  if p_now is null then raise exception 'p_now nao pode ser nulo' using errcode = '22023'; end if;
+  perform public.consolidate_prisma_summaries((p_now - interval '7 days')::date, (p_now - interval '90 days')::date);
+  delete from public.conversation_history where created_at < p_now - interval '48 hours';
+  get diagnostics v_history = row_count;
+  delete from public.ai_events where created_at < p_now - interval '48 hours';
+  delete from public.ai_usage where created_at < p_now - interval '90 days';
+  delete from public.prisma_period_summaries where period_type = 'monthly' and period_end < (p_now - interval '365 days')::date;
+  get diagnostics v_weekly = row_count;
+  update public.prisma_memories set status = 'forgotten', updated_at = p_now
+  where status = 'active' and valid_until is not null and valid_until <= p_now;
+  get diagnostics v_memories = row_count;
+  delete from public.prisma_memories
+  where (status = 'forgotten' and updated_at < p_now - interval '180 days')
+     or (status = 'superseded' and updated_at < p_now - interval '365 days');
+  get diagnostics v_historical = row_count;
+  return jsonb_build_object('history_deleted', v_history, 'periods_deleted', v_weekly, 'memories_forgotten', v_memories, 'historical_memories_deleted', v_historical);
+end
+$enforce_prisma_retention$;
+
+revoke all on function public.save_prisma_daily_summary(text, date, text, text[]) from public, anon, authenticated;
+revoke all on function public.enforce_prisma_retention(timestamptz) from public, anon, authenticated;
+grant execute on function public.save_prisma_daily_summary(text, date, text, text[]) to service_role;
+grant execute on function public.enforce_prisma_retention(timestamptz) to service_role;
 
 create or replace function public.delete_prisma_user_data(p_user_id text, p_scope text)
 returns void
@@ -586,12 +794,56 @@ begin
     raise exception 'Parâmetros inválidos' using errcode = '22023';
   end if;
   if p_scope in ('history', 'all') then delete from public.prisma_messages where user_id = v_user_id; delete from public.conversation_history where discord_id = v_user_id; end if;
-  if p_scope in ('memories', 'all') then delete from public.prisma_memories where user_id = v_user_id; delete from public.prisma_user_profiles where user_id = v_user_id; delete from public.prisma_daily_summaries where user_id = v_user_id; end if;
-  if p_scope in ('relationship', 'all') then delete from public.prisma_relationships where discord_id = v_user_id; delete from public.prisma_temperament where discord_id = v_user_id; delete from public.prisma_emotional_states where user_id = v_user_id; end if;
+  if p_scope in ('memories', 'all') then delete from public.prisma_memories where user_id = v_user_id; delete from public.prisma_user_profiles where user_id = v_user_id; delete from public.prisma_daily_summaries where user_id = v_user_id; delete from public.prisma_period_summaries where user_id = v_user_id; end if;
+  if p_scope in ('relationship', 'all') then delete from public.prisma_relationships where discord_id = v_user_id; delete from public.prisma_emotional_states where user_id = v_user_id; end if;
 end
 $delete_prisma_user_data$;
 revoke all on function public.delete_prisma_user_data(text, text) from public, anon, authenticated;
 grant execute on function public.delete_prisma_user_data(text, text) to service_role;
+
+-- preferred_style era uma segunda fonte para a mesma preferência. Em bancos
+-- existentes, converte o valor em memória antes de remover a coluna antiga.
+do $migrate_preferred_style$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'prisma_relationships' and column_name = 'preferred_style'
+  ) then
+    execute $sql$
+      insert into public.prisma_memories (
+        user_id, memory_key, memory_type, content, importance, confidence,
+        occurrence_count, last_seen_at, created_at, updated_at
+      )
+      select discord_id, 'communication-style:inferred', 'communication',
+        'Prefere respostas ' || trim(preferred_style) || '.', 62, 65, 1,
+        coalesce(updated_at, now()), coalesce(created_at, now()), coalesce(updated_at, now())
+      from public.prisma_relationships
+      where nullif(trim(preferred_style), '') is not null
+      on conflict (user_id, memory_key) where memory_key is not null and status = 'active' do update set
+        content = excluded.content,
+        importance = greatest(public.prisma_memories.importance, excluded.importance),
+        confidence = greatest(public.prisma_memories.confidence, excluded.confidence),
+        last_seen_at = greatest(public.prisma_memories.last_seen_at, excluded.last_seen_at),
+        updated_at = greatest(public.prisma_memories.updated_at, excluded.updated_at)
+    $sql$;
+  end if;
+end
+$migrate_preferred_style$;
+alter table public.prisma_relationships drop column if exists preferred_style;
+
+-- Migra instalações anteriores para uma única linha de estado por pessoa.
+insert into public.prisma_emotional_states (
+  user_id, mood, energy, sarcasm, affection, last_interaction_at, updated_at
+)
+select discord_id, mood, energy, sarcasm, affection, last_interaction_at, updated_at
+from public.prisma_temperament
+on conflict (user_id) do update set
+  mood = excluded.mood,
+  sarcasm = excluded.sarcasm,
+  last_interaction_at = excluded.last_interaction_at,
+  updated_at = greatest(public.prisma_emotional_states.updated_at, excluded.updated_at);
+
+drop table public.prisma_temperament;
 
 commit;
 

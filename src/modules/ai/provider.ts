@@ -367,7 +367,6 @@ export function buildInteractionEnvelope(
       patience: state.relationship.patience,
       banter: state.relationship.banter,
       trust: state.relationship.trust,
-      preferred_style: state.relationship.preferredStyle ?? null,
       summary: state.relationship.relationshipSummary ?? null,
       recent_milestones: state.relationship.recentMilestones ?? [],
       stage: relationshipStage(state.relationship).label,

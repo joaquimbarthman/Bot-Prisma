@@ -112,7 +112,6 @@ test("expõe memória narrativa somente dentro do envelope não confiável", () 
   const state = {
     relationship: {
       ...defaultRelationship("123"),
-      preferredStyle: "curto e descontraído",
       recentMilestones: ["Costuma celebrar conquistas em jogos."],
     },
     temperament: defaultTemperament("123"),
@@ -123,7 +122,7 @@ test("expõe memória narrativa somente dentro do envelope não confiável", () 
     "oi",
     {},
   ));
-  assert.equal(envelope.relationship.preferred_style, "curto e descontraído");
+  assert.equal("preferred_style" in envelope.relationship, false);
   assert.deepEqual(envelope.relationship.recent_milestones, ["Costuma celebrar conquistas em jogos."]);
   assert.equal(envelope.about_me, "Curto RPG.");
 });

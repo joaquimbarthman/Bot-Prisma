@@ -9,7 +9,6 @@ export interface PrismaRelationship {
   patience: number;
   banter: number;
   trust: number;
-  preferredStyle?: string | null;
   relationshipSummary?: string | null;
   recentMilestones?: string[];
   summaryUpdatedAt?: string | null;
@@ -155,7 +154,6 @@ export function defaultRelationship(discordId: string, now = new Date().toISOStr
     patience: 60,
     banter: 30,
     trust: 0,
-    preferredStyle: null,
     relationshipSummary: null,
     recentMilestones: [],
     summaryUpdatedAt: null,
@@ -230,10 +228,6 @@ export function applyValidatedStateUpdate(
     }
     if (update.recentMilestoneCandidates?.length) {
       relationship.recentMilestones = [...new Set([...(relationship.recentMilestones ?? []), ...update.recentMilestoneCandidates])].slice(-5);
-      memoryChanged = true;
-    }
-    if (update.preferredStyleCandidate) {
-      relationship.preferredStyle = update.preferredStyleCandidate;
       memoryChanged = true;
     }
     if (memoryChanged) {
