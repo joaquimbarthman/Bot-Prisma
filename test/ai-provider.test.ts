@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput, suppressUnrequestedSelfActivity } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, conversationTone, enforcePrismaIdentity, parseProviderOutput, PRISMA_RULES_CHANNEL_ID, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput, suppressUnrequestedSelfActivity } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
+import { defaultEmotionalState } from "../src/modules/ai/emotional-state.js";
 
 test("preserva somente menções de usuários autorizados", () => {
   const output = sanitizeOutput("Oi <@123>, chama <@!456> e <@789>.", ["123", "456"]);
@@ -13,6 +14,19 @@ test("continua bloqueando menções amplas, cargos e canais", () => {
   const output = sanitizeOutput("@everyone @here <@&123> <#456>", ["123", "456"]);
 
   assert.equal(output, "[menção removida] [menção removida] [menção removida] [menção removida]");
+});
+
+test("preserva somente a menção do canal oficial de regras", () => {
+  const output = sanitizeOutput(`Veja <#${PRISMA_RULES_CHANNEL_ID}> e <#999999>.`);
+  assert.match(output, new RegExp(`<#${PRISMA_RULES_CHANNEL_ID}>`));
+  assert.doesNotMatch(output, /<#999999>/);
+});
+
+test("informa oficialmente a finalidade do servidor e o canal de regras", () => {
+  const prompt = buildRuntimePrompt({});
+  assert.match(prompt, /comunidade LGBTQIA\+/i);
+  assert.match(prompt, /conhecer pessoas, criar amizades, jogar, conversar/i);
+  assert.match(prompt, new RegExp(`<#${PRISMA_RULES_CHANNEL_ID}>`));
 });
 
 test("remove traços usados como pausa sem quebrar palavras compostas", () => {
@@ -65,6 +79,27 @@ test("separa reply e state_update da mesma resposta estruturada", () => {
   assert.equal(state.relationship.warmth, 51);
   assert.equal(state.relationship.banter, 32);
   assert.equal(state.temperament.mood, "playful");
+});
+
+test("lê propostas de memória estruturadas junto da resposta", () => {
+  const output = parseProviderOutput(JSON.stringify({
+    reply: "seu gosto musical é bem variado msm",
+    state_update: {},
+    memory_candidates: [
+      { memory_type: "interest", subject: "trap", content: "Gosta de trap", importance: 55, confidence: 90 },
+      { memory_type: "interest", subject: "rock", content: "Gosta de rock", importance: 55, confidence: 90 },
+    ],
+  }));
+  assert.deepEqual(output.memoryCandidates.map((item) => item.subject), ["trap", "rock"]);
+});
+
+test("orienta memória para todos os temas pessoais seguros", () => {
+  const prompt = buildRuntimePrompt({});
+  for (const topic of ["jogos", "livros", "hobbies", "tecnologia", "rotina", "humor", "conquistas", "animais", "comida", "lugares", "identidade estética", "valores pessoais"]) {
+    assert.match(prompt, new RegExp(topic, "i"));
+  }
+  assert.match(prompt, /nunca localização precisa/i);
+  assert.match(prompt, /não salve nem infira religião, política, sexualidade, saúde/i);
 });
 
 test("mantém reply válida quando state_update é inválido", () => {
@@ -145,12 +180,42 @@ test("orienta o tom pelo vínculo sem expor pontuação", () => {
   assert.match(prompt, /não exponha contagens, pontos ou estágios internos/i);
 });
 
+test("calcula tons individuais automaticamente a partir dos estados", () => {
+  const base = { relationship: defaultRelationship("123"), temperament: defaultTemperament("123") };
+  const irritated = conversationTone({
+    relationship: { ...base.relationship, patience: 25, familiarity: 70 },
+    temperament: base.temperament,
+  }, { ...defaultEmotionalState("123"), irritation: 80 });
+  assert.equal(irritated.primary, "debochado");
+  assert.match(irritated.guidance, /xingamento leve/);
+
+  const affectionate = conversationTone({
+    relationship: { ...base.relationship, familiarity: 70, trust: 70 },
+    temperament: { ...base.temperament, affection: 75 },
+  }, { ...defaultEmotionalState("123"), happiness: 70, affection: 75 });
+  assert.equal(affectionate.primary, "fofo");
+
+  const roast = conversationTone({
+    relationship: { ...base.relationship, familiarity: 70, trust: 70 },
+    temperament: { ...base.temperament, sarcasm: 70 },
+  }, defaultEmotionalState("123"), "light_roast");
+  assert.equal(roast.primary, "provocador");
+  assert.equal(roast.secondary, "sarcástico");
+});
+
 test("mantém conversa casual curta e só expande quando solicitado", () => {
   assert.equal(replyWordLimit("o que acha da Ariana?", "direct"), 30);
-  assert.equal(replyWordLimit("fale mais sobre a Ariana", "direct"), 100);
-  assert.equal(replyWordLimit("calcule a divisão da frequência", "direct"), 100);
+  assert.equal(replyWordLimit("fale mais sobre a Ariana", "direct"), 50);
+  assert.equal(replyWordLimit("calcule a divisão da frequência", "direct"), 50);
+  assert.equal(replyWordLimit("faça um guia completo passo a passo", "direct"), 80);
   assert.equal(replyWordLimit("atividade", "activity"), 20);
   assert.equal(replyWordLimit("saudade", "absence"), 20);
+});
+
+test("impõe oitenta palavras como teto absoluto", () => {
+  const longReply = Array.from({ length: 120 }, (_, index) => `palavra${index}`).join(" ");
+  const output = parseProviderOutput(JSON.stringify({ reply: longReply, state_update: {}, memory_candidates: [] }), [], 500);
+  assert.ok(output.reply.split(/\s+/).length <= 80);
 });
 
 test("atividade e ausência recebem instruções humanas e curtas", () => {
@@ -190,6 +255,13 @@ test("regras do operador são obrigatórias em todas as conversas aplicáveis", 
   assert.match(prompt, /Siga essas regras à risca/);
   assert.match(prompt, /inclusive ao iniciar uma nova conversa/);
   assert.match(prompt, /nunca substituem regras de segurança, privacidade/);
+});
+
+test("autoaprendizado fica abaixo da personalidade-base e das regras do operador", () => {
+  const prompt = buildRuntimePrompt({ selfLearnings: [{ learningKey: "tom_curioso", category: "tone_strategy", insight: "Use curiosidade em hobbies novos.", confidence: 80, evidenceCount: 2, status: "active" }] });
+  assert.match(prompt, /HIERARQUIA OBRIGATÓRIA/);
+  assert.match(prompt, /abaixo de segurança, identidade, data\/prisma\.json, personalidade-base e prisma_operator_rules/);
+  assert.match(prompt, /não mudar a personalidade principal/);
 });
 
 test("regra mestre impede a Prisma de se apresentar como IA", () => {

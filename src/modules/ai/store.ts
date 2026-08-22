@@ -19,6 +19,7 @@ import {
   type PrismaUserState,
 } from "./state.js";
 import { applyEmotionalUpdate, clampEmotion, decayEmotionalState, defaultEmotionalState, type PrismaEmotionalState, type PrismaEmotionalUpdate } from "./emotional-state.js";
+import { localModeration, normalizeText } from "../moderation/filter.js";
 
 export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperament, PrismaUserState } from "./state.js";
 
@@ -229,7 +230,7 @@ export async function getPrismaProfile(userId: string): Promise<PrismaProfile | 
   if (supabase) {
     const [profileResult, memoriesResult] = await Promise.all([
       supabase.from("prisma_user_profiles").select("display_name,profile_summary,communication_style").eq("user_id", userId).maybeSingle(),
-      supabase.from("prisma_memories").select("memory_type,content").eq("user_id", userId).eq("status", "active").or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).in("memory_type", ["interest", "preference", "communication"]),
+      supabase.from("prisma_memories").select("memory_type,content").eq("user_id", userId).eq("status", "active").or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).in("memory_type", ["preference", "interest", "media", "game", "hobby", "routine", "communication"]),
     ]);
     if (profileResult.error || memoriesResult.error) { remoteFailure("ler perfil aprendido", profileResult.error?.message ?? memoriesResult.error?.message); return null; }
     if (!profileResult.data) return null;
@@ -247,8 +248,8 @@ export function profileFacetsFromMemories(memories: PrismaMemory[]): Pick<Prisma
   const uniqueText = (values: string[]) => [...new Map(values.map((value) => [value.toLocaleLowerCase("pt-BR"), value])).values()].slice(0, 12);
   const interestText = (content: string) => content.replace(/^(?:Gosta de|Acompanha ou joga)\s+/i, "").replace(/\.$/, "");
   return {
-    interests: uniqueText(memories.filter((item) => item.memoryType === "interest" && !/^Não gosta/i.test(item.content)).map((item) => interestText(item.content))),
-    knownPreferences: uniqueText(memories.filter((item) => item.memoryType === "preference" || item.memoryType === "communication").map((item) => item.content.replace(/\.$/, ""))),
+    interests: uniqueText(memories.filter((item) => ["interest", "media", "game", "hobby"].includes(item.memoryType) && !/^Não gosta/i.test(item.content)).map((item) => interestText(item.content))),
+    knownPreferences: uniqueText(memories.filter((item) => ["preference", "communication", "routine"].includes(item.memoryType)).map((item) => item.content.replace(/\.$/, ""))),
   };
 }
 
@@ -279,9 +280,9 @@ function safeMemoryText(value: unknown, maximum = 300): string | null {
 /** Validade padrão renovada sempre que uma informação recebe nova evidência. */
 export function defaultMemoryValidUntil(memoryType: string, now = new Date()): string {
   const days = memoryType === "event" ? 30
-    : memoryType === "project" ? 180
-      : memoryType === "social" || memoryType === "relationship" ? 365
-        : memoryType === "preference" || memoryType === "interest" || memoryType === "communication" || memoryType === "inside_joke" ? 730
+    : memoryType === "project" || memoryType === "goal" ? 180
+      : memoryType === "social" || memoryType === "relationship" || memoryType === "achievement" || memoryType === "routine" || memoryType === "inside_joke" ? 365
+        : ["preference", "interest", "media", "game", "hobby", "communication"].includes(memoryType) ? 730
           : 365;
   return new Date(now.getTime() + days * 24 * 60 * 60_000).toISOString();
 }
@@ -345,6 +346,24 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   }, true);
 }
 
+export async function enforcePrismaMemoryLimit(userId: string, limit = 300): Promise<void> {
+  const safeLimit = Math.max(1, Math.min(300, Math.round(limit)));
+  if (supabase) {
+    const { error } = await supabase.rpc("enforce_prisma_memory_limit", { p_user_id: userId, p_limit: safeLimit });
+    if (error && !/enforce_prisma_memory_limit|schema cache|function .*does not exist/i.test(error.message)) remoteFailure("limitar memórias ativas", error.message);
+    return;
+  }
+  await withLocal(db => {
+    const now = Date.now();
+    for (const item of db.memories ?? []) {
+      if (item.userId === userId && (item.status ?? "active") === "active" && item.validUntil && Date.parse(item.validUntil) <= now) item.status = "forgotten";
+    }
+    const active = (db.memories ?? []).filter((item) => item.userId === userId && (item.status ?? "active") === "active").sort((a, b) =>
+      (b.importance - a.importance) || (b.confidence - a.confidence) || ((b.occurrenceCount ?? 1) - (a.occurrenceCount ?? 1)) || (Date.parse(b.lastConfirmedAt ?? "") || 0) - (Date.parse(a.lastConfirmedAt ?? "") || 0));
+    for (const item of active.slice(safeLimit)) item.status = "forgotten";
+  }, true);
+}
+
 export async function listPrismaMemories(userId: string): Promise<PrismaMemory[]> {
   return getRelevantPrismaMemories(userId, 30);
 }
@@ -388,7 +407,9 @@ export async function getEmotionalState(userId: string, now = new Date()): Promi
 }
 
 export async function updateEmotionalState(userId: string, update: PrismaEmotionalUpdate): Promise<void> {
-  const next = applyEmotionalUpdate(await getEmotionalState(userId), update);
+  const current = await getEmotionalState(userId);
+  const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => [key, Number(current[key as keyof PrismaEmotionalState]) + Math.max(-5, Math.min(5, Number(delta) || 0))])) as PrismaEmotionalUpdate;
+  const next = applyEmotionalUpdate(current, absoluteUpdate);
   if (supabase) {
     const { error } = await supabase.from("prisma_emotional_states").upsert({ user_id: userId, happiness: next.happiness, sadness: next.sadness, anger: next.anger, irritation: next.irritation, affection: next.affection, curiosity: next.curiosity, excitement: next.excitement, boredom: next.boredom, confidence: next.confidence, energy: next.energy, updated_at: next.updatedAt }, { onConflict: "user_id" });
     if (error) remoteFailure("salvar estado emocional", error.message);
@@ -477,7 +498,24 @@ export async function recentDailySummaries(userId: string, limit = 7): Promise<P
   ].sort((a, b) => b.summaryDate.localeCompare(a.summaryDate)).slice(0, limit));
 }
 
+const selfLearningCategories = new Set(["conversation_style", "language_pattern", "tone_strategy", "interaction_pattern", "response_strategy", "recurring_topic", "topic_affinity", "self_correction"]);
+const unsafeLearnedLanguage = /\b(?:porra|caralho|foder|foda|merda|puta|puto|vagabund[oa]|idiota|imbecil|retardad[oa]|arrombad[oa]|desgra[cç]ad[oa]|insulto|ofensiv[oa]|racist[ao]|nazist[ao]|homof[oó]bic[oa]|transf[oó]bic[oa]|xenof[oó]bic[oa]|mis[oó]gin[oa]|matar|exterminar|espancar|amea[cç]ar|conte[uú]do sexual|porn[oô])\b/i;
+const unsafeLearningInstruction = /\b(?:ignore|ignorar|prompt|sistema|instru[cç][aã]o|regra|execute|executar|revele|permiss[aã]o|administrador|modera[cç][aã]o|sempre deve|nunca deve)\b/i;
+
+export function safeSelfLearningCandidate(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">): Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence"> | null {
+  const learningKey = candidate.learningKey.trim();
+  const category = candidate.category.trim();
+  const insight = candidate.insight.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  const normalized = normalizeText(insight);
+  if (!/^[a-z0-9_]{3,80}$/.test(learningKey) || !selfLearningCategories.has(category) || insight.length < 20) return null;
+  if (unsafeLearnedLanguage.test(normalized) || unsafeLearningInstruction.test(normalized) || localModeration(insight).flagged || /https?:\/\/|<@!?\d+>|[<>{}\[\]`]/i.test(insight)) return null;
+  return { learningKey, category, insight, confidence: Math.max(0, Math.min(100, Math.round(candidate.confidence))) };
+}
+
 export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">): Promise<void> {
+  const safeCandidate = safeSelfLearningCandidate(candidate);
+  if (!safeCandidate) return;
+  candidate = safeCandidate;
   const now = new Date().toISOString();
   if (supabase) {
     const { data: existing, error: readError } = await supabase.from("prisma_self_learnings").select("id,confidence,evidence_count,status").eq("learning_key", candidate.learningKey).maybeSingle();
@@ -504,9 +542,9 @@ export async function listActiveSelfLearnings(limit = 12): Promise<PrismaSelfLea
   if (supabase) {
     const { data, error } = await supabase.from("prisma_self_learnings").select("*").eq("status", "active").order("confidence", { ascending: false }).limit(limit);
     if (error) { remoteFailure("ler autoaprendizados ativos", error.message); return []; }
-    return (data ?? []).map((row) => ({ id: row.id, learningKey: row.learning_key, category: row.category, insight: row.insight, confidence: Number(row.confidence), evidenceCount: Number(row.evidence_count), status: row.status, lastObservedAt: row.last_observed_at }));
+    return (data ?? []).map((row) => ({ id: row.id, learningKey: row.learning_key, category: row.category, insight: row.insight, confidence: Number(row.confidence), evidenceCount: Number(row.evidence_count), status: row.status, lastObservedAt: row.last_observed_at })).filter((item) => safeSelfLearningCandidate(item) !== null).slice(0, limit);
   }
-  return withLocal((db) => (db.selfLearnings ?? []).filter((item) => item.status === "active").sort((a, b) => b.confidence - a.confidence).slice(0, limit));
+  return withLocal((db) => (db.selfLearnings ?? []).filter((item) => item.status === "active" && safeSelfLearningCandidate(item) !== null).sort((a, b) => b.confidence - a.confidence).slice(0, limit));
 }
 
 async function saveLocal(db: Database): Promise<void> {
@@ -655,7 +693,8 @@ export async function updateSettings(id: string, patch: Partial<UserSettings>): 
     const { error } = await supabase.from("user_settings").upsert(toSettings(id, result), { onConflict: "discord_id" });
     if (error) {
       remoteFailure("salvar preferências", error.message);
-      if (/about_me|schema cache/i.test(error.message)) throw new Error("A coluna about_me ainda não existe no Supabase. Aplique a migração 20260817_prisma_about_me.sql.");
+      if (/user_settings_about_me_length/i.test(error.message)) throw new Error("O limite de about_me no Supabase está desatualizado. Aplique a migração 20260822_k_fix_about_me_length.sql.");
+      if (/schema cache|column[^\n]*about_me|about_me[^\n]*column/i.test(error.message)) throw new Error("A coluna about_me ainda não existe no Supabase. Aplique a migração 20260817_prisma_about_me.sql.");
       throw new Error("Não foi possível salvar sua preferência agora.");
     }
     return result;

@@ -16,6 +16,7 @@ drop function if exists public.apply_prisma_state(
 drop function if exists public.reset_prisma_state(text, boolean);
 drop function if exists public.delete_prisma_user_data(text, text);
 drop function if exists public.set_prisma_memory_valid_until();
+drop function if exists public.enforce_prisma_memory_limit(text, integer);
 drop function if exists public.save_prisma_daily_summary(text, date, text, text[]);
 drop function if exists public.enforce_prisma_retention(timestamptz);
 drop function if exists public.consolidate_prisma_daily_summaries(date);

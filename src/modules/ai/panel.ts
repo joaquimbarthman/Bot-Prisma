@@ -89,6 +89,14 @@ function deletionResultComponents(title: string, description: string, color: num
   }];
 }
 
+function panelNoticeComponents(title: string, description: string, color = 0xed4245): APIContainerComponent[] {
+  return [{
+    type: ComponentType.Container,
+    accent_color: color,
+    components: [{ type: ComponentType.TextDisplay, content: `## ${title}\n${description}` }],
+  }];
+}
+
 export function relationshipPercentage(relationship: PrismaRelationship): number {
   return Math.round((
     normalizedRelationshipScore(relationship.familiarity, 10)
@@ -274,14 +282,20 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   if (action === "about-me-save" && interaction.isModalSubmit()) {
     const aboutMe = safeAboutMe(interaction.fields.getTextInputValue("about-me"));
     if (typeof aboutMe !== "string") {
-      await interaction.editReply("Escreva uma frase curta, sem dados sensíveis, links ou instruções para a IA.");
+      await interaction.editReply({
+        components: panelNoticeComponents("Sobre mim inválido", "Escreva uma frase curta, sem dados sensíveis, links ou instruções para a IA."),
+        allowedMentions: { parse: [] },
+      });
       return true;
     }
     try {
       await updateSettings(interaction.user.id, { aboutMe });
     } catch (error) {
       if (error instanceof Error && error.message.includes("about_me")) {
-        await interaction.editReply("O recurso “Sobre mim” ainda precisa da migração do banco de dados. Aplique `20260817_prisma_about_me.sql` no Supabase e tente novamente.");
+        await interaction.editReply({
+          components: panelNoticeComponents("Banco de dados desatualizado", `${error.message} Depois, tente novamente.`),
+          allowedMentions: { parse: [] },
+        });
         return true;
       }
       throw error;
@@ -300,7 +314,13 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   }
   if (action === "nickname-save" && interaction.isModalSubmit()) {
     const nickname = sanitizeNickname(interaction.fields.getTextInputValue("nickname"));
-    if (!nickname) { await interaction.editReply("Digite um apelido válido."); return true; }
+    if (!nickname) {
+      await interaction.editReply({
+        components: panelNoticeComponents("Apelido inválido", "Digite um apelido válido."),
+        allowedMentions: { parse: [] },
+      });
+      return true;
+    }
     await updateSettings(interaction.user.id, { nickname });
     await refreshUserPanel(interaction);
     return true;

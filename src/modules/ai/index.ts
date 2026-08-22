@@ -380,7 +380,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
         ], historyRevision);
         await addPrismaMessage({ messageId: message.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content, authorIsPrisma: false, replyToMessageId: message.reference?.messageId ?? null, createdAt: message.createdAt.toISOString() });
         await addPrismaMessage({ messageId: sent.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content: answer, authorIsPrisma: true, replyToMessageId: message.id, createdAt: sent.createdAt.toISOString() });
-        void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer, messageId: message.id });
+        void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer, messageId: message.id, previousAssistantMessage: [...history].reverse().find((item) => item.role === "assistant")?.content, aiMemoryCandidates: generated.memoryCandidates });
       }
       if (spontaneous) await addSpontaneous(message.author.id);
     } catch (error) {

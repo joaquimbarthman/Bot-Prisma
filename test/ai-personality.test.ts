@@ -39,6 +39,14 @@ test("não promove dados relacionais às instruções privilegiadas", () => {
 test("limita respostas a 60 palavras", () => {
   const longReply = Array.from({ length: 75 }, (_, index) => `palavra${index + 1}`).join(" ");
   const limited = limitReplyWords(longReply);
-  assert.equal(limited.split(/\s+/).length, 60);
-  assert.match(limited, /…$/);
+  assert.ok(limited.split(/\s+/).length <= 60);
+  assert.match(limited, /\.$/);
+});
+
+test("resume a proteção de tamanho em frase completa sem reticências", () => {
+  const longReply = Array.from({ length: 75 }, (_, index) => `palavra${index + 1}`).join(" ");
+  const limited = limitReplyWords(longReply, 30);
+  assert.ok(limited.split(/\s+/).length <= 30);
+  assert.ok(limited.endsWith("."));
+  assert.ok(!limited.endsWith("..."));
 });
