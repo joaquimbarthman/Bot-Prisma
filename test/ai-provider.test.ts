@@ -75,9 +75,9 @@ test("separa reply e state_update da mesma resposta estruturada", () => {
     output.stateUpdate,
     new Date("2026-08-16T12:00:00.000Z"),
   );
-  assert.equal(state.relationship.familiarity, 11);
-  assert.equal(state.relationship.warmth, 51);
-  assert.equal(state.relationship.banter, 32);
+  assert.equal(state.relationship.familiarity, 1);
+  assert.equal(state.relationship.warmth, 1);
+  assert.equal(state.relationship.banter, 2);
   assert.equal(state.temperament.mood, "playful");
 });
 

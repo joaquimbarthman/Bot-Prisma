@@ -400,7 +400,8 @@ export async function getEmotionalState(userId: string, now = new Date()): Promi
   if (supabase) {
     const { data, error } = await supabase.from("prisma_emotional_states").select("*").eq("user_id", userId).maybeSingle();
     if (error) { remoteFailure("ler estado emocional", error.message); return defaultEmotionalState(userId, now.toISOString()); }
-    const state = data ? { userId, happiness: clampEmotion(data.happiness, 50), sadness: clampEmotion(data.sadness), anger: clampEmotion(data.anger), irritation: clampEmotion(data.irritation), affection: clampEmotion(data.affection, 30), curiosity: clampEmotion(data.curiosity, 50), excitement: clampEmotion(data.excitement, 30), boredom: clampEmotion(data.boredom), confidence: clampEmotion(data.confidence, 50), energy: clampEmotion(data.energy, 50), updatedAt: timestamp(data.updated_at, now.toISOString()) } : defaultEmotionalState(userId, now.toISOString());
+    const fallback = defaultEmotionalState(userId, now.toISOString());
+    const state = data ? { userId, happiness: clampEmotion(data.happiness, fallback.happiness), sadness: clampEmotion(data.sadness), anger: clampEmotion(data.anger), irritation: clampEmotion(data.irritation), affection: clampEmotion(data.affection, fallback.affection), curiosity: clampEmotion(data.curiosity, fallback.curiosity), excitement: clampEmotion(data.excitement, fallback.excitement), boredom: clampEmotion(data.boredom), confidence: clampEmotion(data.confidence, fallback.confidence), energy: clampEmotion(data.energy, fallback.energy), updatedAt: timestamp(data.updated_at, now.toISOString()) } : fallback;
     return decayEmotionalState(state, now);
   }
   return withLocal(db => decayEmotionalState(db.emotionalStates?.[userId] ?? defaultEmotionalState(userId, now.toISOString()), now));
@@ -408,7 +409,7 @@ export async function getEmotionalState(userId: string, now = new Date()): Promi
 
 export async function updateEmotionalState(userId: string, update: PrismaEmotionalUpdate): Promise<void> {
   const current = await getEmotionalState(userId);
-  const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => [key, Number(current[key as keyof PrismaEmotionalState]) + Math.max(-5, Math.min(5, Number(delta) || 0))])) as PrismaEmotionalUpdate;
+  const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => [key, Number(current[key as keyof PrismaEmotionalState]) + Math.max(-2, Math.min(3, Number(delta) || 0))])) as PrismaEmotionalUpdate;
   const next = applyEmotionalUpdate(current, absoluteUpdate);
   if (supabase) {
     const { error } = await supabase.from("prisma_emotional_states").upsert({ user_id: userId, happiness: next.happiness, sadness: next.sadness, anger: next.anger, irritation: next.irritation, affection: next.affection, curiosity: next.curiosity, excitement: next.excitement, boredom: next.boredom, confidence: next.confidence, energy: next.energy, updated_at: next.updatedAt }, { onConflict: "user_id" });

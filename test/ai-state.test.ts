@@ -12,7 +12,7 @@ test("valida campos conhecidos e aplica clamps obrigatórios", () => {
     unknown: "ignorado",
   });
 
-  assert.deepEqual(update, { familiarityDelta: 2, warmthDelta: -3, energy: 100, sarcasm: 0 });
+  assert.deepEqual(update, { familiarityDelta: 3, warmthDelta: -2, energy: 100, sarcasm: 0 });
 });
 
 test("scores persistentes mudam lentamente e nunca saem de 0 a 100", () => {
@@ -26,6 +26,15 @@ test("scores persistentes mudam lentamente e nunca saem de 0 a 100", () => {
   assert.equal(result.relationship.familiarity, 100);
   assert.equal(result.relationship.warmth, 0);
   assert.equal(result.relationship.interactionCount, 1);
+});
+
+test("vínculo novo começa sem proximidade pré-carregada", () => {
+  const relationship = defaultRelationship("123");
+  assert.equal(relationship.familiarity, 0);
+  assert.equal(relationship.warmth, 0);
+  assert.equal(relationship.patience, 0);
+  assert.equal(relationship.banter, 0);
+  assert.equal(relationship.trust, 0);
 });
 
 test("interação neutra não aumenta confiança automaticamente", () => {
@@ -54,7 +63,35 @@ test("temperamento normaliza após horas sem interação e relação permanece",
   assert.equal(decayed.mood, "neutral");
   assert.equal(decayed.energy, 80);
   assert.equal(decayed.sarcasm, 70);
-  assert.equal(decayed.affection, 30);
+  assert.equal(decayed.affection, 10);
+});
+
+test("temperamento de vínculo novo começa vazio e cresce gradualmente", () => {
+  const initial = defaultTemperament("123");
+  assert.equal(initial.energy, 0);
+  assert.equal(initial.sarcasm, 0);
+  assert.equal(initial.affection, 0);
+  const next = applyValidatedStateUpdate(
+    { relationship: defaultRelationship("123"), temperament: initial },
+    { energy: 80, sarcasm: 70, affection: 90 },
+  );
+  assert.equal(next.temperament.energy, 3);
+  assert.equal(next.temperament.sarcasm, 3);
+  assert.equal(next.temperament.affection, 3);
+});
+
+test("toda interação limita aumentos a três e reduções a dois", () => {
+  const current = {
+    relationship: { ...defaultRelationship("123"), familiarity: 50, warmth: 50 },
+    temperament: { ...defaultTemperament("123"), energy: 50, sarcasm: 50, affection: 50 },
+  };
+  const increased = applyValidatedStateUpdate(current, { familiarity_delta: 99, energy: 100 });
+  assert.equal(increased.relationship.familiarity, 53);
+  assert.equal(increased.temperament.energy, 53);
+  const decreased = applyValidatedStateUpdate(current, { warmth_delta: -99, sarcasm: 0, affection: 0 });
+  assert.equal(decreased.relationship.warmth, 48);
+  assert.equal(decreased.temperament.sarcasm, 48);
+  assert.equal(decreased.temperament.affection, 48);
 });
 
 test("resumo sensível é descartado e resumo seguro exige cinco interações", () => {

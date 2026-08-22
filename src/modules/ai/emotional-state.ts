@@ -23,7 +23,7 @@ export function clampEmotion(value: unknown, fallback = 0): number {
 }
 
 export function defaultEmotionalState(userId: string, now = new Date().toISOString()): PrismaEmotionalState {
-  return { userId, happiness: 50, sadness: 0, anger: 0, irritation: 0, affection: 30, curiosity: 50, excitement: 30, boredom: 0, confidence: 50, energy: 50, updatedAt: now };
+  return { userId, happiness: 0, sadness: 0, anger: 0, irritation: 0, affection: 0, curiosity: 0, excitement: 0, boredom: 0, confidence: 0, energy: 0, updatedAt: now };
 }
 
 function toward(value: number, neutral: number, amount: number): number {
@@ -36,11 +36,11 @@ export function decayEmotionalState(state: PrismaEmotionalState, now = new Date(
   const amount = Math.min(100, Math.floor(elapsedHours) * 4);
   return {
     ...state,
-    happiness: toward(state.happiness, 50, amount), sadness: toward(state.sadness, 0, amount),
+    happiness: toward(state.happiness, 0, amount), sadness: toward(state.sadness, 0, amount),
     anger: toward(state.anger, 0, amount), irritation: toward(state.irritation, 0, amount),
-    affection: toward(state.affection, 30, amount), curiosity: toward(state.curiosity, 50, amount),
-    excitement: toward(state.excitement, 30, amount), boredom: toward(state.boredom, 0, amount),
-    confidence: toward(state.confidence, 50, amount), energy: toward(state.energy, 50, amount),
+    affection: toward(state.affection, 0, amount), curiosity: toward(state.curiosity, 0, amount),
+    excitement: toward(state.excitement, 0, amount), boredom: toward(state.boredom, 0, amount),
+    confidence: toward(state.confidence, 0, amount), energy: toward(state.energy, 0, amount),
   };
 }
 

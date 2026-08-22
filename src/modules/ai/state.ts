@@ -58,10 +58,7 @@ export function clampScore(value: number): number {
 }
 
 export function clampDelta(value: number): number {
-  // Positive relationship changes should accumulate over many conversations.
-  // Negative signals may remain more pronounced so clear boundary violations
-  // still have an immediate effect on the interaction.
-  return Math.max(-3, Math.min(2, Math.round(value)));
+  return Math.max(-2, Math.min(3, Math.round(value)));
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -152,10 +149,10 @@ export function validateStateUpdate(value: unknown): PrismaStateUpdate {
 export function defaultRelationship(discordId: string, now = new Date().toISOString()): PrismaRelationship {
   return {
     discordId,
-    familiarity: 10,
-    warmth: 50,
-    patience: 60,
-    banter: 30,
+    familiarity: 0,
+    warmth: 0,
+    patience: 0,
+    banter: 0,
     trust: 0,
     relationshipSummary: null,
     recentMilestones: [],
@@ -170,9 +167,9 @@ export function defaultTemperament(discordId: string, now = new Date().toISOStri
   return {
     discordId,
     mood: "neutral",
-    energy: 60,
-    sarcasm: 35,
-    affection: 50,
+    energy: 0,
+    sarcasm: 0,
+    affection: 0,
     lastInteractionAt: null,
     updatedAt: now,
   };
@@ -181,6 +178,10 @@ export function defaultTemperament(discordId: string, now = new Date().toISOStri
 function moveToward(value: number, target: number, distance: number): number {
   if (value === target) return value;
   return value < target ? Math.min(target, value + distance) : Math.max(target, value - distance);
+}
+
+function moveTowardPerInteraction(value: number, target: number): number {
+  return moveToward(value, target, target >= value ? 3 : 2);
 }
 
 export function decayTemperament(temperament: PrismaTemperament, now = new Date()): PrismaTemperament {
@@ -192,9 +193,9 @@ export function decayTemperament(temperament: PrismaTemperament, now = new Date(
   return {
     ...temperament,
     mood: "neutral",
-    energy: moveToward(temperament.energy, 60, distance),
-    sarcasm: moveToward(temperament.sarcasm, 35, distance),
-    affection: moveToward(temperament.affection, 50, distance),
+    energy: moveToward(temperament.energy, 0, distance),
+    sarcasm: moveToward(temperament.sarcasm, 0, distance),
+    affection: moveToward(temperament.affection, 0, distance),
   };
 }
 
@@ -241,9 +242,9 @@ export function applyValidatedStateUpdate(
   const temperament: PrismaTemperament = {
     ...currentTemperament,
     mood: update.mood ?? currentTemperament.mood,
-    energy: update.energy ?? currentTemperament.energy,
-    sarcasm: update.sarcasm ?? currentTemperament.sarcasm,
-    affection: update.affection ?? currentTemperament.affection,
+    energy: update.energy === undefined ? currentTemperament.energy : moveTowardPerInteraction(currentTemperament.energy, update.energy),
+    sarcasm: update.sarcasm === undefined ? currentTemperament.sarcasm : moveTowardPerInteraction(currentTemperament.sarcasm, update.sarcasm),
+    affection: update.affection === undefined ? currentTemperament.affection : moveTowardPerInteraction(currentTemperament.affection, update.affection),
     lastInteractionAt: timestamp,
     updatedAt: timestamp,
   };

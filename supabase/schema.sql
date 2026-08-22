@@ -58,10 +58,10 @@ alter table public.prisma_operator_rules
 
 create table if not exists public.prisma_relationships (
   discord_id text primary key,
-  familiarity smallint not null default 10 check (familiarity between 0 and 100),
-  warmth smallint not null default 50 check (warmth between 0 and 100),
-  patience smallint not null default 60 check (patience between 0 and 100),
-  banter smallint not null default 30 check (banter between 0 and 100),
+  familiarity smallint not null default 0 check (familiarity between 0 and 100),
+  warmth smallint not null default 0 check (warmth between 0 and 100),
+  patience smallint not null default 0 check (patience between 0 and 100),
+  banter smallint not null default 0 check (banter between 0 and 100),
   trust smallint not null default 0 check (trust between 0 and 100),
   relationship_summary text check (char_length(relationship_summary) <= 300),
   recent_milestones jsonb not null default '[]'::jsonb check (jsonb_typeof(recent_milestones) = 'array' and jsonb_array_length(recent_milestones) <= 5),
@@ -86,10 +86,10 @@ create table if not exists public.prisma_temperament (
 -- antes de os NOT NULL e CHECKs serem (re)aplicados.
 alter table public.prisma_relationships
   add column if not exists discord_id text,
-  add column if not exists familiarity smallint not null default 10,
-  add column if not exists warmth smallint not null default 50,
-  add column if not exists patience smallint not null default 60,
-  add column if not exists banter smallint not null default 30,
+  add column if not exists familiarity smallint not null default 0,
+  add column if not exists warmth smallint not null default 0,
+  add column if not exists patience smallint not null default 0,
+  add column if not exists banter smallint not null default 0,
   add column if not exists trust smallint not null default 0,
   add column if not exists relationship_summary text,
   add column if not exists recent_milestones jsonb not null default '[]'::jsonb,
@@ -110,13 +110,13 @@ set familiarity = greatest(0, least(100, coalesce(familiarity, 10))),
     updated_at = coalesce(updated_at, now());
 
 alter table public.prisma_relationships
-  alter column familiarity set default 10,
+  alter column familiarity set default 0,
   alter column familiarity set not null,
-  alter column warmth set default 50,
+  alter column warmth set default 0,
   alter column warmth set not null,
-  alter column patience set default 60,
+  alter column patience set default 0,
   alter column patience set not null,
-  alter column banter set default 30,
+  alter column banter set default 0,
   alter column banter set not null,
   alter column trust set default 0,
   alter column trust set not null,
@@ -456,23 +456,23 @@ create index if not exists prisma_period_summaries_type_end_idx on public.prisma
 create table if not exists public.prisma_emotional_states (
   user_id text primary key,
   mood text not null default 'neutral' check (mood in ('neutral', 'playful', 'warm', 'calm', 'serious', 'energetic', 'annoyed')),
-  happiness smallint not null default 50 check (happiness between 0 and 100),
+  happiness smallint not null default 0 check (happiness between 0 and 100),
   sadness smallint not null default 0 check (sadness between 0 and 100),
   anger smallint not null default 0 check (anger between 0 and 100),
   irritation smallint not null default 0 check (irritation between 0 and 100),
-  affection smallint not null default 30 check (affection between 0 and 100),
-  curiosity smallint not null default 50 check (curiosity between 0 and 100),
-  excitement smallint not null default 30 check (excitement between 0 and 100),
+  affection smallint not null default 0 check (affection between 0 and 100),
+  curiosity smallint not null default 0 check (curiosity between 0 and 100),
+  excitement smallint not null default 0 check (excitement between 0 and 100),
   boredom smallint not null default 0 check (boredom between 0 and 100),
-  confidence smallint not null default 50 check (confidence between 0 and 100),
-  energy smallint not null default 50 check (energy between 0 and 100),
-  sarcasm smallint not null default 35 check (sarcasm between 0 and 100),
+  confidence smallint not null default 0 check (confidence between 0 and 100),
+  energy smallint not null default 0 check (energy between 0 and 100),
+  sarcasm smallint not null default 0 check (sarcasm between 0 and 100),
   last_interaction_at timestamptz,
   updated_at timestamptz not null default now()
 );
 alter table public.prisma_emotional_states
   add column if not exists mood text not null default 'neutral',
-  add column if not exists sarcasm smallint not null default 35,
+  add column if not exists sarcasm smallint not null default 0,
   add column if not exists last_interaction_at timestamptz;
 alter table public.prisma_emotional_states drop constraint if exists prisma_emotional_states_mood_check;
 alter table public.prisma_emotional_states
