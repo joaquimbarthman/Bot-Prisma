@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v3.2";
+export const PRISMA_AI_VERSION = "v3.3";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Pesquisa obrigatória de letras no LRCLIB quando perguntam qual parte, trecho ou verso de uma música a Prisma mais aprecia, usando somente a letra encontrada para fundamentar a resposta sem inventar versos.",
   "Memória mais inteligente, capaz de reconhecer mais tipos de informação, listas, gostos musicais e respostas curtas que continuam uma pergunta anterior.",
   "Memórias organizadas por assunto, com validade, confirmação, substituição de informações antigas e limite para evitar acúmulo sem controle.",
   "Leitura emocional mais gradual, para que o estado da conversa evolua sem mudanças bruscas.",
@@ -24,6 +25,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
   "Usar um apelido escolhido pela pessoa e uma apresentação opcional do painel para personalizar a conversa.",
   "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes e a pesquisa estiver disponível.",
+  "Consultar letras no LRCLIB para escolher e explicar, com base na letra real, qual trecho de uma música mais aprecia.",
   "Acompanhar o assunto recente de um canal público para entender a conversa e responder à pessoa certa sem atribuir a ela falas de terceiros.",
   "Mencionar pessoas quando isso for pedido e permitido, respeitando quem tem acesso à Prisma.",
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",

@@ -12,6 +12,7 @@ import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
 import { summarizeCompletedConversationDays } from "./daily-summary.js";
+import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -323,6 +324,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       operatorRules: operatorRules.map((item) => item.rule),
       currentThought,
     };
+    if (asksFavoriteSongPart(content)) {
+      replyContext.lyricsResearchAttempted = true;
+      replyContext.lyricsResearch = await researchLyrics(content, history);
+    }
     const requestedMentionUserIds = explicitlyRequestedMentionUserIds(
       content,
       message.mentions.users.keys(),

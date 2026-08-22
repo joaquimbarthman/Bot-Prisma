@@ -29,6 +29,16 @@ test("informa oficialmente a finalidade do servidor e o canal de regras", () => 
   assert.match(prompt, new RegExp(`<#${PRISMA_RULES_CHANNEL_ID}>`));
 });
 
+test("obriga escolha fundamentada apenas na letra retornada pelo LRCLIB", () => {
+  const prompt = buildRuntimePrompt({
+    lyricsResearchAttempted: true,
+    lyricsResearch: { trackName: "Teste", artistName: "Artista", lyrics: "linha um\nlinha dois" },
+  });
+  assert.match(prompt, /consultada obrigatoriamente no LRCLIB/i);
+  assert.match(prompt, /no máximo duas linhas curtas/i);
+  assert.match(prompt, /não acrescente fatos externos/i);
+});
+
 test("remove traços usados como pausa sem quebrar palavras compostas", () => {
   const output = sanitizeOutput("Mds — isso foi bom - real.\n- outra ideia sobre guarda-chuva");
   assert.equal(output, "Mds, isso foi bom, real.\noutra ideia sobre guarda-chuva");
