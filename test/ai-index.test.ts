@@ -12,8 +12,8 @@ test("autoriza alvo mencionado explicitamente sem depender da menção ao autor"
   assert.deepEqual(ids, ["300"]);
 });
 
-test("não autoriza menções apenas citadas sem pedido direto", () => {
-  assert.deepEqual(explicitlyRequestedMentionUserIds("Eu falei com <@300>", ["300"], "100", "200"), []);
+test("autoriza usuário mencionado na mensagem atual mesmo sem verbo específico", () => {
+  assert.deepEqual(explicitlyRequestedMentionUserIds("Prisma pergunte qual o jogo favorito de <@300>", ["300"], "100", "200"), ["300"]);
 });
 
 test("extrai o alvo do texto bruto quando a coleção do Discord está incompleta", () => {

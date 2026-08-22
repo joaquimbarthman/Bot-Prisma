@@ -195,7 +195,6 @@ export function explicitlyRequestedMentionUserIds(
   botId?: string,
   authorId?: string,
 ): string[] {
-  if (!requestsDirectMention(content) && !requestsContextualMention(content)) return [];
   const rawMentionIds = [...content.matchAll(/<@!?(\d{1,25})>/g)].map((match) => match[1]);
   return [...new Set([...mentionedUserIds, ...rawMentionIds])]
     .filter((userId) => userId !== botId && userId !== authorId)
@@ -369,7 +368,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       ...(spontaneous ? [message.author.id] : []),
       ...allowedMentionUserIds,
     ])];
-    const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, repliedUser: false } });
+    const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, roles: [], repliedUser: false } });
     try {
       if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, generated.stateUpdate);
       if (settings.memoryEnabled && (await getSettings(message.author.id)).memoryEnabled) {
