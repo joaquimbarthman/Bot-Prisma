@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, enforcePrismaIdentity, parseProviderOutput, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput, suppressUnrequestedSelfActivity } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("preserva somente menções de usuários autorizados", () => {
@@ -160,11 +160,29 @@ test("atividade e ausência recebem instruções humanas e curtas", () => {
   assert.match(buildRuntimePrompt({ mode: "absence" }), /não cobre explicações/i);
 });
 
+test("não conta atividade própria sem uma pergunta explícita", () => {
+  const prompt = buildRuntimePrompt({});
+  assert.match(prompt, /É proibido dizer que está ouvindo música/);
+  assert.equal(
+    suppressUnrequestedSelfActivity("tô dboa tbm, ouvindo música e curtindo a manhã hj.", false),
+    "tô dboa tbm",
+  );
+  assert.equal(
+    suppressUnrequestedSelfActivity("tô ouvindo música agora.", false),
+    "",
+  );
+  assert.equal(
+    suppressUnrequestedSelfActivity("tô ouvindo música agora.", true),
+    "tô ouvindo música agora.",
+  );
+});
+
 test("pensamento atual só entra como contexto opcional e relevante", () => {
   const prompt = buildRuntimePrompt({ currentThought: "pensando em ouvir música" });
   assert.match(prompt, /Seu pensamento atual é: "pensando em ouvir música"/);
   assert.match(prompt, /Não cite nem repita esse pensamento em toda resposta/);
-  assert.match(prompt, /quando perguntarem o que você está fazendo, pensando ou sentindo/);
+  assert.match(prompt, /quando perguntarem diretamente o que você está fazendo, pensando ou sentindo/);
+  assert.match(prompt, /Nunca o mencione apenas por ser relacionado ao assunto/);
 });
 
 test("regras do operador são obrigatórias em todas as conversas aplicáveis", () => {

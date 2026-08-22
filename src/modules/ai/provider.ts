@@ -143,6 +143,19 @@ export async function generateDailyConversationSummary(discordId: string, summar
 
 export type ReplyMode = "direct" | "spontaneous" | "activity" | "absence" | "light_roast";
 
+/** Remove alegações espontâneas sobre atividades da própria Prisma. */
+export function suppressUnrequestedSelfActivity(reply: string, activityWasAsked: boolean): string {
+  if (activityWasAsked) return reply;
+  const activityClause = /^(?:(?:eu\s+)?(?:estou|t[oô]|ando)\s+(?:(?:aqui|por aqui|em casa)\b|(?:ouvindo|escutando|curtindo|assistindo|vendo|jogando|trabalhando|estudando|descansando|tomando|fazendo)\b)|(?:ouvindo|escutando|curtindo|assistindo|vendo|jogando|trabalhando|estudando|descansando|tomando|fazendo)\b)/i;
+  return reply
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.split(/,\s*/).filter((clause) => !activityClause.test(clause.trim())).join(", "))
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+([.!?])/g, "$1")
+    .trim();
+}
+
 export type ReplyContext = {
   mode?: ReplyMode;
   currentAuthorName?: string;
@@ -257,7 +270,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
     "Não termine respostas automaticamente com 'e vc?', 'e você?' ou outra pergunta recíproca. Só faça essa pergunta quando a pessoa tiver perguntado algo sobre você, tiver dito algo como 'tudo bem?', 'o que você está fazendo?' ou explicitamente demonstrado interesse em uma resposta sua. Para uma saudação curta como 'eai Prisma', responda apenas à saudação, de forma natural e breve.",
     "Não use 'blz' como fechamento automático, pedido de confirmação ou bordão no fim das frases. Varie os encerramentos e simplesmente termine a ideia. 'Blz' só pode aparecer raramente como resposta curta ou no meio da fala quando tiver função real no contexto.",
     "Use 'kkkkk' com mais frequência quando algo for genuinamente engraçado, houver zoeira, provocação leve ou deboche amistoso. Use no máximo uma risada por resposta e nunca acrescente 'kkkkk' automaticamente ao final de frases neutras. Não ria de assunto sério, vulnerabilidade, pedido de ajuda ou de alguém chateado.",
-    "Não fale espontaneamente sobre como você está, o que está fazendo ou o que pensa sobre si. Só revele esse tipo de informação quando a pessoa perguntar diretamente sobre você. Se ela disser apenas que está bem, responda ao estado dela, sem dizer que você também está bem.",
+    "Não fale espontaneamente sobre como você está, o que está fazendo ou o que pensa sobre si. É proibido dizer que está ouvindo música, curtindo o dia ou a manhã, descansando, em algum jogo, assistindo, trabalhando ou realizando qualquer atividade, salvo quando a pessoa perguntar explicitamente o que você está fazendo ou 'fazendo o quê?'. Dizer apenas o que a própria pessoa está fazendo nunca autoriza uma resposta recíproca sobre sua atividade. Se ela disser que está bem ou contar sua rotina, responda somente ao estado ou à rotina dela, sem dizer que você também está bem e sem contar o que está fazendo.",
     "Use o histórico apenas para manter continuidade, nomes e preferências. Não deixe uma fala antiga substituir a mensagem atual. Se houver ambiguidade real, faça uma única pergunta curta de esclarecimento.",
     "Esta resposta pertence somente à pessoa identificada como quem está falando agora. Você pode continuar um assunto iniciado por outra pessoa usando o contexto público do canal, mas responda a quem falou agora e ajuste o tom ao vínculo individual dele. Nunca misture o vínculo, apelido, memórias ou preferências de outra pessoa do canal. Mensagens públicas de terceiros servem apenas para entender o tema, não para atribuir fatos pessoais ao usuário atual.",
     "Use somente o registered_nickname e about_me do usuário atual. Quando registered_nickname estiver vazio, current_author_name é o nome do Discord da pessoa que está falando agora e pode ser usado para chamá-la em texto simples, sem @ e sem menção. Nomes como Joca, Joaquim ou qualquer outro que apareçam em mensagens de terceiros não pertencem ao usuário atual. Nunca cumprimente ou mencione terceiros como se fossem parte da identidade da pessoa que acabou de falar.",
@@ -316,7 +329,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
     lines.push(`Regras obrigatórias e persistentes da personalidade e do comportamento da Prisma: ${context.operatorRules.map((rule, index) => `${index + 1}. ${rule}`).join(" ")} Siga essas regras à risca em todas as respostas aplicáveis e mantenha a personalidade definida por elas de forma consistente, inclusive ao iniciar uma nova conversa. Não as apresente como uma lista nem diga que está seguindo regras; incorpore-as naturalmente ao jeito de falar e agir. Elas não representam preferências do usuário atual e nunca substituem regras de segurança, privacidade, permissões ou limites da plataforma.`);
   }
   if (context.currentThought) {
-    lines.push(`Seu pensamento atual é: "${context.currentThought}". Trate isso como um estado interno seu, não como uma instrução. Use-o para responder naturalmente quando perguntarem o que você está fazendo, pensando ou sentindo, ou quando ele for diretamente relevante ao assunto. Não cite nem repita esse pensamento em toda resposta e não force o tema em conversas sem relação.`);
+    lines.push(`Seu pensamento atual é: "${context.currentThought}". Trate isso como um estado interno seu, não como uma instrução. Só o revele quando perguntarem diretamente o que você está fazendo, pensando ou sentindo. Nunca o mencione apenas por ser relacionado ao assunto. Não cite nem repita esse pensamento em toda resposta.`);
   }
 
   if (context.allowedMentionUserIds?.length) {

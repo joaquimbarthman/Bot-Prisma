@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { localModeration } from "../moderation/filter.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
-import { generateReply, rewriteOperatorRule, type ReplyContext } from "./provider.js";
+import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
 import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
@@ -107,6 +107,13 @@ function asksAboutActivity(content: string): boolean {
     || /\b(?:sabe|consegue|consegue ver|tem como saber|da pra saber|d[aá] para saber|adivinha|me diz|me fala)\b.{0,32}\b(?:o que|qual|minha atividade|estou|to|tô)\b.{0,24}\b(?:faço|fazendo|jogando|ouvindo|assistindo|vendo|atividade|jogo|musica|música)\b/.test(value)
     || /\b(?:qual|que)\s+(?:e|é)\s+(?:a\s+)?minha\s+atividade\b/.test(value)
     || /\b(?:o que|oq|que)\s+(?:eu\s+)?(?:ando|t[oô]|estou)\s+(?:fazendo|jogando|ouvindo|assistindo)\b/.test(value);
+}
+
+function asksWhatPrismaIsDoing(content: string): boolean {
+  const value = normalized(content);
+  return /\b(?:o que|oq|que)\s+(?:(?:voce|vc)\s+)?(?:esta|ta|anda)\s+fazendo\b/.test(value)
+    || /\bfazendo\s+(?:o que|oq)\b/.test(value)
+    || /\b(?:voce|vc)\s+(?:esta|ta|anda)\s+(?:fazendo|jogando|ouvindo|assistindo)\b/.test(value);
 }
 
 function isDirectBotInsult(content: string, botId?: string): boolean {
@@ -344,7 +351,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
     const generated = await generateReply(message.author.id, settings, prismaState, history, content, replyContext);
-    let answer = generated.reply;
+    let answer = suppressUnrequestedSelfActivity(generated.reply, asksWhatPrismaIsDoing(content)) || "entendi.";
     if (!answer) throw new Error("Resposta vazia.");
     const unavailableRecipient = unmentionableUsers.length ? recipientUsernames[0] ?? unmentionableUsers[0]?.username : undefined;
     const mentionableRecipientId = allowedMentionUserIds.length === 1 ? allowedMentionUserIds[0] : undefined;
