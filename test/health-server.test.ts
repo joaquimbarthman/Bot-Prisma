@@ -44,8 +44,14 @@ test("health aceita HEAD sem enviar corpo", async () => {
   assert(Number(response.headers["content-length"]) > 0);
 });
 
-test("ready confirma que o processo esta vivo durante reconexao do Discord", async () => {
+test("ready informa indisponibilidade durante reconexao do Discord", async () => {
   const response = await call("GET", "/ready", false);
+  assert.equal(response.status, 503);
+  assert.deepEqual(JSON.parse(response.body).discord, "connecting");
+});
+
+test("health continua confirmando que o processo HTTP esta vivo", async () => {
+  const response = await call("GET", "/health", false);
   assert.equal(response.status, 200);
   assert.deepEqual(JSON.parse(response.body).discord, "connecting");
 });

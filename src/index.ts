@@ -21,7 +21,16 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
+const discordRecoveryTimeoutMs = 5 * 60_000;
+let lastDiscordConnectionAt = Date.now();
+
+function markDiscordConnected(): void {
+  lastDiscordConnectionAt = Date.now();
+}
+
 client.once(Events.ClientReady, async (ready) => {
+  markDiscordConnected();
+  console.log(`[DISCORD] Gateway conectado como ${ready.user.tag}; iniciando módulos.`);
   const rest = new REST().setToken(config.token);
   const route = config.guildId
     ? Routes.applicationGuildCommands(config.clientId, config.guildId)
@@ -60,6 +69,21 @@ client.once(Events.ClientReady, async (ready) => {
     if (missing.length) console.error(`[MONITOR] Canal ${channelId} sem permissões: ${missing.join(", ")}.`);
     else console.log(`[MONITOR] Canal ${channelId} pronto para censura.`);
   }
+});
+
+client.on(Events.ShardReady, (shardId) => {
+  markDiscordConnected();
+  console.log(`[DISCORD] Shard ${shardId} pronta.`);
+});
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  markDiscordConnected();
+  console.log(`[DISCORD] Shard ${shardId} reconectada; ${replayedEvents} evento(s) recuperado(s).`);
+});
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  console.error(`[DISCORD] Shard ${shardId} desconectada (código ${event.code}). Tentando reconectar.`);
+});
+client.on(Events.ShardError, (error, shardId) => {
+  console.error(`[DISCORD] Erro na shard ${shardId}:`, error);
 });
 
 client.on(Events.ChannelCreate, async (channel) => {
@@ -121,10 +145,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.Error, console.error);
 const healthServer = startHealthServer(client);
+setInterval(() => {
+  if (client.isReady()) {
+    markDiscordConnected();
+    return;
+  }
+  const disconnectedForMs = Date.now() - lastDiscordConnectionAt;
+  if (disconnectedForMs < discordRecoveryTimeoutMs) return;
+  console.error(`[DISCORD] Conexão indisponível há ${Math.floor(disconnectedForMs / 1000)}s; reiniciando o processo.`);
+  process.exit(1);
+}, 30_000).unref();
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => {
   console.log(`[SISTEMA] ${signal} recebido; encerrando conexões.`);
   client.destroy();
   healthServer.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5_000).unref();
 });
-client.login(config.token);
+client.login(config.token).catch((error) => {
+  console.error("[DISCORD] Falha ao autenticar ou conectar:", error);
+  process.exit(1);
+});

@@ -17,12 +17,13 @@ export function handleHealthRequest(client: HealthClient, request: IncomingMessa
   }
 
   const ready = client.isReady();
+  const isReadinessProbe = pathname === "/ready";
   const body = JSON.stringify({
     status: "ok",
     discord: ready ? "connected" : "connecting",
     uptimeSeconds: Math.floor(process.uptime()),
   });
-  response.writeHead(200, {
+  response.writeHead(isReadinessProbe && !ready ? 503 : 200, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Content-Length": Buffer.byteLength(body),
