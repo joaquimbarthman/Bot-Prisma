@@ -254,7 +254,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
 
   if (context.allowedMentionUserIds?.length) {
     const ids = context.allowedMentionUserIds.filter((id) => /^\d{1,25}$/.test(id)).slice(0, 3);
-    if (ids.length) lines.push(`Você pode mencionar diretamente, quando pedido, somente: ${ids.map((id) => `<@${id}>`).join(", ")}. Preserve <@ID> e use cada alvo no máximo uma vez, dentro do texto pedido. Não anuncie que vai escrever ou enviar a mensagem. Não mencione outros IDs, cargos, canais, @everyone ou @here.`);
+    if (ids.length) lines.push(`O pedido atual exige uma menção direta. Mencione exatamente uma vez cada alvo aplicável desta lista: ${ids.map((id) => `<@${id}>`).join(", ")}. Preserve <@ID> e coloque a menção naturalmente no começo da saudação, pergunta, convite ou assunto. Não anuncie que vai escrever ou enviar a mensagem. Não mencione outros IDs, cargos, canais, @everyone ou @here.`);
   }
   if (context.unmentionableUsers?.length) {
     const users = context.unmentionableUsers

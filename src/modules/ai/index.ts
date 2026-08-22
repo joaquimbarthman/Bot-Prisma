@@ -138,12 +138,18 @@ function needsChannelContext(message: Message): boolean {
 
 function requestsDirectMention(content: string): boolean {
   const text = normalized(content);
-  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda)\b/i.test(text)
-    || /\b(?:de|da)\s+(?:um\s+)?(?:oi|ola|boas?\s+vindas?)\b/i.test(text);
+  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda|cumprimenta|cumprimente|sauda|saude|interage|interaja)\b/i.test(text)
+    || /\b(?:de|da)\s+(?:um\s+)?(?:oi|ola|bom dia|boa tarde|boa noite|boas?\s+vindas?)\b/i.test(text)
+    || /\b(?:puxa|puxe|inicia|inicie|comeca|comece)\b.{0,45}\b(?:assunto|conversa|papo)\b.{0,45}\b(?:com|pro|pra|para)\b/i.test(text)
+    || /\b(?:conversa|fale|fala|interage|interaja)\s+(?:ai\s+)?(?:com|pro|pra)\b/i.test(text);
 }
 
 function requestsContextualMention(content: string): boolean {
-  return /<@!?\d+>/.test(content) && /\b(?:o que|oq|qual|como)\b.{0,80}\b(?:acha|achou|opin(?:a|i)|pensa|pensou|avalia|avaliou)\b/i.test(normalized(content));
+  if (!/<@!?\d+>/.test(content)) return false;
+  const text = normalized(content);
+  return /\b(?:o que|oq|qual|como)\b.{0,100}\b(?:acha|achou|opin(?:a|i)|pensa|pensou|avalia|avaliou)\b/i.test(text)
+    || /\b(?:acha|achou|opin(?:a|i)|pensa|pensou|avalia|avaliou|concorda|discorda)\b.{0,120}\b(?:disse|falou|comentou|mandou|assunto|ideia|opiniao)\b/i.test(text)
+    || /\b(?:sobre|do|da)\b.{0,80}<@!?\d+>.{0,80}\b(?:disse|falou|comentou|mandou)\b/i.test(content);
 }
 
 function requestedPlainUsernames(content: string): string[] {
@@ -192,7 +198,7 @@ async function resolveRequestedMentions(message: Message, requestedIds: string[]
   for (const userId of requestedIds) {
     const member = message.guild?.members.cache.get(userId) ?? await message.guild?.members.fetch(userId).catch(() => null);
     const username = member?.user.username ?? message.mentions.users.get(userId)?.username ?? "essa pessoa";
-    if (member && accessLevel(member) !== "none") allowedMentionUserIds.push(userId);
+    if (member && !member.user.bot) allowedMentionUserIds.push(userId);
     else unmentionableUsers.push({ id: userId, username });
   }
   return { allowedMentionUserIds, unmentionableUsers };
