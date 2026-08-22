@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consolidatePrismaProfile, contextualMemoryCandidates, emotionalUpdateFromMessage, memoryCandidates, validatedAiMemoryCandidates } from "../src/modules/ai/learning.js";
+import { buildInteractionEnvelope } from "../src/modules/ai/provider.js";
+import { defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("reconhece gatilhos emocionais sem inferir diagnóstico", () => {
   assert.deepEqual(emotionalUpdateFromMessage("obrigada, você me ajudou muito"), { happiness: 2, affection: 1, confidence: 1 });
@@ -85,6 +87,26 @@ test("consolida memórias no perfil aprendido", () => {
   assert.ok(profile.knownPreferences.includes("Prefere respostas curtas"));
   assert.match(profile.profileSummary ?? "", /Fortnite/);
   assert.match(profile.profileSummary ?? "", /bot/);
+});
+
+test("preferência de conversa aprendida volta no contexto da próxima interação", () => {
+  const memories = memoryCandidates("u1", "eu prefiro que você responda de forma curta e direta", "m1");
+  const profile = consolidatePrismaProfile(null, memories, "u1", "Lucas");
+  const envelope = JSON.parse(buildInteractionEnvelope(
+    { nickname: "", aboutMe: "", allowMentions: false, memoryEnabled: true, spontaneousInteractions: false },
+    { relationship: defaultRelationship("u1"), temperament: defaultTemperament("u1") },
+    "me explica isso",
+    { currentAuthorId: "u1", learnedProfile: profile, relevantMemories: memories },
+  ));
+
+  assert.equal(memories[0]?.memoryType, "communication");
+  assert.equal(profile.communicationStyle, "de forma curta e direta");
+  assert.equal(envelope.learned_profile.communication_style, "de forma curta e direta");
+  assert.deepEqual(envelope.relevant_memories, [{
+    type: "communication",
+    content: "Prefere respostas de forma curta e direta.",
+    confidence: 84,
+  }]);
 });
 
 test("aceita o nome Prisma como vocativo antes de uma preferência", () => {

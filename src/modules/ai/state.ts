@@ -58,7 +58,10 @@ export function clampScore(value: number): number {
 }
 
 export function clampDelta(value: number): number {
-  return Math.max(-3, Math.min(3, Math.round(value)));
+  // Positive relationship changes should accumulate over many conversations.
+  // Negative signals may remain more pronounced so clear boundary violations
+  // still have an immediate effect on the interaction.
+  return Math.max(-3, Math.min(2, Math.round(value)));
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -214,9 +217,9 @@ export function applyValidatedStateUpdate(
     warmth: clampScore(state.relationship.warmth + (update.warmthDelta ?? 0)),
     patience: clampScore(state.relationship.patience + (update.patienceDelta ?? 0)),
     banter: clampScore(state.relationship.banter + (update.banterDelta ?? 0)),
-    // A continued direct conversation is a small positive trust signal when
-    // the model has no contrary evidence. Explicit model deltas still win.
-    trust: clampScore(state.relationship.trust + (update.trustDelta ?? 1)),
+    // Trust only grows from an explicit signal in the current conversation;
+    // merely sending repeated messages must not manufacture intimacy.
+    trust: clampScore(state.relationship.trust + (update.trustDelta ?? 0)),
     interactionCount: Math.max(0, state.relationship.interactionCount + 1),
     updatedAt: timestamp,
   };

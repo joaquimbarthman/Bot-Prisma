@@ -264,6 +264,19 @@ test("autoaprendizado fica abaixo da personalidade-base e das regras do operador
   assert.match(prompt, /não mudar a personalidade principal/);
 });
 
+test("reutiliza gírias, abreviações e formas de conversar já confirmadas", () => {
+  const prompt = buildRuntimePrompt({ selfLearnings: [
+    { learningKey: "giria_pprt", category: "language_pattern", insight: "Usar 'pprt' em concordâncias casuais quando combinar com o contexto.", confidence: 85, evidenceCount: 2, status: "active" },
+    { learningKey: "abreviacao_ctz", category: "language_pattern", insight: "Usar 'ctz' ocasionalmente em respostas curtas e informais.", confidence: 80, evidenceCount: 2, status: "active" },
+    { learningKey: "ritmo_direto", category: "conversation_style", insight: "Preferir um ritmo direto em conversas casuais sem perder naturalidade.", confidence: 82, evidenceCount: 3, status: "active" },
+  ] });
+
+  assert.match(prompt, /Usar 'pprt'/);
+  assert.match(prompt, /Usar 'ctz'/);
+  assert.match(prompt, /ritmo direto/);
+  assert.match(prompt, /somente quando forem naturais para o contexto/);
+});
+
 test("regra mestre impede a Prisma de se apresentar como IA", () => {
   const prompt = buildRuntimePrompt({});
   assert.match(prompt, /REGRA MESTRE DE IDENTIDADE/);

@@ -12,7 +12,7 @@ test("valida campos conhecidos e aplica clamps obrigatórios", () => {
     unknown: "ignorado",
   });
 
-  assert.deepEqual(update, { familiarityDelta: 3, warmthDelta: -3, energy: 100, sarcasm: 0 });
+  assert.deepEqual(update, { familiarityDelta: 2, warmthDelta: -3, energy: 100, sarcasm: 0 });
 });
 
 test("scores persistentes mudam lentamente e nunca saem de 0 a 100", () => {
@@ -25,6 +25,18 @@ test("scores persistentes mudam lentamente e nunca saem de 0 a 100", () => {
 
   assert.equal(result.relationship.familiarity, 100);
   assert.equal(result.relationship.warmth, 0);
+  assert.equal(result.relationship.interactionCount, 1);
+});
+
+test("interação neutra não aumenta confiança automaticamente", () => {
+  const relationship = { ...defaultRelationship("123"), trust: 12 };
+  const result = applyValidatedStateUpdate(
+    { relationship, temperament: defaultTemperament("123") },
+    {},
+    new Date("2026-08-16T12:00:00.000Z"),
+  );
+
+  assert.equal(result.relationship.trust, 12);
   assert.equal(result.relationship.interactionCount, 1);
 });
 
