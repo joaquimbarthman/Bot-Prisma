@@ -43,12 +43,23 @@ client.once(Events.ClientReady, async (ready) => {
   await startLfgModule(ready);
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) {
-    const pairedRoleCount = await syncPairedRoleGrants(guild).catch((error) => {
-      console.error("[CARGO-DUPLO] Falha ao sincronizar concessões:", error);
-      return 0;
+    // Buscar todos os membros usa o opcode 8, que possui um limite rigoroso no
+    // Gateway. As sincronizações abaixo devem compartilhar a mesma resposta.
+    const members = await guild.members.fetch().catch((error) => {
+      console.error("[MEMBROS] Falha ao carregar membros para as sincronizações iniciais:", error);
+      return null;
     });
-    console.log(`[CARGO-DUPLO] ${pairedRoleCount} membro(s) processado(s) nesta inicialização.`);
-    await syncBoosterAccessRoles(guild).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
+    if (members) {
+      const pairedRoleCount = await syncPairedRoleGrants(guild, members).catch((error) => {
+        console.error("[CARGO-DUPLO] Falha ao sincronizar concessões:", error);
+        return 0;
+      });
+      console.log(`[CARGO-DUPLO] ${pairedRoleCount} membro(s) processado(s) nesta inicialização.`);
+      await syncBoosterAccessRoles(guild, members).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
+    } else {
+      console.error("[CARGO-DUPLO] Sincronização inicial ignorada porque os membros não foram carregados.");
+      console.error("[PRISMA-IA] Sincronização inicial de Boosters ignorada porque os membros não foram carregados.");
+    }
     await syncPunishmentPermissions(guild).catch((error) => console.error("[CASTIGO] Falha ao sincronizar permissões:", error));
   }
   startAiCleanup(ready);

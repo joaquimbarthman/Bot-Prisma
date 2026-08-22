@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Guild, GuildMember } from "discord.js";
+import type { Collection, Guild, GuildMember, Snowflake } from "discord.js";
 import { config } from "../../config.js";
 
 type GrantState = Record<string, string[]>;
@@ -71,9 +71,12 @@ export async function grantPairedRoleOnce(member: GuildMember): Promise<boolean>
   }
 }
 
-export async function syncPairedRoleGrants(guild: Guild): Promise<number> {
+export async function syncPairedRoleGrants(
+  guild: Guild,
+  members?: Collection<Snowflake, GuildMember>,
+): Promise<number> {
   await guild.roles.fetch();
-  const members = await guild.members.fetch();
+  members ??= await guild.members.fetch();
   let processed = 0;
   for (const member of members.values()) {
     if (await grantPairedRoleOnce(member)) processed += 1;
