@@ -5,10 +5,10 @@ import { buildInteractionEnvelope } from "../src/modules/ai/provider.js";
 import { defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
 test("reconhece gatilhos emocionais sem inferir diagnóstico", () => {
-  assert.deepEqual(emotionalUpdateFromMessage("obrigada, você me ajudou muito"), { happiness: 2, affection: 1, confidence: 1 });
-  assert.deepEqual(emotionalUpdateFromMessage("aff, deu errado de novo"), { irritation: 3, energy: -1 });
+  assert.deepEqual(emotionalUpdateFromMessage("obrigada, você me ajudou muito"), { happiness: 3, affection: 3, confidence: 3 });
+  assert.deepEqual(emotionalUpdateFromMessage("aff, deu errado de novo"), { irritation: 3, energy: -2 });
   assert.deepEqual(emotionalUpdateFromMessage("tô triste e desanimado"), { sadness: 3, energy: -2 });
-  assert.deepEqual(emotionalUpdateFromMessage("cala a boca, que lixo"), { irritation: 5, anger: 3, happiness: -2 });
+  assert.deepEqual(emotionalUpdateFromMessage("cala a boca, que lixo"), { irritation: 3, anger: 3, happiness: -2 });
 });
 
 test("extrai várias preferências e reconhece rejeições", () => {

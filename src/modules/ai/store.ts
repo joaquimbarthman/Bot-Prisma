@@ -411,7 +411,11 @@ export async function getEmotionalState(userId: string, now = new Date()): Promi
 
 export async function updateEmotionalState(userId: string, update: PrismaEmotionalUpdate): Promise<void> {
   const current = await getEmotionalState(userId);
-  const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => [key, Number(current[key as keyof PrismaEmotionalState]) + Math.max(-2, Math.min(3, Number(delta) || 0))])) as PrismaEmotionalUpdate;
+  const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => {
+    const requested = Number(delta);
+    const fixedDelta = requested > 0 ? 3 : requested < 0 ? -2 : 0;
+    return [key, Number(current[key as keyof PrismaEmotionalState]) + fixedDelta];
+  })) as PrismaEmotionalUpdate;
   const next = applyEmotionalUpdate(current, absoluteUpdate);
   if (supabase) {
     const { error } = await supabase.from("prisma_emotional_states").upsert({ user_id: userId, happiness: next.happiness, sadness: next.sadness, anger: next.anger, irritation: next.irritation, affection: next.affection, curiosity: next.curiosity, excitement: next.excitement, boredom: next.boredom, confidence: next.confidence, energy: next.energy, updated_at: next.updatedAt }, { onConflict: "user_id" });

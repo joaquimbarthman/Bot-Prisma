@@ -94,6 +94,17 @@ test("toda interação limita aumentos a três e reduções a dois", () => {
   assert.equal(decreased.temperament.affection, 48);
 });
 
+test("temperamento satura em zero e cem", () => {
+  const current = {
+    relationship: defaultRelationship("123"),
+    temperament: { ...defaultTemperament("123"), energy: 99, sarcasm: 1, affection: 100 },
+  };
+  const next = applyValidatedStateUpdate(current, { energy: 100, sarcasm: 0, affection: 100 });
+  assert.equal(next.temperament.energy, 100);
+  assert.equal(next.temperament.sarcasm, 0);
+  assert.equal(next.temperament.affection, 100);
+});
+
 test("resumo sensível é descartado e resumo seguro exige cinco interações", () => {
   const base = { relationship: { ...defaultRelationship("123"), interactionCount: 4 }, temperament: defaultTemperament("123") };
   const accepted = applyValidatedStateUpdate(base, { relationship_summary_candidate: "Conversa bastante e costuma brincar com a Prisma." });
