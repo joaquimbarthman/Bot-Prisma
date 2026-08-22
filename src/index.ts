@@ -13,11 +13,12 @@ import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
+import { handleDirectMessage } from "./modules/direct-message/index.js";
 
 validateConfig();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences],
   partials: [Partials.Channel],
 });
 
@@ -124,6 +125,7 @@ client.on(Events.MessageCreate, async (message) => {
   try {
     void handleBumpMessage(client, message);
     if (message.author.bot) return;
+    if (await handleDirectMessage(message)) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
     if (await handleModerationMessage(client, message)) return;
