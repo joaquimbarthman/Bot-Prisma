@@ -20,20 +20,33 @@ function normalizedSubject(value: string): string {
   return value.replace(/[.!?;]|\s+(?:mas|porém|só que)\s+.*/i, "").replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
+function isExplicitPersonalPreference(clause: string, matchIndex: number): boolean {
+  const prefix = clause.slice(0, matchIndex).replace(/^[\s:,-]+|[\s:,-]+$/g, "");
+  // A forma verbal já é de primeira pessoa. Texto adicional antes dela pode
+  // ser um relato ou uma citação e não deve ser atribuído ao autor.
+  return /^(?:(?:eu|também|realmente|eu\s+também)\s*)?$/i.test(prefix);
+}
+
+function isUsefulPreferenceSubject(subject: string): boolean {
+  if (subject.split(/\s+/).length > 8) return false;
+  return !/^(?:isso|disso|n?isso|aquilo|daquilo|aqui|agora|hoje|ontem|amanhã|dormir(?: agora)?|comer(?: agora)?|tomar banho(?: agora)?|quando\b|se\b|que\b|você\b|voce\b|vc\b)|\b(?:minha|meu)\s+(?:mãe|mae|pai|irmã|irma|irmão|irmao|amig[oa]|namorad[oa])(?:\s|$)/i.test(subject);
+}
+
 function subjectKey(subject: string): string {
   return subject.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\b(?:o|a|os|as|de|do|da)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /** Extrai somente preferências explícitas, duráveis e não sensíveis. */
 export function memoryCandidates(userId: string, content: string, sourceMessageId?: string): PrismaMemory[] {
-  if (content.length > 500 || /https?:\/\/|<@!?\d+>|\b(?:senha|token|cpf|telefone|e-?mail|endere[cç]o)\b/i.test(content)) return [];
+  if (content.length > 500 || /[?"“”]|https?:\/\/|<@!?\d+>|\b(?:senha|token|cpf|telefone|e-?mail|endere[cç]o)\b/i.test(content)) return [];
   const clauses = content.split(/[,\n]|\s+e\s+(?=(?:eu\s+)?(?:gosto|amo|curto|prefiro|odeio|detesto|n[aã]o gosto)\b)/i).slice(0, 6);
   const candidates: PrismaMemory[] = [];
   for (const clause of clauses) {
     const match = clause.match(/\b(?:eu\s+)?(n[aã]o gosto|odeio|detesto|gosto|amo|curto|prefiro)\s+(?:muito\s+)?(?:de\s+|do\s+|da\s+)?(.{3,80})/i);
     if (!match) continue;
+    if (!isExplicitPersonalPreference(clause, match.index ?? 0)) continue;
     const subject = normalizedSubject(match[2]);
-    if (!subject || /^(?:isso|aquilo|aqui|agora|hoje|dormir(?: agora)?|comer(?: agora)?|tomar banho(?: agora)?)$/i.test(subject)) continue;
+    if (!subject || !isUsefulPreferenceSubject(subject)) continue;
     const key = subjectKey(subject);
     if (key.length < 3) continue;
     const negative = /^(?:n[aã]o gosto|odeio|detesto)$/i.test(match[1]);
@@ -47,16 +60,16 @@ export async function learnFromInteraction(input: LearnInput): Promise<void> {
   try {
     const memories = memoryCandidates(input.userId, input.content, input.messageId);
     const interests = memories.filter((memory) => memory.memoryType === "interest" && memory.content.startsWith("Gosta de ")).map((memory) => memory.content.replace(/^Gosta de /, "").replace(/\.$/, ""));
-    const communicationStyle = /\b(?:vc|vdd|pq|tb|n|kkk|mds)\b/i.test(input.content) ? "Informal, usa abreviações e conversa de forma direta." : null;
     const previous = await getPrismaProfile(input.userId);
     const profile: PrismaProfile & { guildId: string } = {
       userId: input.userId, guildId: input.guildId, displayName: input.displayName,
       profileSummary: memories[0] ? `Já comentou que ${memories[0].content.charAt(0).toLocaleLowerCase("pt-BR") + memories[0].content.slice(1)}` : previous?.profileSummary ?? null,
-      communicationStyle: communicationStyle ?? previous?.communicationStyle ?? null,
+      // Uma mensagem isolada não é evidência suficiente para definir o estilo da pessoa.
+      communicationStyle: previous?.communicationStyle ?? null,
       interests: unique([...(previous?.interests ?? []), ...interests]),
-      knownPreferences: unique([...(previous?.knownPreferences ?? []), ...(communicationStyle ? ["Prefere conversa informal e direta."] : [])]),
+      knownPreferences: unique(previous?.knownPreferences ?? []),
     };
-    await upsertPrismaProfile(profile);
+    if (previous || memories.length) await upsertPrismaProfile(profile);
     for (const memory of memories) await upsertPrismaMemory(memory);
     await updateEmotionalState(input.userId, emotionalUpdateFromMessage(input.content));
   } catch (error) {

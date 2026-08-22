@@ -28,3 +28,16 @@ test("não memoriza dados sensíveis ou estados passageiros", () => {
   assert.deepEqual(memoryCandidates("u1", "eu gosto do meu e-mail teste@example.com"), []);
   assert.deepEqual(memoryCandidates("u1", "eu gosto de dormir agora"), []);
 });
+
+test("não atribui à pessoa falas citadas, perguntas ou preferências de terceiros", () => {
+  assert.deepEqual(memoryCandidates("u1", "minha amiga disse que eu gosto de Valorant"), []);
+  assert.deepEqual(memoryCandidates("u1", "ela falou: eu gosto de Fortnite"), []);
+  assert.deepEqual(memoryCandidates("u1", "você acha que eu gosto de Roblox?"), []);
+  assert.deepEqual(memoryCandidates("u1", "eu gosto da minha irmã"), []);
+});
+
+test("não transforma respostas contextuais ou condicionais em memória", () => {
+  assert.deepEqual(memoryCandidates("u1", "eu gosto disso"), []);
+  assert.deepEqual(memoryCandidates("u1", "eu gosto quando você responde assim"), []);
+  assert.deepEqual(memoryCandidates("u1", "talvez eu goste de Minecraft"), []);
+});
