@@ -31,20 +31,20 @@ test("histórico respeita quantidade e orçamento de caracteres", () => {
   assert.equal(selected.at(-1)?.content, entries.at(-1)?.content);
 });
 
-test("define validade menor para eventos e projetos do que para preferências", () => {
+test("limita todos os tipos de memória a 180 dias", () => {
   const base = new Date("2026-08-22T00:00:00.000Z");
   const days = (type: string) => (Date.parse(defaultMemoryValidUntil(type, base)) - base.getTime()) / 86_400_000;
-  assert.equal(days("event"), 30);
+  assert.equal(days("event"), 180);
   assert.equal(days("project"), 180);
   assert.equal(days("goal"), 180);
-  assert.equal(days("relationship"), 365);
-  assert.equal(days("achievement"), 365);
-  assert.equal(days("inside_joke"), 365);
-  assert.equal(days("game"), 730);
-  assert.equal(days("media"), 730);
-  assert.equal(days("hobby"), 730);
-  assert.equal(days("preference"), 730);
-  assert.equal(days("communication"), 730);
+  assert.equal(days("relationship"), 180);
+  assert.equal(days("achievement"), 180);
+  assert.equal(days("inside_joke"), 180);
+  assert.equal(days("game"), 180);
+  assert.equal(days("media"), 180);
+  assert.equal(days("hobby"), 180);
+  assert.equal(days("preference"), 180);
+  assert.equal(days("communication"), 180);
 });
 
 test("deriva interesses e preferências somente das memórias fornecidas", () => {

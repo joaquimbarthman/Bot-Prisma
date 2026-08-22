@@ -42,13 +42,7 @@ set search_path = pg_catalog
 as $$
 begin
   if new.valid_until is null then
-    new.valid_until := now() + case
-      when new.memory_type = 'event' then interval '30 days'
-      when new.memory_type in ('project', 'goal') then interval '180 days'
-      when new.memory_type in ('social', 'relationship', 'achievement', 'routine', 'inside_joke') then interval '365 days'
-      when new.memory_type in ('preference', 'interest', 'media', 'game', 'hobby', 'communication') then interval '730 days'
-      else interval '365 days'
-    end;
+    new.valid_until := now() + interval '180 days';
   end if;
   if new.last_confirmed_at is null then new.last_confirmed_at := now(); end if;
   return new;
@@ -56,10 +50,10 @@ end;
 $$;
 
 update public.prisma_memories
-set valid_until = coalesce(last_confirmed_at, updated_at, created_at, now()) + interval '365 days'
+set valid_until = coalesce(last_confirmed_at, updated_at, created_at, now()) + interval '180 days'
 where memory_type = 'inside_joke'
   and status = 'active'
-  and (valid_until is null or valid_until > coalesce(last_confirmed_at, updated_at, created_at, now()) + interval '365 days');
+  and (valid_until is null or valid_until > coalesce(last_confirmed_at, updated_at, created_at, now()) + interval '180 days');
 
 commit;
 notify pgrst, 'reload schema';

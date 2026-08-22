@@ -279,11 +279,7 @@ function safeMemoryText(value: unknown, maximum = 300): string | null {
 
 /** Validade padrão renovada sempre que uma informação recebe nova evidência. */
 export function defaultMemoryValidUntil(memoryType: string, now = new Date()): string {
-  const days = memoryType === "event" ? 30
-    : memoryType === "project" || memoryType === "goal" ? 180
-      : memoryType === "social" || memoryType === "relationship" || memoryType === "achievement" || memoryType === "routine" || memoryType === "inside_joke" ? 365
-        : ["preference", "interest", "media", "game", "hobby", "communication"].includes(memoryType) ? 730
-          : 365;
+  const days = 180;
   return new Date(now.getTime() + days * 24 * 60 * 60_000).toISOString();
 }
 
@@ -300,7 +296,13 @@ export async function upsertPrismaProfile(profile: PrismaProfile & { guildId?: s
 export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   const content = safeMemoryText(memory.content);
   if (!content) return;
-  const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60), validUntil: memory.validUntil ?? defaultMemoryValidUntil(memory.memoryType) };
+  const validityNow = new Date();
+  const requestedValidity = memory.validUntil ? Date.parse(memory.validUntil) : Number.NaN;
+  const maximumValidity = validityNow.getTime() + 180 * 24 * 60 * 60_000;
+  const validUntil = Number.isFinite(requestedValidity)
+    ? new Date(Math.min(requestedValidity, maximumValidity)).toISOString()
+    : defaultMemoryValidUntil(memory.memoryType, validityNow);
+  const candidate = { ...memory, content, importance: score(memory.importance, 50), confidence: score(memory.confidence, 60), validUntil };
   if (supabase) {
     const lookup = supabase.from("prisma_memories").select("id,content,importance,confidence,occurrence_count,source_message_id,valid_until").eq("user_id", candidate.userId).eq("status", "active");
     const { data: existing, error: readError } = candidate.memoryKey

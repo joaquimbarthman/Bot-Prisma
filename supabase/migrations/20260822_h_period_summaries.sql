@@ -69,7 +69,7 @@ begin
   delete from public.conversation_history where created_at < p_now - interval '48 hours'; get diagnostics v_history = row_count;
   delete from public.ai_events where created_at < p_now - interval '48 hours';
   delete from public.ai_usage where created_at < p_now - interval '90 days';
-  delete from public.prisma_period_summaries where period_type = 'monthly' and period_end < (p_now - interval '730 days')::date; get diagnostics v_periods = row_count;
+  delete from public.prisma_period_summaries where period_type = 'monthly' and period_end < (p_now - interval '365 days')::date; get diagnostics v_periods = row_count;
   update public.prisma_memories set status = 'forgotten', updated_at = p_now where status = 'active' and valid_until is not null and valid_until <= p_now; get diagnostics v_memories = row_count;
   return jsonb_build_object('history_deleted', v_history, 'periods_deleted', v_periods, 'memories_forgotten', v_memories);
 end

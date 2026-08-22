@@ -48,7 +48,7 @@ Os campos `interests` e `known_preferences` não são persistidos no perfil: sã
 
 Memórias possuem ciclo de vida: somente registros `active` entram no contexto; mudanças de opinião arquivam a versão anterior como `superseded`, ligam-na à nova por `superseded_by` e preservam quando ela foi confirmada. Registros com `valid_until` vencido passam para `forgotten` durante a limpeza automática.
 
-A validade é renovada quando surge nova evidência: eventos duram 30 dias, projetos 180 dias, memórias sociais/relacionais 365 dias e preferências, interesses, estilos de comunicação e piadas internas 730 dias. Emoções não usam esse prazo porque possuem decaimento próprio.
+A validade é renovada quando surge nova evidência, e todos os tipos de memória duram no máximo 180 dias desde a confirmação mais recente. Emoções não usam esse prazo porque possuem decaimento próprio.
 
 As mensagens têm ciclos distintos: `conversation_history` retém somente 48 horas para contexto imediato e `prisma_messages` funciona como fila, apagada assim que o dia é resumido. Em `prisma_period_summaries`, os diários com mais de 7 dias viram semanais, os semanais com mais de 90 dias viram mensais e os mensais permanecem por 365 dias.
 
