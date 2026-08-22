@@ -136,6 +136,29 @@ test("adoro também funciona como preferência positiva genérica", () => {
   assert.equal(memories[0]?.content, "Gosta de fotografia.");
 });
 
+test("usa palavra de preferência para ligar avaliação livre a uma música", () => {
+  const memories = memoryCandidates("u1", "pser we cant be friends e muito boa adoro essa da Ariana Grande", "m1");
+  const song = memories.find((item) => item.memoryKey === "preference:song:we cant be friends");
+  assert.equal(song?.memoryType, "interest");
+  assert.equal(song?.content, "Gosta especialmente da música we cant be friends, de Ariana Grande.");
+  assert.equal(song?.sourceMessageId, "m1");
+});
+
+test("não transforma avaliação positiva sem palavra de preferência em memória", () => {
+  assert.deepEqual(memoryCandidates("u1", "we cant be friends é muito boa", "m1"), []);
+});
+
+test("aplica o mesmo gatilho a assuntos genéricos sem tratá-los como música", () => {
+  const fashion = memoryCandidates("u1", "looks dramáticos são perfeitos, eu adoro", "m1")[0];
+  const food = memoryCandidates("u1", "lasanha é muito boa, amo demais", "m2")[0];
+  const game = memoryCandidates("u1", "Valorant é horrível, eu odeio esse jogo", "m3")[0];
+  assert.equal(fashion?.content, "Gosta de looks dramáticos.");
+  assert.equal(fashion?.memoryType, "preference");
+  assert.equal(food?.content, "Gosta de lasanha.");
+  assert.equal(game?.content, "Não gosta de Valorant.");
+  assert.equal(game?.memoryType, "interest");
+});
+
 test("valida memórias propostas pela IA e separa listas livres", () => {
   const memories = validatedAiMemoryCandidates("u1", [
     { memoryType: "interest", subject: "espaço", content: "Gosta do espaço", importance: 65, confidence: 91 },

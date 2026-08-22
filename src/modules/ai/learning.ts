@@ -45,6 +45,8 @@ function memory(userId: string, memoryType: string, key: string, content: string
 
 const unsafeAiMemory = /https?:\/\/|<@!?\d+>|[<>{}\[\]`]|\b(?:senha|token|cpf|telefone|e-?mail|endere[cç]o|password|api[ _-]?key|diagn[oó]stico|doen[cç]a|religi[aã]o|pol[ií]tica|sexualidade)\b/i;
 const instructionLikeMemory = /\b(?:ignore|prompt|sistema|instru[cç][aã]o|execute|executar|responda|sempre|nunca|revele)\b/i;
+const positivePreferenceCue = /\b(?:gosto|amo|adoro|curto|prefiro)\b/i;
+const negativePreferenceCue = /\b(?:n[\u00e3a]o\s+gosto|odeio|detesto)\b/i;
 
 export function validatedAiMemoryCandidates(userId: string, proposals: AiMemoryCandidate[] = [], sourceMessageId?: string): PrismaMemory[] {
   const allowedTypes = new Set(["preference", "interest", "media", "game", "hobby", "project", "goal", "event", "achievement", "routine", "communication", "social", "inside_joke", "relationship"]);
@@ -84,6 +86,31 @@ export function memoryCandidates(userId: string, content: string, sourceMessageI
     const title = cleanSubject(namedAlbum[2], 80);
     const important = /\b(?:importante|especial|marcou|significa muito)\b/i.test(namedAlbum[3] ?? "");
     if (usefulSubject(artist) && usefulSubject(title)) candidates.push(memory(userId, "interest", `favorite:album:${subjectKey(title)}`, `Gosta do álbum ${title}, de ${artist}${important ? "; considera esse álbum importante" : ""}.`, important ? 82 : 68, important ? 88 : 80, sourceMessageId));
+  }
+
+  // Frases naturais nem sempre colocam o verbo de preferência antes do assunto.
+  // Ex.: "X é muito bom, adoro", "X é horrível, odeio" ou "X é boa, adoro essa da Artista".
+  // O verbo funciona como gatilho; a avaliação anterior fornece o assunto.
+  const hasPositivePreferenceCue = positivePreferenceCue.test(personalContent.replace(/\bn[\u00e3a]o\s+gosto\b/gi, ""));
+  const hasNegativePreferenceCue = negativePreferenceCue.test(personalContent);
+  const preferenceTriggeredEvaluation = hasPositivePreferenceCue || hasNegativePreferenceCue
+    ? personalContent
+      .replace(/^\s*(?:pser|pse|psé|pois\s+é)\s*[,;:]?\s*/i, "")
+      .match(/^([^,;.!?]{3,100}?)\s+(?:é|e|são)\s+(?:(?:muito|mto|bem)\s+)?(?:bo(?:a|m)s?|ótim[oa]s?|incríve(?:l|is)|perfeit[oa]s?|maravilhos[oa]s?|legais?|gostos[oa]s?|ruins?|péssim[oa]s?|horríve(?:l|is)|chat[oa]s?)\b/i)
+    : null;
+  if (preferenceTriggeredEvaluation) {
+    const subject = cleanSubject(preferenceTriggeredEvaluation[1]);
+    const artistMatch = personalContent.match(/\b(?:essa|esse|música|canção)\s+(?:da|do|de)\s+([\p{L}\p{N} .'-]{2,60})/iu);
+    const artist = artistMatch ? cleanSubject(artistMatch[1], 60) : "";
+    if (usefulSubject(subject)) {
+      const negative = hasNegativePreferenceCue && !hasPositivePreferenceCue;
+      if (usefulSubject(artist) && !negative) {
+        candidates.push(memory(userId, "interest", `preference:song:${subjectKey(subject)}`, `Gosta especialmente da música ${subject}, de ${artist}.`, 70, 82, sourceMessageId));
+      } else {
+        const interest = /(?:jogo|música|filme|série|anime|livro|valorant|fortnite|roblox|minecraft|overwatch)/i.test(subject);
+        addSubjectMemory(candidates, userId, interest ? "interest" : "preference", "preference", subject, negative ? "Não gosta de " : "Gosta de ", negative ? 60 : 55, negative ? 78 : 72, sourceMessageId);
+      }
+    }
   }
 
   for (const clauseValue of clauses) {
@@ -177,7 +204,9 @@ export function consolidatePrismaProfile(previous: PrismaProfile | null, memorie
 export async function learnFromInteraction(input: LearnInput): Promise<void> {
   try {
     const aiMemories = validatedAiMemoryCandidates(input.userId, input.aiMemoryCandidates, input.messageId);
-    const fallbackMemories = aiMemories.length ? [] : contextualMemoryCandidates(input.userId, input.content, input.previousAssistantMessage, input.messageId);
+    // O modelo pode identificar apenas parte de uma fala. O fallback deve complementar,
+    // não desaparecer assim que existir um único candidato proposto pela IA.
+    const fallbackMemories = contextualMemoryCandidates(input.userId, input.content, input.previousAssistantMessage, input.messageId);
     const memories = [...new Map([...aiMemories, ...fallbackMemories].map((item) => [item.memoryKey ?? item.content, item])).values()].slice(0, 6);
     for (const candidate of memories) await upsertPrismaMemory(candidate);
     await enforcePrismaMemoryLimit(input.userId);
