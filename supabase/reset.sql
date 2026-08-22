@@ -24,6 +24,7 @@ drop table if exists public.conversation_history cascade;
 drop table if exists public.prisma_temperament cascade;
 drop table if exists public.prisma_relationships cascade;
 drop table if exists public.prisma_operator_rules cascade;
+drop table if exists public.prisma_self_learnings cascade;
 drop table if exists public.user_settings cascade;
 
 commit;

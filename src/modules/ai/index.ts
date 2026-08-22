@@ -11,6 +11,7 @@ import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
+import { summarizeCompletedConversationDays } from "./daily-summary.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -33,7 +34,9 @@ export function startAiCleanup(client: Client): void {
   checkSupabaseConnection().catch((error) => console.error("[SUPABASE] Falha no teste de conexão:", error));
   refreshAiPanel(client).catch((error) => console.error("[PRISMA-IA] Falha ao atualizar painel:", error));
   cleanupExpired().catch(console.error);
+  summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error));
   setInterval(() => cleanupExpired().catch(console.error), 60 * 60_000).unref();
+  setInterval(() => summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error)), 60 * 60_000).unref();
   setTimeout(() => sendOccasionalAbsenceMessage(client).catch(console.error), 5 * 60_000).unref();
   setInterval(() => sendOccasionalAbsenceMessage(client).catch(console.error), 60 * 60_000).unref();
   getPrismaThought(config.prismaAi.operatorUserId)
@@ -294,7 +297,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     }
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
     const prismaState = await getPrismaState(message.author.id);
-    const { learnedProfile, relevantMemories, emotionalState } = await buildPrismaPersonalContext(message.author.id, settings, content);
+    const { learnedProfile, relevantMemories, emotionalState, dailySummaries, selfLearnings } = await buildPrismaPersonalContext(message.author.id, settings, content);
     const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
@@ -308,6 +311,8 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       currentAuthorId: message.author.id,
       learnedProfile,
       relevantMemories,
+      dailySummaries,
+      selfLearnings,
       emotionalState,
       operatorRules: operatorRules.map((item) => item.rule),
       currentThought,

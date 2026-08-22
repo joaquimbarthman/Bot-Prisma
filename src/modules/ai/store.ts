@@ -29,8 +29,10 @@ export type PrismaProfile = { userId: string; displayName: string | null; profil
 export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null; memoryKey?: string; occurrenceCount?: number; lastSeenAt?: string };
 export type PrismaMessage = { messageId: string; guildId: string; channelId: string; userId: string; content: string; authorIsPrisma: boolean; replyToMessageId?: string | null; createdAt: string };
 export type PrismaDailySummary = { userId: string; summaryDate: string; summary: string; updatedAt?: string };
+export type PrismaDailyBatch = { userId: string; summaryDate: string; messages: PrismaMessage[] };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 export type PrismaOperatorRule = { id?: number; ownerId: string; rule: string; createdAt: string };
+export type PrismaSelfLearning = { id?: number; learningKey: string; category: string; insight: string; confidence: number; evidenceCount: number; status: "candidate" | "active" | "rejected"; lastObservedAt?: string };
 type SpontaneousEvent = { discordId: string; createdAt: string };
 type Database = {
   settings: Record<string, UserSettings>;
@@ -45,6 +47,7 @@ type Database = {
   prismaMessages?: PrismaMessage[];
   dailySummaries?: PrismaDailySummary[];
   operatorRules?: PrismaOperatorRule[];
+  selfLearnings?: PrismaSelfLearning[];
 };
 
 const defaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
@@ -212,10 +215,11 @@ async function readLocal(): Promise<Database> {
       spontaneous: parsed.spontaneous ?? [],
       profiles: parsed.profiles ?? {}, memories: parsed.memories ?? [],
       emotionalStates: parsed.emotionalStates ?? {}, prismaMessages: parsed.prismaMessages ?? [], dailySummaries: parsed.dailySummaries ?? [],
+      selfLearnings: parsed.selfLearnings ?? [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [], profiles: {}, memories: [], emotionalStates: {}, prismaMessages: [], dailySummaries: [] };
+      return { settings: {}, relationships: {}, temperaments: {}, history: [], usage: [], spontaneous: [], profiles: {}, memories: [], emotionalStates: {}, prismaMessages: [], dailySummaries: [], selfLearnings: [] };
     }
     throw error;
   }
@@ -353,6 +357,95 @@ export async function addPrismaMessage(message: PrismaMessage): Promise<void> {
   await withLocal(db => { const messages = db.prismaMessages ??= []; if (!messages.some(item => item.messageId === message.messageId)) messages.push({ ...message, content }); }, true);
 }
 
+function dateInTimezone(value: string, timezone: string): string {
+  return new Date(value).toLocaleDateString("en-CA", { timeZone: timezone });
+}
+
+export async function completedDailyMessageBatches(timezone: string, now = new Date()): Promise<PrismaDailyBatch[]> {
+  const today = now.toLocaleDateString("en-CA", { timeZone: timezone });
+  let messages: PrismaMessage[];
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_messages").select("*").lt("created_at", now.toISOString()).order("created_at", { ascending: true }).limit(2_000);
+    if (error) { remoteFailure("ler mensagens para resumo diário", error.message); return []; }
+    messages = (data ?? []).map((row) => ({ messageId: row.message_id, guildId: row.guild_id, channelId: row.channel_id, userId: row.user_id, content: row.content, authorIsPrisma: row.author_is_prisma, replyToMessageId: row.reply_to_message_id, createdAt: row.created_at }));
+  } else {
+    messages = await withLocal((db) => [...(db.prismaMessages ?? [])]);
+  }
+  const groups = new Map<string, PrismaDailyBatch>();
+  for (const message of messages) {
+    const summaryDate = dateInTimezone(message.createdAt, timezone);
+    if (summaryDate >= today) continue;
+    const key = `${message.userId}:${summaryDate}`;
+    const batch = groups.get(key) ?? { userId: message.userId, summaryDate, messages: [] };
+    batch.messages.push(message); groups.set(key, batch);
+  }
+  return [...groups.values()].slice(0, 100);
+}
+
+export async function saveDailySummaryAndDeleteMessages(batch: PrismaDailyBatch, summary: string): Promise<boolean> {
+  const safe = safeMemoryText(summary, 1_200);
+  if (!safe || !batch.messages.length) return false;
+  const messageIds = batch.messages.map((message) => message.messageId);
+  const now = new Date().toISOString();
+  if (supabase) {
+    const { error: summaryError } = await supabase.from("prisma_daily_summaries").upsert({ user_id: batch.userId, summary_date: batch.summaryDate, summary: safe, updated_at: now }, { onConflict: "user_id,summary_date" });
+    if (summaryError) { remoteFailure("salvar resumo diário", summaryError.message); return false; }
+    const { error: deleteError } = await supabase.from("prisma_messages").delete().in("message_id", messageIds);
+    if (deleteError) { remoteFailure("apagar mensagens já resumidas", deleteError.message); return false; }
+    return true;
+  }
+  return withLocal((db) => {
+    const summaries = db.dailySummaries ??= [];
+    const existing = summaries.find((item) => item.userId === batch.userId && item.summaryDate === batch.summaryDate);
+    if (existing) Object.assign(existing, { summary: safe, updatedAt: now });
+    else summaries.push({ userId: batch.userId, summaryDate: batch.summaryDate, summary: safe, updatedAt: now });
+    const ids = new Set(messageIds);
+    db.prismaMessages = (db.prismaMessages ?? []).filter((message) => !ids.has(message.messageId));
+    return true;
+  }, true);
+}
+
+export async function recentDailySummaries(userId: string, limit = 7): Promise<PrismaDailySummary[]> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_daily_summaries").select("user_id,summary_date,summary,updated_at").eq("user_id", userId).order("summary_date", { ascending: false }).limit(limit);
+    if (error) { remoteFailure("ler resumos diários", error.message); return []; }
+    return (data ?? []).map((row) => ({ userId: row.user_id, summaryDate: row.summary_date, summary: row.summary, updatedAt: row.updated_at }));
+  }
+  return withLocal((db) => (db.dailySummaries ?? []).filter((item) => item.userId === userId).sort((a, b) => b.summaryDate.localeCompare(a.summaryDate)).slice(0, limit));
+}
+
+export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">): Promise<void> {
+  const now = new Date().toISOString();
+  if (supabase) {
+    const { data: existing, error: readError } = await supabase.from("prisma_self_learnings").select("id,confidence,evidence_count,status").eq("learning_key", candidate.learningKey).maybeSingle();
+    if (readError) { remoteFailure("ler autoaprendizado", readError.message); return; }
+    const evidenceCount = (Number(existing?.evidence_count) || 0) + 1;
+    const row = { learning_key: candidate.learningKey, category: candidate.category, insight: candidate.insight, confidence: Math.min(100, Math.max(candidate.confidence, Number(existing?.confidence) || 0) + (existing ? 5 : 0)), evidence_count: evidenceCount, status: existing?.status === "rejected" ? "rejected" : evidenceCount >= 2 ? "active" : "candidate", last_observed_at: now, updated_at: now };
+    const { error } = existing ? await supabase.from("prisma_self_learnings").update(row).eq("id", existing.id) : await supabase.from("prisma_self_learnings").insert(row);
+    if (error) remoteFailure("salvar autoaprendizado", error.message);
+    return;
+  }
+  await withLocal((db) => {
+    const items = db.selfLearnings ??= [];
+    const existing = items.find((item) => item.learningKey === candidate.learningKey);
+    if (existing) {
+      if (existing.status === "rejected") return;
+      existing.insight = candidate.insight; existing.category = candidate.category;
+      existing.evidenceCount += 1; existing.confidence = Math.min(100, Math.max(existing.confidence, candidate.confidence) + 5);
+      existing.status = existing.evidenceCount >= 2 ? "active" : "candidate"; existing.lastObservedAt = now;
+    } else items.push({ ...candidate, evidenceCount: 1, status: "candidate", lastObservedAt: now });
+  }, true);
+}
+
+export async function listActiveSelfLearnings(limit = 12): Promise<PrismaSelfLearning[]> {
+  if (supabase) {
+    const { data, error } = await supabase.from("prisma_self_learnings").select("*").eq("status", "active").order("confidence", { ascending: false }).limit(limit);
+    if (error) { remoteFailure("ler autoaprendizados ativos", error.message); return []; }
+    return (data ?? []).map((row) => ({ id: row.id, learningKey: row.learning_key, category: row.category, insight: row.insight, confidence: Number(row.confidence), evidenceCount: Number(row.evidence_count), status: row.status, lastObservedAt: row.last_observed_at }));
+  }
+  return withLocal((db) => (db.selfLearnings ?? []).filter((item) => item.status === "active").sort((a, b) => b.confidence - a.confidence).slice(0, limit));
+}
+
 async function saveLocal(db: Database): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
@@ -470,8 +563,9 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("prisma_operator_rules").select("id").limit(1),
     supabase.from("gallery_posts").select("message_id").limit(1),
     supabase.from("lfg_sessions").select("id").limit(1),
+    supabase.from("prisma_self_learnings").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions"];
+  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_temperament", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
@@ -769,11 +863,13 @@ export async function addSpontaneous(id: string): Promise<void> {
 export async function cleanupExpired(): Promise<void> {
   const historyCutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString();
   const usageCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString();
+  const summaryCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString().slice(0, 10);
   if (supabase) {
     const results = await Promise.all([
       supabase.from("conversation_history").delete().lt("created_at", historyCutoff),
       supabase.from("ai_events").delete().lt("created_at", historyCutoff),
       supabase.from("ai_usage").delete().lt("created_at", usageCutoff),
+      supabase.from("prisma_daily_summaries").delete().lt("summary_date", summaryCutoff),
     ]);
     const error = results.find((result) => result.error)?.error;
     if (error) remoteFailure("limpeza automática", error.message);
@@ -782,5 +878,6 @@ export async function cleanupExpired(): Promise<void> {
     db.history = db.history.filter((item) => item.createdAt >= historyCutoff);
     db.spontaneous = db.spontaneous.filter((item) => item.createdAt >= historyCutoff);
     db.usage = db.usage.filter((item) => item.createdAt >= usageCutoff);
+    db.dailySummaries = (db.dailySummaries ?? []).filter((item) => item.summaryDate >= summaryCutoff);
   }, true);
 }
