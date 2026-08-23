@@ -20,7 +20,7 @@ import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { defaultEmotionalState, type PrismaEmotionalState } from "./emotional-state.js";
-import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
+import { safeAboutMe, type PrismaRelationship } from "./state.js";
 import { clearNickname, clearUserHistory, deletePrismaUserData, getEmotionalState, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
 
 export function publicPanelComponents(): APIContainerComponent[] {
@@ -112,10 +112,6 @@ function progressBar(value: number): string {
   return `${"▰".repeat(filled)}${"▱".repeat(10 - filled)}`;
 }
 
-function sentenceCase(value: string): string {
-  return value ? value.charAt(0).toLocaleUpperCase("pt-BR") + value.slice(1) : value;
-}
-
 const feelingLabels: Array<[keyof Omit<PrismaEmotionalState, "userId" | "updatedAt">, string]> = [
   ["anger", "Raiva"], ["irritation", "Irritação"], ["sadness", "Tristeza"], ["happiness", "Felicidade"],
   ["affection", "Carinho"], ["excitement", "Entusiasmo"], ["curiosity", "Curiosidade"], ["boredom", "Tédio"],
@@ -142,14 +138,10 @@ export function shortAboutMe(value: string, maximum = 40): string {
 export function userPanelComponents(
   user: Interaction["user"],
   settings: UserSettings,
-  relationship: PrismaRelationship,
+  _relationship: PrismaRelationship,
   emotionalState: PrismaEmotionalState = defaultEmotionalState(user.id),
 ): APIContainerComponent[] {
   const status = (enabled: boolean) => enabled ? "🟢 Ativada" : "⚪ Desativada";
-  const relationshipScore = relationshipPercentage(relationship);
-  const relationshipLabel = sentenceCase(qualitativeRelationship(relationship));
-  const relationshipView = relationship.relationshipSummary
-    || "Ainda estou conhecendo você e formando minha impressão.";
   const feeling = currentFeeling(emotionalState);
   return [{
     type: ComponentType.Container,
@@ -170,7 +162,7 @@ export function userPanelComponents(
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Vínculo com a Prisma\n**${relationshipLabel}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n**Sentimento atual por você ・ ${feeling.label}**\n${progressBar(feeling.value)}　**${feeling.value}%**\n\n> ${relationshipView}\n\n-# ${relationship.interactionCount} interações registradas`,
+        content: `### Sentimento atual por você ・ ${feeling.label}\n${progressBar(feeling.value)}　**${feeling.value}%**`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {

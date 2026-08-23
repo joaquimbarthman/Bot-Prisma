@@ -34,16 +34,14 @@ test("painel adaptativo remove personalidade e humor manuais", () => {
   assert.ok(!ids.includes("prisma-ai:personality"));
 });
 
-test("painel privado mantém o vínculo e exibe a frase de percepção da Prisma", () => {
+test("painel privado exibe somente o sentimento no bloco emocional", () => {
   const container = userPanelComponents(mockUser, settings, defaultRelationship("123"))[0];
   assert.equal(container.type, 17);
   assert.ok(container.components.filter((component) => component.type === 14).length >= 3);
   assert.ok(container.components.some((component) => component.type === 1));
   const serialized = JSON.stringify(container);
-  assert.match(serialized, /Ainda estou conhecendo você e formando minha impressão\./);
-  assert.match(serialized, /Vínculo com a Prisma/);
   assert.match(serialized, /Sentimento atual por você ・ Neutro/);
-  assert.match(serialized, /interações registradas/);
+  assert.doesNotMatch(serialized, /Vínculo com a Prisma|Criando confiança|dinâmica equilibrada|interações registradas/);
   assert.doesNotMatch(serialized, /Somente você pode ver/);
 });
 
@@ -73,7 +71,7 @@ test("resume o sobre mim no painel sem alterar o texto armazenado", () => {
   assert.equal(shortAboutMe("Curto RPG"), "Curto RPG");
 });
 
-test("exibe a evolução junto da percepção dinâmica", () => {
+test("mantém o cálculo interno do vínculo sem exibi-lo no painel", () => {
   assert.equal(relationshipPercentage(defaultRelationship("123")), 0);
   assert.equal(relationshipPercentage({
     ...defaultRelationship("123"),
@@ -82,12 +80,6 @@ test("exibe a evolução junto da percepção dinâmica", () => {
     trust: 100,
     banter: 100,
   }), 100);
-  const relationship = {
-    ...defaultRelationship("123"),
-    relationshipSummary: "Eu vejo você como alguém divertido e gosto da nossa conversa leve.",
-  };
-  const serialized = JSON.stringify(userPanelComponents(mockUser, settings, relationship)[0]);
-  assert.match(serialized, /Eu vejo você como alguém divertido e gosto da nossa conversa leve\./);
-  assert.match(serialized, /Vínculo com a Prisma/);
-  assert.match(serialized, /%/);
+  const serialized = JSON.stringify(userPanelComponents(mockUser, settings, defaultRelationship("123"))[0]);
+  assert.doesNotMatch(serialized, /Vínculo com a Prisma|dinâmica equilibrada/);
 });

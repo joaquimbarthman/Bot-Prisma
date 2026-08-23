@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v4.9";
+export const PRISMA_AI_VERSION = "v5.0";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Painel pessoal simplificado para destacar somente o sentimento atual da Prisma pela pessoa, removendo a pontuação e os detalhes visíveis do vínculo.",
   "O painel pessoal agora mostra o sentimento predominante da Prisma por cada pessoa, com nome, intensidade percentual e uma barra visual atualizada.",
   "Reciprocidade imediata de tom: quando alguém for diretamente grosso ou desrespeitoso, a Prisma pode responder com firmeza e grosseria proporcional no mesmo turno, sem esperar a próxima mensagem.",
   "Emoções mais dinâmicas: cada interação agora pode variar os estados emocionais entre +10 e -5 pontos conforme a intensidade real da mensagem.",
