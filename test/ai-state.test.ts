@@ -51,11 +51,14 @@ test("interação neutra não aumenta confiança automaticamente", () => {
   assert.equal(result.relationship.interactionCount, 1);
 });
 
-test("sinais relacionais usam passos fixos de mais três e menos dois", () => {
+test("sinais relacionais sobem de zero a três e descem dois pontos fixos", () => {
   const state = { relationship: { ...defaultRelationship("123"), familiarity: 10, warmth: 10, trust: 10 }, temperament: defaultTemperament("123") };
   const positive = applyValidatedStateUpdate(state, { familiarity_delta: 1, trust_delta: 1 });
-  assert.equal(positive.relationship.familiarity, 13);
-  assert.equal(positive.relationship.trust, 13);
+  assert.equal(positive.relationship.familiarity, 11);
+  assert.equal(positive.relationship.trust, 11);
+  const strongerPositive = applyValidatedStateUpdate(state, { familiarity_delta: 2, trust_delta: 3 });
+  assert.equal(strongerPositive.relationship.familiarity, 12);
+  assert.equal(strongerPositive.relationship.trust, 13);
   const negative = applyValidatedStateUpdate(state, { warmth_delta: -1, trust_delta: -1 });
   assert.equal(negative.relationship.warmth, 8);
   assert.equal(negative.relationship.trust, 8);

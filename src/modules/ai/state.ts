@@ -216,14 +216,14 @@ export function applyValidatedStateUpdate(
     .some((delta) => delta !== undefined && delta < 0);
   const fixedDelta = (delta: number | undefined, neutralGrowth = 0): number => {
     if (delta === undefined) return hasNegativeSignal ? 0 : neutralGrowth;
-    if (delta > 0) return 3;
+    if (delta > 0) return delta;
     if (delta < 0) return -2;
     return 0;
   };
   const relationship: PrismaRelationship = {
     ...state.relationship,
     // Conversar diretamente cria reconhecimento e receptividade aos poucos.
-    // Sinais explícitos usam passos fixos para tornar a evolução previsível.
+    // Sinais explícitos positivos variam de 0 a 3; os negativos recuam 2 pontos.
     familiarity: clampScore(state.relationship.familiarity + fixedDelta(update.familiarityDelta, 1)),
     warmth: clampScore(state.relationship.warmth + fixedDelta(update.warmthDelta, 1)),
     patience: clampScore(state.relationship.patience + fixedDelta(update.patienceDelta)),
