@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v4.6";
+export const PRISMA_AI_VERSION = "v4.7";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Emoções mais dinâmicas: cada interação agora pode variar os estados emocionais entre +10 e -5 pontos conforme a intensidade real da mensagem.",
   "O modo de ignorância total agora entende e pode usar abreviações naturais de palavrões, mantendo o mesmo limite contextual e todas as proteções de segurança.",
   "Novo modo de ignorância total para provocações insistentes, permitindo respostas e xingamentos mais pesados sem liberar ameaças, conteúdo sexual, preconceito, discurso de ódio ou ataques a grupos protegidos.",
   "Temperamento mais autêntico em conflitos: apó provocações ou desrespeito insistentes, a Prisma pode perder a paciência, responder com firmeza e comprar a briga verbalmente, sem abandonar as regras de segurança.",

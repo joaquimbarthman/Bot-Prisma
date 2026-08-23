@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyEmotionalUpdate, clampEmotion, decayEmotionalState, defaultEmotionalState } from "../src/modules/ai/emotional-state.js";
+import { applyEmotionalUpdate, clampEmotion, decayEmotionalState, defaultEmotionalState, validateEmotionalUpdate } from "../src/modules/ai/emotional-state.js";
+
+test("deltas emocionais variam entre menos cinco e mais dez", () => {
+  assert.deepEqual(validateEmotionalUpdate({ happiness_delta: 7, anger_delta: -4 }), { happiness: 7, anger: -4 });
+  assert.deepEqual(validateEmotionalUpdate({ happiness_delta: 99, anger_delta: -99 }), { happiness: 10, anger: -5 });
+});
 
 test("estado emocional respeita limites", () => {
   assert.equal(clampEmotion(-10), 0);

@@ -413,8 +413,8 @@ export async function updateEmotionalState(userId: string, update: PrismaEmotion
   const current = await getEmotionalState(userId);
   const absoluteUpdate = Object.fromEntries(Object.entries(update).map(([key, delta]) => {
     const requested = Number(delta);
-    const fixedDelta = requested > 0 ? 3 : requested < 0 ? -2 : 0;
-    return [key, Number(current[key as keyof PrismaEmotionalState]) + fixedDelta];
+    const boundedDelta = Math.max(-5, Math.min(10, Math.round(requested)));
+    return [key, Number(current[key as keyof PrismaEmotionalState]) + boundedDelta];
   })) as PrismaEmotionalUpdate;
   const next = applyEmotionalUpdate(current, absoluteUpdate);
   if (supabase) {

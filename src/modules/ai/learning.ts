@@ -24,10 +24,10 @@ export function emotionalUpdateFromMessage(content: string): PrismaEmotionalUpda
   if (/\b(?:t[ôo] trist[ea]|dia ruim|desanimad[oa]|n[ãa]o tenho vontade)\b/i.test(content)) Object.assign(update, { sadness: 3, energy: -2 });
   if (/\b(?:tanto faz|sei l[áa]|chato)\b/i.test(content)) Object.assign(update, { boredom: 3, excitement: -2 });
   if (/\b(?:cala a boca|idiota|burr[ao]|lixo)\b/i.test(content)) Object.assign(update, { irritation: 5, anger: 3, happiness: -2 });
-  return Object.fromEntries(Object.entries(update).map(([key, delta]) => {
-    const requested = Number(delta);
-    return [key, requested > 0 ? 3 : requested < 0 ? -2 : 0];
-  })) as PrismaEmotionalUpdate;
+  return Object.fromEntries(Object.entries(update).map(([key, delta]) => [
+    key,
+    Math.max(-5, Math.min(10, Math.round(Number(delta)))),
+  ])) as PrismaEmotionalUpdate;
 }
 
 function cleanSubject(value: string, maximum = 80): string {

@@ -118,14 +118,14 @@ test("mantém reply válida quando state_update é inválido", () => {
   assert.deepEqual(output.stateUpdate, {});
 });
 
-test("interpreta atualização emocional estruturada com passos fixos", () => {
+test("interpreta atualização emocional estruturada com intensidade variável", () => {
   const output = parseProviderOutput(JSON.stringify({
     reply: "entendi",
     state_update: {},
-    emotional_update: { happiness_delta: 1, sadness_delta: -1, excitement_delta: 3 },
+    emotional_update: { happiness_delta: 7, sadness_delta: -4, excitement_delta: 10 },
     memory_candidates: [],
   }));
-  assert.deepEqual(output.emotionalUpdate, { happiness: 3, sadness: -2, excitement: 3 });
+  assert.deepEqual(output.emotionalUpdate, { happiness: 7, sadness: -4, excitement: 10 });
 });
 
 test("mantém texto não confiável fora das instructions", () => {

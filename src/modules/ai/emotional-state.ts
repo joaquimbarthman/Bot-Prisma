@@ -24,7 +24,7 @@ export function validateEmotionalUpdate(value: unknown): PrismaEmotionalUpdate {
   for (const key of emotionalKeys) {
     const delta = source[`${key}_delta`];
     if (typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) continue;
-    update[key] = delta > 0 ? 3 : -2;
+    update[key] = Math.max(-5, Math.min(10, Math.round(delta)));
   }
   return update;
 }
