@@ -2,7 +2,7 @@ import { enforcePrismaMemoryLimit, getPrismaProfile, listPrismaMemories, upsertP
 import type { PrismaEmotionalUpdate } from "./emotional-state.js";
 import type { AiMemoryCandidate } from "./provider.js";
 
-type LearnInput = { userId: string; guildId: string; displayName: string; content: string; reply: string; messageId?: string; previousAssistantMessage?: string; aiMemoryCandidates?: AiMemoryCandidate[] };
+type LearnInput = { userId: string; guildId: string; displayName: string; content: string; reply: string; messageId?: string; previousAssistantMessage?: string; aiMemoryCandidates?: AiMemoryCandidate[]; aiEmotionalUpdate?: PrismaEmotionalUpdate };
 
 const sensitiveOrUnsafe = /https?:\/\/|<@!?\d+>|\b(?:senha|token|cpf|telefone|e-?mail|endere[cç]o|password|api[ _-]?key)\b/i;
 const transientSubject = /^(?:isso|disso|n?isso|aquilo|daquilo|aqui|agora|hoje|ontem|amanhã|dormir(?: agora)?|comer(?: agora)?|tomar banho(?: agora)?|quando\b|se\b|que\b|você\b|voce\b|vc\b)|\b(?:minha|meu)\s+(?:mãe|mae|pai|irmã|irma|irmão|irmao|amig[oa]|namorad[oa])(?:\s|$)/i;
@@ -18,8 +18,8 @@ function unique(values: string[], limit = 12): string[] {
 
 export function emotionalUpdateFromMessage(content: string): PrismaEmotionalUpdate {
   const update: PrismaEmotionalUpdate = {};
-  if (/\b(?:obrigad[oa]|amei|adorei|te adoro|você é incr[ií]vel|me ajudou|kkkk|kkk)\b/i.test(content)) Object.assign(update, { happiness: 2, affection: 1, confidence: 1 });
-  if (/\b(?:olha isso|tenho uma ideia|bora jogar|finalmente)\b|!{2,}/i.test(content)) Object.assign(update, { curiosity: 2, excitement: 2, energy: 1 });
+  if (/\b(?:obrigad[oa]|amei|adorei|te adoro|adoro (?:falar|conversar) com (?:voc[eê]|vc)|voc[eê] [ée] incr[ií]vel|me ajudou|me ajuda(?:m)?|fico (?:muito )?feliz|kkkk|kkk)\b/i.test(content)) Object.assign(update, { happiness: 2, affection: 1, confidence: 1 });
+  if (/\b(?:olha isso|tenho uma ideia|bora jogar|finalmente|(?:t[oô]|estou) animad[oa]|animad[oa] (?:pra|para))\b|!{2,}/i.test(content)) Object.assign(update, { curiosity: 2, excitement: 2, energy: 1 });
   if (/\b(?:aff|que saco|n[ãa]o aguento|deu errado|t[ôo] irritad[oa])\b/i.test(content)) Object.assign(update, { irritation: 3, energy: -1 });
   if (/\b(?:t[ôo] trist[ea]|dia ruim|desanimad[oa]|n[ãa]o tenho vontade)\b/i.test(content)) Object.assign(update, { sadness: 3, energy: -2 });
   if (/\b(?:tanto faz|sei l[áa]|chato)\b/i.test(content)) Object.assign(update, { boredom: 3, excitement: -2 });
@@ -218,7 +218,9 @@ export async function learnFromInteraction(input: LearnInput): Promise<void> {
       const allMemories = await listPrismaMemories(input.userId);
       await upsertPrismaProfile({ ...consolidatePrismaProfile(previous, allMemories, input.userId, input.displayName), guildId: input.guildId });
     }
-    await updateEmotionalState(input.userId, emotionalUpdateFromMessage(input.content));
+    const semanticEmotion = input.aiEmotionalUpdate ?? {};
+    const emotionalUpdate = Object.keys(semanticEmotion).length ? semanticEmotion : emotionalUpdateFromMessage(input.content);
+    await updateEmotionalState(input.userId, emotionalUpdate);
   } catch (error) {
     console.error("[PRISMA-LEARNING] Falha não bloqueante ao aprender interação:", error);
   }

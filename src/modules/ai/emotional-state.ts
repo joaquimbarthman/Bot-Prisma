@@ -17,6 +17,18 @@ export type PrismaEmotionalUpdate = Partial<Omit<PrismaEmotionalState, "userId" 
 
 const emotionalKeys = ["happiness", "sadness", "anger", "irritation", "affection", "curiosity", "excitement", "boredom", "confidence", "energy"] as const;
 
+export function validateEmotionalUpdate(value: unknown): PrismaEmotionalUpdate {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const source = value as Record<string, unknown>;
+  const update: PrismaEmotionalUpdate = {};
+  for (const key of emotionalKeys) {
+    const delta = source[`${key}_delta`];
+    if (typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) continue;
+    update[key] = delta > 0 ? 3 : -2;
+  }
+  return update;
+}
+
 export function clampEmotion(value: unknown, fallback = 0): number {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : fallback;

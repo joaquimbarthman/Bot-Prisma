@@ -85,7 +85,7 @@ export const config = {
     personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/personality/prisma.json",
     soulPath: process.env.PRISMA_SOUL_PATH?.trim() || "data/personality/prisma.json",
     reasoningEffort: process.env.AI_REASONING_EFFORT?.trim() || "minimal",
-    maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 300),
+    maxOutputTokens: integer("AI_MAX_OUTPUT_TOKENS", 450),
     historyMaxMessages: integer("AI_HISTORY_MAX_MESSAGES", 10),
     historyMaxChars: integer("AI_HISTORY_MAX_CHARS", 12000),
     channelHistoryLimit: integer("AI_CHANNEL_HISTORY_LIMIT", 200),
