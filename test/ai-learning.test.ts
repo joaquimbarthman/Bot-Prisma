@@ -15,6 +15,23 @@ test("reconhece gatilhos emocionais sem inferir diagnóstico", () => {
   assert.deepEqual(emotionalUpdateFromMessage("cala a boca, que lixo"), { irritation: 3, anger: 3, happiness: -2 });
 });
 
+test("descarta memórias genéricas sobre a Prisma e preserva percepção relacional específica", () => {
+  const memories = validatedAiMemoryCandidates("u1", [
+    { memoryType: "preference", subject: "Prisma", content: "Gosta de prisma.", importance: 50, confidence: 80 },
+    { memoryType: "preference", subject: "conversar com você", content: "Gosta de conversar com você.", importance: 50, confidence: 80 },
+    { memoryType: "relationship", subject: "utilidade das conversas", content: "Considera as conversas com a Prisma úteis e fica feliz quando ela aparece.", importance: 72, confidence: 84 },
+  ]);
+  assert.deepEqual(memories.map((item) => item.content), ["Considera as conversas com a Prisma úteis e fica feliz quando ela aparece."]);
+  assert.equal(memories[0]?.memoryKey, "relationship:prisma-dynamic");
+});
+
+test("consolida formulações relacionais diferentes na mesma memória canônica", () => {
+  const first = validatedAiMemoryCandidates("u1", [{ memoryType: "relationship", subject: "acolhimento no papo", content: "Sente-se acolhido nas conversas com a Prisma.", importance: 70, confidence: 82 }])[0];
+  const second = validatedAiMemoryCandidates("u1", [{ memoryType: "relationship", subject: "ajuda recebida", content: "Confia na forma como suas respostas ajudam em decisões.", importance: 76, confidence: 86 }])[0];
+  assert.equal(first?.memoryKey, "relationship:prisma-dynamic");
+  assert.equal(second?.memoryKey, first?.memoryKey);
+});
+
 test("extrai várias preferências e reconhece rejeições", () => {
   const memories = memoryCandidates("u1", "eu gosto de Fortnite e eu não gosto de Valorant", "m1");
   assert.equal(memories.length, 2);

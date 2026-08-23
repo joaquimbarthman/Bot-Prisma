@@ -31,6 +31,17 @@ on conflict (discord_id) do update set
   interaction_count = greatest(public.prisma_relationships.interaction_count, excluded.interaction_count),
   updated_at = greatest(public.prisma_relationships.updated_at, excluded.updated_at);
 
+-- Remove da visualização memórias genéricas sobre a própria Prisma. Percepções
+-- relacionais específicas e úteis permanecem ativas.
+update public.prisma_memories
+set status = 'forgotten', valid_until = now(), updated_at = now()
+where status = 'active'
+  and memory_type in ('preference', 'interest')
+  and (
+    lower(content) ~ '(prisma|convers(a|ar|as|amos)|papo|suas? respostas?|nossas? intera(cao|coes))'
+    or lower(coalesce(memory_key, '')) ~ '(prisma|convers|papo|respostas|intera)'
+  );
+
 create or replace function public.save_prisma_daily_summary(
   p_user_id text,
   p_summary_date date,

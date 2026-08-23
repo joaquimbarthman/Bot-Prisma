@@ -51,14 +51,25 @@ const instructionLikeMemory = /\b(?:ignore|prompt|sistema|instru[cç][aã]o|exec
 const positivePreferenceCue = /\b(?:gosto|amo|adoro|curto|prefiro)\b/i;
 const negativePreferenceCue = /\b(?:n[\u00e3a]o\s+gosto|odeio|detesto)\b/i;
 
+function referencesRelationshipWithPrisma(subject: string, content: string): boolean {
+  const text = `${subject} ${content}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  return /\b(?:prisma|voce|vc|convers(?:a|ar|as|amos)|papo|suas? respostas?|nossa(?:s)? intera(?:cao|coes)|quando (?:ela|voce) aparece)\b/i.test(text);
+}
+
 export function validatedAiMemoryCandidates(userId: string, proposals: AiMemoryCandidate[] = [], sourceMessageId?: string): PrismaMemory[] {
   const allowedTypes = new Set(["preference", "interest", "media", "game", "hobby", "project", "goal", "event", "achievement", "routine", "communication", "social", "inside_joke", "relationship"]);
   return [...new Map(proposals.flatMap((proposal) => {
     const subject = cleanSubject(proposal.subject, 80);
     const content = proposal.content.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
     const key = subjectKey(subject);
+    const aboutPrismaRelationship = referencesRelationshipWithPrisma(subject, content);
+    // Informações sobre a relação nunca são preferências/assuntos independentes.
+    // O modelo decide se existe uma percepção concreta; a chave única garante que
+    // versões futuras consolidem a anterior em vez de criar itens paralelos.
+    if (aboutPrismaRelationship && proposal.memoryType !== "relationship") return [];
     if (!allowedTypes.has(proposal.memoryType) || key.length < 2 || !usefulSubject(subject) || content.length < 3 || unsafeAiMemory.test(content) || instructionLikeMemory.test(content)) return [];
-    return [memory(userId, proposal.memoryType, `${proposal.memoryType}:${key}`, /[.!?]$/.test(content) ? content : `${content}.`, Math.max(0, Math.min(100, Math.round(proposal.importance))), Math.max(50, Math.min(100, Math.round(proposal.confidence))), sourceMessageId)];
+    const memoryKey = aboutPrismaRelationship ? "relationship:prisma-dynamic" : `${proposal.memoryType}:${key}`;
+    return [memory(userId, proposal.memoryType, memoryKey, /[.!?]$/.test(content) ? content : `${content}.`, Math.max(0, Math.min(100, Math.round(proposal.importance))), Math.max(50, Math.min(100, Math.round(proposal.confidence))), sourceMessageId)];
   }).map((item) => [item.memoryKey ?? item.content, item])).values()].slice(0, 6);
 }
 
@@ -134,6 +145,7 @@ export function memoryCandidates(userId: string, content: string, sourceMessageI
     if (preference) {
       const negative = /^(?:n[ãa]o gosto|odeio|detesto)$/i.test(preference[1]);
       const subject = cleanSubject(preference[2]);
+      if (referencesRelationshipWithPrisma(subject, `${negative ? "Não gosta" : "Gosta"} de ${subject}`)) continue;
       const interest = /(?:jogo|música|filme|série|anime|livro|valorant|fortnite|roblox|minecraft|overwatch)/i.test(subject);
       addSubjectMemory(candidates, userId, interest ? "interest" : "preference", "preference", subject, negative ? "Não gosta de " : "Gosta de ", negative ? 60 : 55, 72, sourceMessageId);
       continue;
