@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v3.6";
+export const PRISMA_AI_VERSION = "v3.7";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A seção Sobre mim agora mostra até 40 caracteres no painel antes de resumir textos maiores.",
   "Evolução dos vínculos mais proporcional: sinais positivos agora podem acrescentar de 0 a 3 pontos conforme a intensidade, enquanto sinais negativos removem 2 pontos.",
   "Memórias relacionais mais limpas, descartando registros genéricos ou repetidos sobre gostar da Prisma e preservando apenas percepções específicas e úteis sobre a dinâmica da conversa.",
   "Humor interpretado semanticamente a partir da mensagem completa, permitindo que diferentes formas de expressão alterem emoções de maneira contextual, com limites seguros de progressão.",

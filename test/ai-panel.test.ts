@@ -58,7 +58,8 @@ test("painel público possui somente a entrada para o painel privado", () => {
 
 test("resume o sobre mim no painel sem alterar o texto armazenado", () => {
   const aboutMe = "Amo a Ariana Grande e Olivia Rodrigo são minhas cantoras favoritas";
-  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia...");
+  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia Rodrigo...");
+  assert.equal(shortAboutMe("1234567890123456789012345678901234567890"), "1234567890123456789012345678901234567890");
   assert.equal(shortAboutMe("Curto RPG"), "Curto RPG");
 });
 

@@ -115,7 +115,7 @@ function sentenceCase(value: string): string {
   return value ? value.charAt(0).toLocaleUpperCase("pt-BR") + value.slice(1) : value;
 }
 
-export function shortAboutMe(value: string, maximum = 30): string {
+export function shortAboutMe(value: string, maximum = 40): string {
   const text = value.trim();
   if (text.length <= maximum) return text;
   const preview = text.slice(0, maximum + 1);
