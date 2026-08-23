@@ -227,6 +227,16 @@ async function migrateTechnicalTopics(guild: Guild): Promise<void> {
     if (channel.type !== ChannelType.GuildText) continue;
     const userId = reportUserId(channel);
     if (!userId) continue;
+    await channel.permissionOverwrites.edit(config.reports.staffRoleId, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true,
+      ManageMessages: true,
+    }).catch((error) => console.error(`[ATENDIMENTOS] Falha ao liberar equipe em ${channel.id}:`, error));
+    const previousStaffRoleId = "1537991738801659904";
+    if (previousStaffRoleId !== config.reports.staffRoleId) {
+      await channel.permissionOverwrites.delete(previousStaffRoleId).catch(() => undefined);
+    }
     if (channel.topic?.startsWith("prisma-report:user=")) {
       const user = await guild.client.users.fetch(userId).catch(() => null);
       if (user) await channel.setTopic(user.username).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar assunto de ${channel.id}:`, error));

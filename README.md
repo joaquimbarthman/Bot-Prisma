@@ -32,7 +32,7 @@ Preencha `OPENAI_API_KEY` para ativar a análise de assédio, ameaças e discurs
 - Defina `MOD_LOG_CHANNEL_ID` para manter revisão humana das decisões.
 - Defina `MONITORED_CHANNEL_IDS` para limitar o monitoramento a canais específicos.
 - `LOG_MONITORED_MESSAGES=true` exibe no terminal cada mensagem verificada e o resultado. O texto fica oculto por padrão; mantenha `LOG_MESSAGE_CONTENT=false` em produção.
-- Avisos ficam em `data/warnings.json`. Para vários servidores ou alta escala, migre para SQLite/PostgreSQL.
+- Avisos, confiança e o período de monitoramento por IA ficam em `moderation_user_states` no Supabase. Sem Supabase, o desenvolvimento local usa `data/moderation-states.json`.
 
 ## Prisma IA
 

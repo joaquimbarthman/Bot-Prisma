@@ -441,7 +441,9 @@ function dateInTimezone(value: string, timezone: string): string {
 }
 
 export async function completedDailyMessageBatches(timezone: string, now = new Date()): Promise<PrismaDailyBatch[]> {
-  const summaryCutoff = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
+  // O fechamento roda às 23:59 no fuso configurado e inclui tudo que já foi
+  // persistido até o início da execução. Lotes antigos pendentes entram juntos.
+  const summaryCutoff = now.toISOString();
   let messages: PrismaMessage[];
   if (supabase) {
     const { data, error } = await supabase.from("prisma_messages").select("*").lt("created_at", summaryCutoff).order("created_at", { ascending: true }).limit(2_000);
@@ -671,9 +673,10 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("prisma_operator_rules").select("id").limit(1),
     supabase.from("gallery_posts").select("message_id").limit(1),
     supabase.from("lfg_sessions").select("id").limit(1),
+    supabase.from("booster_access_grants").select("user_id").limit(1),
     supabase.from("prisma_self_learnings").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "ai_usage", "ai_events", "prisma_relationships", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_period_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
+  const tables = ["user_settings", "ai_usage", "ai_events", "prisma_relationships", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_period_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "booster_access_grants", "prisma_self_learnings"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
@@ -973,6 +976,7 @@ export async function cleanupExpired(): Promise<void> {
       const error = results.find((result) => result.error)?.error;
       if (error) remoteFailure("limpeza automática", error.message);
     }
+    return;
   }
   await withLocal((db) => {
     const oldDaily = (db.dailySummaries ?? []).filter((item) => item.summaryDate < dailyCutoff);

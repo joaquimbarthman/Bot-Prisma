@@ -27,6 +27,10 @@ export const config = {
   monitoredChannelIds: new Set(
     (process.env.MONITORED_CHANNEL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
   ),
+  monitoredCategoryIds: new Set([
+    "1538661540754886716", "1538247652347613376", "1537989282751447166", "1538663337011707944",
+    ...(process.env.MONITORED_CATEGORY_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+  ]),
   logMonitoredMessages: boolean("LOG_MONITORED_MESSAGES", true),
   logMessageContent: boolean("LOG_MESSAGE_CONTENT", false),
   ignoreAdministrators: boolean("IGNORE_ADMINISTRATORS", false),
@@ -34,11 +38,11 @@ export const config = {
   punishmentRoleId: process.env.PUNISHMENT_ROLE_ID?.trim(),
   appealReferenceChannelName: process.env.APPEAL_REFERENCE_CHANNEL_NAME?.trim() || "Falando",
   punishmentCategoryId: process.env.PUNISHMENT_CATEGORY_ID?.trim() || "1538026559913328690",
-  filterJsonPath: process.env.FILTER_JSON_PATH?.trim(),
+  filterJsonPath: process.env.FILTER_JSON_PATH?.trim() || "data/filtro_discurso_odio_nazismo_ptBR.json",
   galleryChannelId: process.env.GALLERY_CHANNEL_ID?.trim() || "1538026764260085821",
   verification: {
     panelChannelId: process.env.VERIFICATION_PANEL_CHANNEL_ID?.trim() || "1538200208679239720",
-    staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1537991738801659904",
+    staffRoleId: process.env.VERIFICATION_STAFF_ROLE_ID?.trim() || "1538337494355935302",
     verifiedChatChannelId: process.env.VERIFIED_CHAT_CHANNEL_ID?.trim() || "138026764260085821",
     verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim() || "1538272377111318649",
     logChannelId: process.env.VERIFICATION_LOG_CHANNEL_ID?.trim(),
@@ -46,7 +50,7 @@ export const config = {
   },
   reports: {
     panelChannelId: process.env.REPORT_PANEL_CHANNEL_ID?.trim() || "1538296088459608087",
-    staffRoleId: process.env.REPORT_STAFF_ROLE_ID?.trim() || "1537991738801659904",
+    staffRoleId: process.env.REPORT_STAFF_ROLE_ID?.trim() || "1538337494355935302",
     logChannelId: process.env.REPORT_LOG_CHANNEL_ID?.trim() || "1538276823786455050",
   },
   lfg: {

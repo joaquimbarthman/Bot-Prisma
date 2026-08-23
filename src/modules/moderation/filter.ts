@@ -15,52 +15,54 @@ export function normalizeText(input: string): string {
     .toLowerCase()
     .replace(/[@4]/g, "a").replace(/[3]/g, "e").replace(/[1]/g, "i")
     .replace(/[0]/g, "o").replace(/[5$]/g, "s").replace(/[7]/g, "t")
-    .replace(/(.)\1{2,}/g, "$1$1")
+    .replace(/(.)\1+/g, "$1")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ").trim();
 }
 
-// Mantenha esta lista pequena e inequívoca. Contexto ambíguo deve ser avaliado pela IA/moderação humana.
-const severePatterns: Array<{ pattern: RegExp; category: string; reason: string }> = [
-  { pattern: /\b(?:heil\s+hitler|morte\s+aos?)\b/i, category: "odio", reason: "Incitação ou exaltação explícita de ódio" },
-  { pattern: /\b(?:vamos|temos\s+que|deveria(?:m)?)\s+(?:matar|exterminar|eliminar)\s+(?:todos?\s+)?(?:os|as|esse|essa|esses|essas)\b/i, category: "violencia", reason: "Possível incitação à violência contra um grupo" },
-];
+/** Forma compacta usada somente contra evasões como "b.u c-e_t_a". */
+export function compactNormalizedText(input: string): string {
+  return normalizeText(input).replace(/\s+/g, "");
+}
 
 type FilterDataset = {
   bloqueio_imediato?: Record<string, { nivel?: number; frases?: string[] }>;
   revisao_contextual?: { termos?: string[] };
+  regex_bloqueio_imediato?: Array<{ nome?: string; padrao?: string; categoria?: string; motivo?: string }>;
 };
 
-type DatasetPhrase = { phrase: string; category: string; level: number };
+type DatasetPhrase = { phrase: string; evasionPattern: RegExp; category: string; level: number };
+type DatasetRegex = { pattern: RegExp; category: string; reason: string };
 let datasetPhrases: DatasetPhrase[] = [];
 let contextualTerms: string[] = [];
+let datasetRegexes: DatasetRegex[] = [];
 
 if (config.filterJsonPath) {
   try {
     const dataset = JSON.parse(readFileSync(config.filterJsonPath, "utf8")) as FilterDataset;
     datasetPhrases = Object.entries(dataset.bloqueio_imediato ?? {}).flatMap(([category, group]) =>
-      (group.frases ?? []).map((phrase) => ({ phrase: normalizeText(phrase), category, level: group.nivel ?? 2 })),
+      (group.frases ?? []).map((phrase) => {
+        const normalized = normalizeText(phrase);
+        const characters = compactNormalizedText(phrase).split("").map(escapeRegex).join("\\s*");
+        return { phrase: normalized, evasionPattern: new RegExp(`(?:^| )${characters}(?:$| )`), category, level: group.nivel ?? 2 };
+      }),
     ).filter((item) => item.phrase.length > 0);
     contextualTerms = (dataset.revisao_contextual?.termos ?? []).map(normalizeText).filter(Boolean);
-    console.log(`[FILTRO] JSON carregado: ${datasetPhrases.length} frases de bloqueio e ${contextualTerms.length} termos contextuais.`);
+    datasetRegexes = (dataset.regex_bloqueio_imediato ?? []).flatMap((rule) => {
+      if (!rule.padrao) return [];
+      try { return [{ pattern: new RegExp(rule.padrao, "i"), category: rule.categoria ?? "ofensivo", reason: rule.motivo ?? `Regra ${rule.nome ?? "do JSON"}` }]; }
+      catch (error) { console.error(`[FILTRO] Regex inválida no JSON (${rule.nome ?? rule.padrao}):`, error); return []; }
+    });
+    console.log(`[FILTRO] JSON carregado: ${datasetPhrases.length} frases, ${datasetRegexes.length} regex de bloqueio e ${contextualTerms.length} termos contextuais.`);
   } catch (error) {
     console.error(`[FILTRO] Não foi possível carregar ${config.filterJsonPath}; usando regras internas:`, error);
   }
 }
 
-// Estes termos apenas selecionam mensagens para análise contextual; nunca punem sozinhos.
-const suspiciousPatterns = [
-  /\b(?:matar|morte|morre|exterminar|eliminar|espancar|agredir|ameacar)\b/i,
-  /\b(?:odio|odeio|nojento|inferior|subhumano|aberracao|aberracoes|praga)\b/i,
-  /\b(?:racista|racismo|nazista|nazismo|preconceito|xenofob|homofob|transfob|misogin)\w*\b/i,
-  /\b(?:vai|deveria|merece|tem\s+que|precisa)\s+(?:morrer|apanhar|sumir)\b/i,
-];
-
 export function shouldUseAi(content: string): boolean {
   const normalized = normalizeText(content);
   return normalized.length >= 4 && (
-    suspiciousPatterns.some((pattern) => pattern.test(normalized))
-    || contextualTerms.some((term) => new RegExp(`(?:^| )${escapeRegex(term)}(?:$| )`).test(normalized))
+    contextualTerms.some((term) => new RegExp(`(?:^| )${escapeRegex(term)}(?:$| )`).test(normalized))
   );
 }
 
@@ -71,7 +73,7 @@ function escapeRegex(value: string): string {
 export function localModeration(content: string): ModerationResult {
   const normalized = normalizeText(content);
   for (const rule of datasetPhrases) {
-    if (new RegExp(`(?:^| )${escapeRegex(rule.phrase)}(?:$| )`).test(normalized)) {
+    if (new RegExp(`(?:^| )${escapeRegex(rule.phrase)}(?:$| )`).test(normalized) || rule.evasionPattern.test(normalized)) {
       return {
         flagged: true,
         confidence: 1,
@@ -81,9 +83,9 @@ export function localModeration(content: string): ModerationResult {
       };
     }
   }
-  for (const rule of severePatterns) {
+  for (const rule of datasetRegexes) {
     if (rule.pattern.test(normalized)) {
-      return { flagged: true, confidence: 0.98, category: rule.category, reason: rule.reason, source: "local" };
+      return { flagged: true, confidence: 0.99, category: rule.category, reason: rule.reason, source: "local" };
     }
   }
   return { flagged: false, confidence: 0, source: "none" };

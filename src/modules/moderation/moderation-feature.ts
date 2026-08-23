@@ -3,9 +3,8 @@ import { aiModeration } from "./ai.js";
 import { config } from "../../config.js";
 import { moderationButtons } from "../../emoji-manager.js";
 import { localModeration } from "./filter.js";
+import { getModerationState, isAiMonitoringActive, recordWarning, resetModerationState } from "./state.js";
 import { forgiveMember, punishMember } from "./punishment-role.js";
-import { decreaseReputation, getReputation, resetReputation } from "./reputation.js";
-import { addWarning, clearWarnings, getWarnings } from "./warnings.js";
 
 function log(message: Message<true>, status: string): void {
   if (!config.logMonitoredMessages) return;
@@ -33,14 +32,23 @@ function reputationBar(value: number): string {
   return `${"▰".repeat(filled)}${"▱".repeat(4 - filled)}  **${value}%**`;
 }
 
+function warningProgress(count: number): string {
+  const current = count > 0 ? ((count - 1) % config.warningsBeforeTimeout) + 1 : 0;
+  return `${current}/${config.warningsBeforeTimeout}`;
+}
+
 export async function handleModerationMessage(client: Client, message: Message): Promise<boolean> {
   if (!message.inGuild() || !message.content) return false;
-  if (config.monitoredChannelIds.size && !config.monitoredChannelIds.has(message.channelId)) return false;
+  const inMonitoredChannel = config.monitoredChannelIds.has(message.channelId);
+  const inMonitoredCategory = !!message.channel.parentId && config.monitoredCategoryIds.has(message.channel.parentId);
+  if (!inMonitoredChannel && !inMonitoredCategory) return false;
   if (config.ignoreAdministrators && message.member?.permissions.has(PermissionFlagsBits.Administrator)) { log(message, "IGNORADA_ADMIN"); return false; }
 
   const local = localModeration(message.content);
-  log(message, local.flagged ? "SINALIZADA_LOCAL" : "ENVIADA_MODERACAO");
-  const result = local.flagged ? local : await aiModeration(message.content);
+  const state = await getModerationState(message.guildId, message.author.id);
+  const monitoredByAi = isAiMonitoringActive(state);
+  log(message, local.flagged ? "SINALIZADA_LOCAL" : monitoredByAi ? "ENVIADA_MODERACAO_IA" : "LIBERADA_FILTRO_LOCAL");
+  const result = local.flagged ? local : monitoredByAi ? await aiModeration(message.content) : local;
   if (!result.flagged) { log(message, "LIBERADA_APOS_ANALISE"); return false; }
 
   const reason = reasonInPortuguese(result.category);
@@ -51,24 +59,23 @@ export async function handleModerationMessage(client: Client, message: Message):
     log(message, `FALHA_AO_APAGAR motivo=${reason}`);
     return true;
   }
-  const count = await addWarning(message.guildId, message.author.id, { at: new Date().toISOString(), reason, moderator: "automático" });
-  let reputation = await getReputation(message.guildId, message.author.id);
-  if (count >= config.warningsBeforeTimeout) reputation = await decreaseReputation(message.guildId, message.author.id);
-  log(message, `REMOVIDA motivo=${reason} aviso=${count}/${config.warningsBeforeTimeout} reputacao=${reputation}%`);
+  const updatedState = await recordWarning(message.guildId, message.author.id, { at: new Date().toISOString(), reason, moderator: "automático" });
+  const { warnings: count, trust: reputation } = updatedState;
+  log(message, `REMOVIDA motivo=${reason} avisos=${count} reputacao=${reputation}%`);
 
   let punishment = "";
-  if (count >= config.warningsBeforeTimeout && reputation === 0 && message.member) {
+  if (count === config.warningsBeforeTimeout * 2 && reputation === 0 && message.member) {
     try {
-      await punishMember(message.member); await clearWarnings(message.guildId, message.author.id);
+      await punishMember(message.member);
       punishment = ` e ficou com **0% de reputação**, recebendo o cargo **${config.punishmentRoleName}**`;
     } catch (error) { console.error("[CASTIGO] Falha ao aplicar cargo:", error); punishment = ". A moderação foi avisada sobre uma falha no castigo"; }
-  } else if (count >= config.warningsBeforeTimeout && message.member?.moderatable) {
+  } else if (count === config.warningsBeforeTimeout && message.member?.moderatable) {
     try {
-      await message.member.timeout(config.timeoutMinutes * 60_000, reason); await clearWarnings(message.guildId, message.author.id);
-      punishment = ` e recebeu um castigo de ${config.timeoutMinutes} minutos. Os avisos foram zerados`;
+      await message.member.timeout(config.timeoutMinutes * 60_000, reason);
+      punishment = ` e recebeu um castigo de ${config.timeoutMinutes} minutos`;
     } catch (error) { console.error("[CASTIGO] Falha ao aplicar castigo:", error); punishment = ". A moderação foi avisada sobre uma falha no castigo"; }
   }
-  const notice = await message.channel.send(`<@${message.author.id}>, sua mensagem foi removida por **${reason.toLowerCase()}**. Aviso **${count}/${config.warningsBeforeTimeout}**${punishment}.`);
+  const notice = await message.channel.send(`<@${message.author.id}>, sua mensagem foi removida por **${reason.toLowerCase()}**. Aviso **${warningProgress(count)}**${punishment}.`);
   setTimeout(() => notice.delete().catch(() => undefined), 12_000);
 
   if (!config.modLogChannelId) return true;
@@ -98,15 +105,16 @@ export async function handleModerationMessage(client: Client, message: Message):
         { type: ComponentType.Separator, divider: true, spacing: 1 },
         {
           type: ComponentType.TextDisplay,
-          content: `**Canal**　　　　　　　 **Motivo**\n<#${message.channelId}>　  　      ${reason}\n\n**Avisos**　　　　　　  **  Confiança**\n${count}/${config.warningsBeforeTimeout}　　　 　　　　　 ${reputationBar(reputation)}`,
+          content: `**Avisos**　　　　　　 ** Confiança**　　　　　　 ** Canal**\n${warningProgress(count)}　　　　　　　　${reputationBar(reputation)}　　　　<#${message.channelId}>\n\n**Motivo**\n${reason}`,
         },
         { type: ComponentType.Separator, divider: true, spacing: 1 },
         { type: ComponentType.TextDisplay, content: `**Conteúdo removido**\n\`\`\`\n${content}\n\`\`\`` },
         { type: ComponentType.Separator, divider: true, spacing: 1 },
         moderationButtons(message.author.id).toJSON(),
-        { type: ComponentType.TextDisplay, content: `-# Central de Segurança • <t:${timestamp}:t>` },
+        { type: ComponentType.TextDisplay, content: `-# Central de Segurança • <t:${timestamp}:t> • <@&1538337494355935302>` },
       ],
     }],
+    allowedMentions: { parse: [], roles: ["1538337494355935302"] },
   });
   return true;
 }
@@ -125,7 +133,7 @@ export async function handleModerationButton(interaction: ButtonInteraction): Pr
       await member.ban({ reason: `Banido pela moderação: ${interaction.user.tag}` });
       await interaction.editReply(`${member.user.tag} foi banido do servidor.`);
     } else if (action === "confiar") {
-      await clearWarnings(interaction.guild.id, userId); await resetReputation(interaction.guild.id, userId);
+      await resetModerationState(interaction.guild.id, userId);
       if (member) { if (member.isCommunicationDisabled()) await member.timeout(null, `Confiança restaurada por ${interaction.user.tag}`); await forgiveMember(member); }
       await interaction.editReply("Confiança restaurada para **100%**, avisos zerados e castigos removidos.");
     }
@@ -137,11 +145,11 @@ export async function handleModerationCommand(interaction: ChatInputCommandInter
   if (!interaction.guildId) return;
   const user = interaction.options.getUser("membro", true);
   if (interaction.commandName === "avisos") {
-    const warnings = await getWarnings(interaction.guildId, user.id); const reputation = await getReputation(interaction.guildId, user.id);
+    const state = await getModerationState(interaction.guildId, user.id); const warnings = state.warningHistory; const reputation = state.trust;
     const text = warnings.length ? warnings.slice(-10).map((warning, index) => `${index + 1}. <t:${Math.floor(new Date(warning.at).getTime() / 1000)}:d> — ${warning.reason}`).join("\n") : "Nenhum aviso.";
     await interaction.reply({ content: `**Avisos de ${user.tag}: ${warnings.length}** · **Reputação: ${reputation}%**\n${text}`, flags: ["Ephemeral"] });
   } else if (interaction.commandName === "limpar-avisos") {
-    await clearWarnings(interaction.guildId, user.id); await resetReputation(interaction.guildId, user.id);
+    await resetModerationState(interaction.guildId, user.id);
     const member = await interaction.guild?.members.fetch(user.id).catch(() => null); if (member) await forgiveMember(member).catch(console.error);
     await interaction.reply({ content: `Os avisos de ${user.tag} foram removidos, a reputação voltou para 100% e o castigo foi retirado.`, flags: ["Ephemeral"] });
   }

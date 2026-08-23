@@ -127,7 +127,7 @@ function requestedAtDisplay(value: string): string {
 
 function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
   const details = [
-    `**Solicitado em**　　　　　**Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
+    `**Solicitado em**　　　　　 ** Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
   ];
   if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
   if (state.name) details.push(`**Nome informado**\n${state.name}`);
@@ -385,6 +385,7 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
     await panel.permissionOverwrites.edit(verification.staffRoleId, { ViewChannel: true, SendMessages: false });
     await panel.permissionOverwrites.edit(verification.verifiedRoleId!, { ViewChannel: true, SendMessages: false });
     await panel.permissionOverwrites.edit(botId, { ViewChannel: true, SendMessages: true, EmbedLinks: true, ReadMessageHistory: true });
+    if (verification.staffRoleId !== "1537991738801659904") await panel.permissionOverwrites.delete("1537991738801659904").catch(() => undefined);
   }
   for (const channel of [verifiedChat, gallery]) {
     if (!channel || channel.isThread()) continue;
@@ -403,6 +404,7 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
     await channel.permissionOverwrites.edit(verification.verifiedRoleId!, { ViewChannel: true, SendMessages: true, SendMessagesInThreads: true, ReadMessageHistory: true, AttachFiles: true, EmbedLinks: true, AddReactions: true, UseApplicationCommands: true });
     await channel.permissionOverwrites.edit(verification.staffRoleId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, ManageMessages: true });
     await channel.permissionOverwrites.edit(botId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, ManageMessages: true });
+    if (verification.staffRoleId !== "1537991738801659904") await channel.permissionOverwrites.delete("1537991738801659904").catch(() => undefined);
   }
 }
 
@@ -429,6 +431,8 @@ export async function startVerificationModule(client: Client): Promise<void> {
     const channels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText && channel.name.startsWith("verificacao-"));
     for (const channel of channels.values()) {
       const textChannel = channel as TextChannel; const legacy = decodeState(textChannel.topic);
+      await textChannel.permissionOverwrites.edit(verification.staffRoleId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, ManageMessages: true }).catch(console.error);
+      if (verification.staffRoleId !== "1537991738801659904") await textChannel.permissionOverwrites.delete("1537991738801659904").catch(() => undefined);
       if (legacy) await textChannel.setTopic(null).catch(console.error);
       const state = legacy ?? await readChannelState(textChannel);
       if (state) {

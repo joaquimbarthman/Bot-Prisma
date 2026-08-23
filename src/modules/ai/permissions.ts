@@ -1,50 +1,40 @@
-import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import type { Collection, Guild, GuildMember, Snowflake } from "discord.js";
 import { config } from "../../config.js";
 
 export type AccessLevel = "none" | "member";
 
-type BoosterGrantState = Record<string, string[]>;
-
-const boosterGrantStateFile = path.resolve(config.dataDir, "booster-access-grants.json");
-let boosterGrantState = loadBoosterGrantState();
-let boosterGrantWriteQueue = Promise.resolve();
+const supabase = config.supabaseUrl && config.supabaseSecretKey
+  ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
+  : null;
+const boosterGrantsByGuild = new Map<string, Set<string>>();
+const boosterGrantLoads = new Map<string, Promise<Set<string>>>();
 const boosterGrantsInProgress = new Set<string>();
 
-function loadBoosterGrantState(): BoosterGrantState {
-  try {
-    const parsed = JSON.parse(readFileSync(boosterGrantStateFile, "utf8")) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return Object.fromEntries(Object.entries(parsed).map(([guildId, ids]) => [
-      guildId,
-      Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [],
-    ]));
-  } catch {
-    return {};
-  }
-}
-
-function saveBoosterGrantState(): Promise<void> {
-  boosterGrantWriteQueue = boosterGrantWriteQueue.then(async () => {
-    await mkdir(path.dirname(boosterGrantStateFile), { recursive: true });
-    const temporary = `${boosterGrantStateFile}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(boosterGrantState, null, 2)}\n`, "utf8");
-    await rename(temporary, boosterGrantStateFile);
-  });
-  return boosterGrantWriteQueue;
-}
-
-function alreadyReceivedBoosterAccess(member: GuildMember): boolean {
-  return boosterGrantState[member.guild.id]?.includes(member.id) ?? false;
+async function boosterGrants(guildId: string): Promise<Set<string>> {
+  const cached = boosterGrantsByGuild.get(guildId);
+  if (cached) return cached;
+  const pending = boosterGrantLoads.get(guildId);
+  if (pending) return pending;
+  const loading = (async () => {
+    if (!supabase) {
+      const grants = new Set<string>(); boosterGrantsByGuild.set(guildId, grants); boosterGrantLoads.delete(guildId); return grants;
+    }
+    const { data, error } = await supabase.from("booster_access_grants").select("user_id").eq("guild_id", guildId);
+    if (error) throw new Error(`[BOOSTER] Falha ao carregar concessões: ${error.message}`);
+    const grants = new Set((data ?? []).map((row) => String(row.user_id)));
+    boosterGrantsByGuild.set(guildId, grants); boosterGrantLoads.delete(guildId); return grants;
+  })();
+  boosterGrantLoads.set(guildId, loading);
+  return loading;
 }
 
 async function rememberBoosterAccess(member: GuildMember): Promise<void> {
-  const members = boosterGrantState[member.guild.id] ?? [];
-  if (members.includes(member.id)) return;
-  boosterGrantState = { ...boosterGrantState, [member.guild.id]: [...members, member.id] };
-  await saveBoosterGrantState();
+  if (supabase) {
+    const { error } = await supabase.from("booster_access_grants").upsert({ guild_id: member.guild.id, user_id: member.id }, { onConflict: "guild_id,user_id", ignoreDuplicates: true });
+    if (error) throw new Error(`[BOOSTER] Falha ao salvar concessão: ${error.message}`);
+  }
+  (await boosterGrants(member.guild.id)).add(member.id);
 }
 
 export function accessLevel(member: GuildMember): AccessLevel {
@@ -56,7 +46,7 @@ export function shouldGrantAccessRole(member: GuildMember): boolean {
 }
 
 export async function grantAccessRoleToBooster(member: GuildMember): Promise<boolean> {
-  if (member.premiumSinceTimestamp === null || alreadyReceivedBoosterAccess(member)) return false;
+  if (member.premiumSinceTimestamp === null || (await boosterGrants(member.guild.id)).has(member.id)) return false;
   const memberKey = `${member.guild.id}:${member.id}`;
   if (boosterGrantsInProgress.has(memberKey)) return false;
   boosterGrantsInProgress.add(memberKey);

@@ -1,10 +1,30 @@
 import { config } from "../../config.js";
 import { memoryCandidates } from "./learning.js";
-import { completedDailyMessageBatches, reinforceSelfLearning, saveDailySummaryAndDeleteMessages, upsertPrismaMemory, type PrismaDailyBatch } from "./store.js";
+import { completedDailyMessageBatches, reinforceSelfLearning, saveDailySummaryAndDeleteMessages, type PrismaDailyBatch } from "./store.js";
 import { topicTokens } from "./topic-context.js";
 import { generateDailyConversationSummary } from "./provider.js";
 
 let running = false;
+let lastScheduledDate: string | null = null;
+
+export function dailySummaryScheduleParts(now = new Date(), timezone = "America/Sao_Paulo"): { date: string; hour: string; minute: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return { date: `${value("year")}-${value("month")}-${value("day")}`, hour: value("hour"), minute: value("minute") };
+}
+
+export function shouldRunDailySummary(now = new Date(), timezone = "America/Sao_Paulo"): boolean {
+  const local = dailySummaryScheduleParts(now, timezone);
+  if (local.hour !== "23" || local.minute !== "59" || lastScheduledDate === local.date) return false;
+  lastScheduledDate = local.date;
+  return true;
+}
+
+export function resetDailySummaryScheduleForTests(): void {
+  lastScheduledDate = null;
+}
 
 export function buildDailySummary(batch: PrismaDailyBatch): string | null {
   const userMessages = batch.messages.filter((message) => !message.authorIsPrisma);
@@ -44,9 +64,6 @@ export async function summarizeCompletedConversationDays(): Promise<number> {
       const transcript = dailySummaryTranscript(batch);
       const reflection = transcript ? await generateDailyConversationSummary(batch.userId, batch.summaryDate, transcript) : null;
       const summary = reflection?.summary ?? fallbackSummary;
-      for (const message of batch.messages.filter((item) => !item.authorIsPrisma)) {
-        for (const memory of memoryCandidates(batch.userId, message.content, message.messageId)) await upsertPrismaMemory(memory);
-      }
       for (const learning of reflection?.learnings ?? []) await reinforceSelfLearning(learning);
       if (await saveDailySummaryAndDeleteMessages(batch, summary)) completed += 1;
     }

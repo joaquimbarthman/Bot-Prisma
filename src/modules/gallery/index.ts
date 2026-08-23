@@ -2,7 +2,7 @@ import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, Compon
 import { config } from "../../config.js";
 import { aiPanelEmojis, galleryButtons } from "../../emoji-manager.js";
 import { aiModeration } from "../moderation/ai.js";
-import { localModeration, normalizeText, shouldUseAi } from "../moderation/filter.js";
+import { localModeration } from "../moderation/filter.js";
 import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
 import { addPhotoFrame } from "./image.js";
 
@@ -13,16 +13,10 @@ function normalizeInstagramHandle(value: string): string | null {
   return /^[a-z0-9._]{1,30}$/i.test(handle) ? handle : null;
 }
 
-function hasHomophobicTerm(content: string): boolean {
-  const normalized = normalizeText(content);
-  return /\b(?:viad(?:o|a|ao|ona|inh[ao]?)|bich(?:a|ona|inha)|boiol[ao]|baitol[ao]|maric[ao]|sapat(?:ao|ona)|travec[oa])s?\b/i.test(normalized);
-}
-
 async function blockedGalleryComment(content: string): Promise<boolean> {
-  if (localModeration(content).flagged || hasHomophobicTerm(content)) return true;
-  if (!shouldUseAi(content)) return false;
   const result = await aiModeration(content);
-  return result.flagged && /(?:^|,)\s*hate(?:\/|,|$)/i.test(result.category ?? "");
+  const local = localModeration(content);
+  return result.source !== "ai" || result.flagged || local.flagged;
 }
 
 function deleteConfirmationComponents(messageId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {

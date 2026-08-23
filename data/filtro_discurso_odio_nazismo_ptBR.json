@@ -272,9 +272,33 @@
     "ofensas_e_abreviacoes_bloqueadas": {
       "nivel": 2,
       "frases": [
+        "bct",
+        "buceta",
+        "xereca",
+        "xeraca",
         "pnc",
         "vtnc",
         "depo"
+      ]
+    },
+    "ofensas_homofobicas_bloqueadas": {
+      "nivel": 2,
+      "frases": [
+        "viado",
+        "viada",
+        "viadao",
+        "viadona",
+        "bicha",
+        "bichona",
+        "boiola",
+        "boiolao",
+        "baitola",
+        "marica",
+        "maricao",
+        "sapatao",
+        "sapatona",
+        "traveco",
+        "traveca"
       ]
     }
   },
@@ -344,9 +368,45 @@
       "baitola",
       "sapatao",
       "retardado",
-      "mongoloide"
+      "mongoloide",
+      "matar",
+      "morte",
+      "morre",
+      "exterminar",
+      "eliminar",
+      "espancar",
+      "agredir",
+      "ameacar",
+      "odio",
+      "odeio",
+      "nojento",
+      "inferior",
+      "subhumano",
+      "aberracao",
+      "praga",
+      "racista",
+      "racismo",
+      "preconceito",
+      "xenofobia",
+      "homofobia",
+      "transfobia",
+      "misoginia"
     ]
   },
+  "regex_bloqueio_imediato": [
+    {
+      "nome": "ofensa_sexual_ofuscada",
+      "padrao": "(?:^|[^a-z])(?:b\\s*c\\s*t|b\\s*u\\s*c\\s*e\\s*t\\s*a|x\\s*e\\s*r\\s*[ea]\\s*c\\s*a)(?:s|o|a)?(?:$|[^a-z])",
+      "categoria": "assedio",
+      "motivo": "Ofensa sexual ou tentativa de escapar do filtro"
+    },
+    {
+      "nome": "incitacao_violencia_grupo",
+      "padrao": "\\b(?:vamos|temos\\s+que|deveriam?)\\s+(?:matar|exterminar|eliminar)\\s+(?:todos?\\s+)?(?:os|as|esse|essa|esses|essas)\\b",
+      "categoria": "violencia",
+      "motivo": "Possivel incitacao a violencia contra um grupo"
+    }
+  ],
   "regex_para_revisao": [
     {
       "nome": "heil_hitler_ofuscado",

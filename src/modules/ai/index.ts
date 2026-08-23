@@ -11,7 +11,7 @@ import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
-import { summarizeCompletedConversationDays } from "./daily-summary.js";
+import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
 
 const cooldowns = new Map<string, number>();
@@ -35,9 +35,13 @@ export function startAiCleanup(client: Client): void {
   checkSupabaseConnection().catch((error) => console.error("[SUPABASE] Falha no teste de conexão:", error));
   refreshAiPanel(client).catch((error) => console.error("[PRISMA-IA] Falha ao atualizar painel:", error));
   cleanupExpired().catch(console.error);
-  summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error));
   setInterval(() => cleanupExpired().catch(console.error), 60 * 60_000).unref();
-  setInterval(() => summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error)), 60 * 60_000).unref();
+  const runScheduledDailySummary = () => {
+    if (!shouldRunDailySummary(new Date(), "America/Sao_Paulo")) return;
+    summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error));
+  };
+  runScheduledDailySummary();
+  setInterval(runScheduledDailySummary, 20_000).unref();
   setTimeout(() => sendOccasionalAbsenceMessage(client).catch(console.error), 5 * 60_000).unref();
   setInterval(() => sendOccasionalAbsenceMessage(client).catch(console.error), 60 * 60_000).unref();
   getPrismaThought(config.prismaAi.operatorUserId)
@@ -254,7 +258,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
   if (level === "none" && !operatorRuleCommand) {
     if (direct) {
-      const notice = await message.reply({ content: `A Prisma IA é exclusiva para membros com o cargo <@&${config.prismaAi.accessRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
+      const notice = await message.reply({ content: `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.accessRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
       setTimeout(() => notice.delete().catch(() => undefined), 10_000).unref();
     }
     return direct;

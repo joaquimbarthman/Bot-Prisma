@@ -248,7 +248,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
 
   const member = await authorizedMember(interaction);
   if (!selfServiceDeletion && (!member || accessLevel(member) === "none")) {
-    const content = `A Prisma IA é exclusiva para membros com o cargo <@&${config.prismaAi.accessRoleId}>.`;
+    const content = `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.accessRoleId}>.`;
     if (interaction.deferred) await interaction.followUp({ content, flags: ["Ephemeral"], allowedMentions: { parse: [] } });
     else await interaction.reply({ content, flags: ["Ephemeral"], allowedMentions: { parse: [] } });
     return true;

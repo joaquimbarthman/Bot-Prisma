@@ -459,6 +459,63 @@ alter table public.prisma_emotional_states
 
 -- Publicações da galeria. Curtidas e comentários ficam no próprio post porque
 -- o módulo atual persiste esses dados como arrays JSON.
+create table if not exists public.moderation_user_states (
+  guild_id text not null,
+  user_id text not null,
+  warnings integer not null default 0 check (warnings >= 0),
+  trust smallint not null default 100 check (trust in (0, 50, 100)),
+  ai_monitor_until timestamptz,
+  warning_history jsonb not null default '[]'::jsonb check (jsonb_typeof(warning_history) = 'array'),
+  updated_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create table if not exists public.paired_role_grants (
+  guild_id text not null,
+  user_id text not null,
+  granted_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create table if not exists public.punishment_role_snapshots (
+  guild_id text not null,
+  user_id text not null,
+  role_ids jsonb not null default '[]'::jsonb check (jsonb_typeof(role_ids) = 'array'),
+  created_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create table if not exists public.booster_access_grants (
+  guild_id text not null,
+  user_id text not null,
+  granted_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create index if not exists moderation_user_states_monitor_idx
+  on public.moderation_user_states (ai_monitor_until) where ai_monitor_until is not null;
+
+create or replace function public.record_moderation_warning(p_guild_id text, p_user_id text, p_warning jsonb)
+returns public.moderation_user_states
+language plpgsql security definer set search_path = public, pg_temp
+as $record_moderation_warning$
+declare v_state public.moderation_user_states;
+begin
+  if nullif(pg_catalog.btrim(p_guild_id), '') is null or nullif(pg_catalog.btrim(p_user_id), '') is null then
+    raise exception 'Parametros invalidos' using errcode = '22023';
+  end if;
+  insert into public.moderation_user_states (guild_id, user_id, warnings, trust, ai_monitor_until, warning_history)
+  values (p_guild_id, p_user_id, 1, 100, now() + interval '60 minutes', jsonb_build_array(p_warning))
+  on conflict (guild_id, user_id) do update set
+    warnings = moderation_user_states.warnings + 1,
+    trust = greatest(0, 100 - floor((moderation_user_states.warnings + 1) / 3.0)::integer * 50),
+    ai_monitor_until = now() + interval '60 minutes',
+    warning_history = moderation_user_states.warning_history || jsonb_build_array(p_warning),
+    updated_at = now()
+  returning * into v_state;
+  return v_state;
+end
+$record_moderation_warning$;
+
+revoke all on function public.record_moderation_warning(text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_moderation_warning(text, text, jsonb) to service_role;
+
 create table if not exists public.gallery_posts (
   message_id text primary key,
   owner_id text not null,
@@ -539,6 +596,9 @@ alter table public.prisma_period_summaries enable row level security;
 alter table public.prisma_emotional_states enable row level security;
 alter table public.gallery_posts enable row level security;
 alter table public.lfg_sessions enable row level security;
+alter table public.paired_role_grants enable row level security;
+alter table public.punishment_role_snapshots enable row level security;
+alter table public.booster_access_grants enable row level security;
 
 -- O bot usa exclusivamente a chave service_role no backend. Não há políticas
 -- para clientes públicos, e estas revogações deixam essa intenção explícita.
@@ -547,13 +607,15 @@ revoke all on table public.user_settings, public.prisma_operator_rules,
   public.ai_usage, public.ai_events,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
   public.prisma_daily_summaries, public.prisma_period_summaries, public.prisma_emotional_states,
-  public.gallery_posts, public.lfg_sessions from anon, authenticated;
+  public.gallery_posts, public.lfg_sessions, public.paired_role_grants,
+  public.punishment_role_snapshots, public.booster_access_grants from anon, authenticated;
 grant all on table public.user_settings, public.prisma_operator_rules,
   public.prisma_relationships, public.prisma_temperament, public.prisma_self_learnings,
   public.ai_usage, public.ai_events,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
   public.prisma_daily_summaries, public.prisma_period_summaries, public.prisma_emotional_states,
-  public.gallery_posts, public.lfg_sessions to service_role;
+  public.gallery_posts, public.lfg_sessions, public.paired_role_grants,
+  public.punishment_role_snapshots, public.booster_access_grants to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
 drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);

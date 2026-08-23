@@ -24,6 +24,9 @@ drop function if exists public.consolidate_prisma_summaries(date, date);
 
 drop table if exists public.gallery_posts cascade;
 drop table if exists public.lfg_sessions cascade;
+drop table if exists public.paired_role_grants cascade;
+drop table if exists public.punishment_role_snapshots cascade;
+drop table if exists public.booster_access_grants cascade;
 drop table if exists public.prisma_daily_summaries cascade;
 drop table if exists public.prisma_weekly_summaries cascade;
 drop table if exists public.prisma_period_summaries cascade;

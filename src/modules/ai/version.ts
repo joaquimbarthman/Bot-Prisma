@@ -1,7 +1,16 @@
-export const PRISMA_AI_VERSION = "v3.7";
+export const PRISMA_AI_VERSION = "v3.13";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Mensagem de acesso simplificada para mostrar diretamente o cargo necessário para conversar com a Prisma.",
+  "Aviso de acesso mais claro, informando que é necessário ser Prisma Booster e mostrando diretamente o cargo exigido.",
+  "Concessões automáticas de acesso para Boosters agora são persistidas no Supabase, sem depender de arquivo JSON local.",
+  "Armazenamento local corrigido: com Supabase configurado, a rotina de limpeza não cria mais o arquivo ai-module.json.",
+  "Resumo diário e autoaprendizado agora são executados uma vez por noite, às 23:59 no horário de Brasília; memórias pessoais continuam sendo aprendidas durante as conversas.",
+  "Moderação contextual por IA durante 60 minutos após cada aviso, com renovação automática quando há uma nova ocorrência.",
+  "Comentários em fotos agora são analisados pela IA antes da publicação e também passam pelos filtros locais.",
+  "Detecção local reforçada contra abreviações, letras repetidas e separadores usados para esconder termos ofensivos.",
+  "Avisos e confiança da moderação agora ficam persistidos no banco, com confiança de 50 no terceiro aviso e zero no sexto.",
   "A seção Sobre mim agora mostra até 40 caracteres no painel antes de resumir textos maiores.",
   "Evolução dos vínculos mais proporcional: sinais positivos agora podem acrescentar de 0 a 3 pontos conforme a intensidade, enquanto sinais negativos removem 2 pontos.",
   "Memórias relacionais mais limpas, descartando registros genéricos ou repetidos sobre gostar da Prisma e preservando apenas percepções específicas e úteis sobre a dinâmica da conversa.",
@@ -25,6 +34,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",
   "Conversar com personalidade própria e adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",
   "Aprender preferências, interesses, hobbies, jogos, mídias, projetos, objetivos, eventos, conquistas, rotinas, estilo de comunicação e outros fatos duráveis e não sensíveis compartilhados pela própria pessoa.",
