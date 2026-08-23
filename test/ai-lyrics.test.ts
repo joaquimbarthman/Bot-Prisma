@@ -60,3 +60,34 @@ test("consulta somente o LRCLIB e remove timestamps da letra sincronizada", asyn
   assert.match(requestedUrl, /^https:\/\/lrclib\.net\/api\/search\?q=/);
   assert.equal(result?.lyrics, "primeira linha\nsegunda linha");
 });
+
+test("ignora letra do primeiro resultado quando título ou artista não correspondem", async () => {
+  const fakeFetch = async () => new Response(JSON.stringify([
+    { trackName: "Friday I'm in Love", artistName: "The Cure", plainLyrics: "letra errada" },
+    { trackName: "The Cure", artistName: "Olivia Rodrigo", plainLyrics: "letra certa" },
+  ]), { status: 200, headers: { "content-type": "application/json" } });
+
+  const result = await researchLyrics("qual sua parte favorita de the cure da olivia?", [], fakeFetch as typeof fetch);
+  assert.equal(result?.trackName, "The Cure");
+  assert.equal(result?.artistName, "Olivia Rodrigo");
+  assert.equal(result?.lyrics, "letra certa");
+});
+
+test("não envia letra de outra música quando não há resultado compatível", async () => {
+  const fakeFetch = async () => new Response(JSON.stringify([
+    { trackName: "Friday I'm in Love", artistName: "The Cure", plainLyrics: "letra errada" },
+  ]), { status: 200, headers: { "content-type": "application/json" } });
+
+  const result = await researchLyrics("qual sua parte favorita de the cure da olivia?", [], fakeFetch as typeof fetch);
+  assert.equal(result, null);
+});
+
+test("não transforma a resposta anterior da Prisma em consulta de letra", () => {
+  const history = [
+    { discordId: "1", channelId: "2", role: "user" as const, content: "qual sua parte favorita de the cure da olivia?", createdAt: new Date().toISOString() },
+    { discordId: "1", channelId: "2", role: "assistant" as const, content: "a letra enviada aqui é de outra música", createdAt: new Date().toISOString() },
+  ];
+  const queries = lyricsSearchQueries("qual parte vc mais gosta dessa musica da olivia rodrigo?", history);
+  assert.equal(queries.some((query) => /letra enviada aqui/i.test(query)), false);
+  assert.equal(queries.some((query) => /the cure.*olivia/i.test(query)), true);
+});

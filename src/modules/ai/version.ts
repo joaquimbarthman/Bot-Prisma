@@ -1,7 +1,11 @@
-export const PRISMA_AI_VERSION = "v4.2";
+export const PRISMA_AI_VERSION = "v4.6";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O modo de ignorância total agora entende e pode usar abreviações naturais de palavrões, mantendo o mesmo limite contextual e todas as proteções de segurança.",
+  "Novo modo de ignorância total para provocações insistentes, permitindo respostas e xingamentos mais pesados sem liberar ameaças, conteúdo sexual, preconceito, discurso de ódio ou ataques a grupos protegidos.",
+  "Temperamento mais autêntico em conflitos: apó provocações ou desrespeito insistentes, a Prisma pode perder a paciência, responder com firmeza e comprar a briga verbalmente, sem abandonar as regras de segurança.",
+  "Pesquisa de letras mais precisa: os resultados do LRCLIB agora são validados pelo título e artista, evitando enviar versos de outra música e preservando o contexto correto nas perguntas seguintes.",
   "Mensagem de acesso simplificada para mostrar diretamente o cargo necessário para conversar com a Prisma.",
   "Aviso de acesso mais claro, informando que é necessário ser Prisma Booster e mostrando diretamente o cargo exigido.",
   "Concessões automáticas de acesso para Boosters agora são persistidas no Supabase, sem depender de arquivo JSON local.",
@@ -43,7 +47,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
   "Usar um apelido escolhido pela pessoa e uma apresentação opcional do painel para personalizar a conversa.",
   "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes e a pesquisa estiver disponível.",
-  "Consultar letras no LRCLIB para escolher e explicar, com base na letra real, qual trecho de uma música mais aprecia.",
+  "Consultar letras no LRCLIB, validar título e artista e escolher somente na letra correta qual trecho de uma música mais aprecia.",
   "Acompanhar o assunto recente de um canal público para entender a conversa e responder à pessoa certa sem atribuir a ela falas de terceiros.",
   "Mencionar pessoas quando isso for pedido e permitido, respeitando quem tem acesso à Prisma.",
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",

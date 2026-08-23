@@ -25,6 +25,40 @@ type LrclibTrack = {
   syncedLyrics?: unknown;
 };
 
+const SEARCH_STOP_WORDS = new Set([
+  "a", "as", "da", "das", "de", "do", "dos", "e", "em", "na", "nas", "no", "nos", "o", "os",
+  , "um", "uma", "por", "pra", "para", "seu", "seus", "sua", "suas", "with", "feat", "featuring",
+]);
+
+function normalizedWords(value: string): string[] {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 1 && !SEARCH_STOP_WORDS.has(word));
+}
+
+function candidateRelevance(candidate: LrclibTrack, query: string): number {
+  if (typeof candidate.trackName !== "string" || typeof candidate.artistName !== "string") return 0;
+  const expected = [...new Set(normalizedWords(query))];
+  if (!expected.length) return 0;
+  const metadata = new Set(normalizedWords(`${candidate.trackName} ${candidate.artistName}`));
+  const matched = expected.filter((word) => metadata.has(word)).length;
+  return matched / expected.length;
+}
+
+function isReliableCandidate(candidate: LrclibTrack, query: string): boolean {
+  const expected = [...new Set(normalizedWords(query))];
+  if (!expected.length) return false;
+  const relevance = candidateRelevance(candidate, query);
+  // Para consultas curtas, cada palavra relevante precisa aparecer no título ou artista.
+  // Em consultas mais longas, tolera palavras extras do contexto, mas nunca um resultado vago.
+  return expected.length <= 3 ? relevance === 1 : relevance >= 0.6;
+}
+
 export function asksFavoriteSongPart(content: string): boolean {
   return appreciationQuestion.test(content.replace(/<@!?\d+>/g, " "));
 }
@@ -57,7 +91,10 @@ export function lyricsSearchQueries(content: string, history: HistoryItem[] = []
     const quotes = [...item.content.matchAll(/["“]([^"”]{2,100})["”]/g)].map((match) => match[1].trim());
     const named = [...item.content.matchAll(/\b(?:m[uú]sica|ouvindo|escutando)\s+([^.!?\n]{2,100})/giu)].map((match) => match[1].trim());
     const contextual = cleanQuery(item.content);
-    return [...quotes, ...named, ...(contextual.length >= 2 && contextual.length <= 120 ? [contextual] : [])];
+    // Falas da Prisma podem conter um verso ou uma suposição incorreta; use nelas apenas
+    // referências explicitamente nomeadas. A mensagem da pessoa continua podendo resolver o título.
+    const contextualQueries = item.role === "user" && contextual.length >= 2 && contextual.length <= 120 ? [contextual] : [];
+    return [...quotes, ...named, ...contextualQueries];
   });
   const contextualQuestion = !quoted.length && (!usefulQuery(current) || /\b(?:dela|dele|dessa|desse|nela|nele|essa|esse|isso)\b/iu.test(content));
   const ordered = contextualQuestion
@@ -88,7 +125,10 @@ export async function researchLyrics(
       if (!response.ok) continue;
       const payload = await response.json() as unknown;
       if (!Array.isArray(payload)) continue;
-      for (const candidate of payload.slice(0, 10) as LrclibTrack[]) {
+      const candidates = (payload.slice(0, 10) as LrclibTrack[])
+        .filter((candidate) => plainLyrics(candidate) && isReliableCandidate(candidate, query))
+        .sort((left, right) => candidateRelevance(right, query) - candidateRelevance(left, query));
+      for (const candidate of candidates) {
         const lyrics = plainLyrics(candidate);
         if (!lyrics) continue;
         return {

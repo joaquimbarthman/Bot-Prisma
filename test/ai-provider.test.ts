@@ -163,6 +163,21 @@ test("libera provocação ácida somente para o temperamento irritado", () => {
   assert.doesNotMatch(buildRuntimePrompt({ mode: "spontaneous" }, annoyedState), /mimimi|gado|boomer|vagabund|porra|caralho/i);
 });
 
+test("permite comprar briga apó desrespeito insistente sem remover limites de segurança", () => {
+  const prompt = buildRuntimePrompt({ mode: "direct" });
+  assert.match(prompt, /insistiu em provocação, assédio sexual, ofensa ou desrespeito/i);
+  assert.match(prompt, /modo ignorância total.*comprar a briga verbalmente/i);
+  assert.match(prompt, /até dois palavrões ou xingamentos fortes não discriminatórios/i);
+  assert.match(prompt, /babaca.*arrombado.*desgraçado.*filho da puta/i);
+  assert.match(prompt, /fdp.*vsf.*pqp.*tmnc/i);
+  assert.match(prompt, /cada abreviação conta como um dos dois termos permitidos/i);
+  assert.match(prompt, /nunca use 'fds' como xingamento/i);
+  assert.match(prompt, /concordar brevemente com outra pessoa que esteja defendendo você/i);
+  assert.match(prompt, /nunca autoriza ameaça, perseguição, incentivo à violência/i);
+  assert.match(prompt, /nunca use raça, cor, origem.*orientação sexual.*como xingamento/i);
+  assert.match(prompt, /não invente acusações/i);
+});
+
 test("expõe memória narrativa somente dentro do envelope não confiável", () => {
   const state = {
     relationship: {
