@@ -11,9 +11,9 @@ const item = (discordId: string, channelId: string, content: string, createdAt: 
   createdAt,
 });
 
-test("histórico isola usuário/canal e descarta texto com mais de 48 horas", () => {
+test("histórico isola usuário/canal e descarta texto com mais de 24 horas", () => {
   const selected = selectRecentHistory([
-    item("a", "canal", "expirado", "2026-08-14T11:59:59.000Z"),
+    item("a", "canal", "expirado", "2026-08-15T11:59:59.000Z"),
     item("b", "canal", "outro usuário", "2026-08-16T10:00:00.000Z"),
     item("a", "outro", "outro canal", "2026-08-16T10:00:00.000Z"),
     item("a", "canal", "válido", "2026-08-16T11:00:00.000Z"),

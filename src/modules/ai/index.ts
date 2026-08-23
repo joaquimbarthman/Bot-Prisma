@@ -5,7 +5,7 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addHistoryTurn, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, captureHistoryRevision, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
+import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
@@ -266,7 +266,6 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     await message.reply({ content: "beleza, não vou mais te chamar do nada. se quiser, você pode ativar isso de novo no painel da Prisma.", allowedMentions: { repliedUser: false } });
     return true;
   }
-  const historyRevision = captureHistoryRevision(message.author.id);
   let spontaneous = false;
   let spontaneousReserved = false;
   if (!direct) {
@@ -382,11 +381,6 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     try {
       if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, generated.stateUpdate);
       if (settings.memoryEnabled && (await getSettings(message.author.id)).memoryEnabled) {
-        const now = new Date().toISOString();
-        await addHistoryTurn([
-          { discordId: message.author.id, channelId: message.channelId, role: "user", content, createdAt: now },
-          { discordId: message.author.id, channelId: message.channelId, role: "assistant", content: answer, createdAt: now },
-        ], historyRevision);
         await addPrismaMessage({ messageId: message.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content, authorIsPrisma: false, replyToMessageId: message.reference?.messageId ?? null, createdAt: message.createdAt.toISOString() });
         await addPrismaMessage({ messageId: sent.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content: answer, authorIsPrisma: true, replyToMessageId: message.id, createdAt: sent.createdAt.toISOString() });
         void learnFromInteraction({ userId: message.author.id, guildId: message.guildId, displayName: message.member.displayName, content, reply: answer, messageId: message.id, previousAssistantMessage: [...history].reverse().find((item) => item.role === "assistant")?.content, aiMemoryCandidates: generated.memoryCandidates });

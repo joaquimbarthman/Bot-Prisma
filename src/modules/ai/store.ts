@@ -107,11 +107,11 @@ function toSettings(id: string, value: UserSettings) {
   };
 }
 
-function fromHistory(row: Record<string, unknown>): HistoryItem {
+function historyFromPrismaMessage(row: Record<string, unknown>): HistoryItem {
   return {
-    discordId: row.discord_id as string,
+    discordId: row.user_id as string,
     channelId: row.channel_id as string,
-    role: row.role as "user" | "assistant",
+    role: row.author_is_prisma ? "assistant" : "user",
     content: row.content as string,
     createdAt: row.created_at as string,
   };
@@ -441,10 +441,10 @@ function dateInTimezone(value: string, timezone: string): string {
 }
 
 export async function completedDailyMessageBatches(timezone: string, now = new Date()): Promise<PrismaDailyBatch[]> {
-  const today = now.toLocaleDateString("en-CA", { timeZone: timezone });
+  const summaryCutoff = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
   let messages: PrismaMessage[];
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_messages").select("*").lt("created_at", now.toISOString()).order("created_at", { ascending: true }).limit(2_000);
+    const { data, error } = await supabase.from("prisma_messages").select("*").lt("created_at", summaryCutoff).order("created_at", { ascending: true }).limit(2_000);
     if (error) { remoteFailure("ler mensagens para resumo diário", error.message); return []; }
     messages = (data ?? []).map((row) => ({ messageId: row.message_id, guildId: row.guild_id, channelId: row.channel_id, userId: row.user_id, content: row.content, authorIsPrisma: row.author_is_prisma, replyToMessageId: row.reply_to_message_id, createdAt: row.created_at }));
   } else {
@@ -452,8 +452,8 @@ export async function completedDailyMessageBatches(timezone: string, now = new D
   }
   const groups = new Map<string, PrismaDailyBatch>();
   for (const message of messages) {
+    if (message.createdAt >= summaryCutoff) continue;
     const summaryDate = dateInTimezone(message.createdAt, timezone);
-    if (summaryDate >= today) continue;
     const key = `${message.userId}:${summaryDate}`;
     const batch = groups.get(key) ?? { userId: message.userId, summaryDate, messages: [] };
     batch.messages.push(message); groups.set(key, batch);
@@ -470,7 +470,9 @@ export async function saveDailySummaryAndDeleteMessages(batch: PrismaDailyBatch,
     const { error: rpcError } = await supabase.rpc("save_prisma_daily_summary", { p_user_id: batch.userId, p_summary_date: batch.summaryDate, p_summary: safe, p_message_ids: messageIds });
     if (!rpcError) return true;
     if (!/save_prisma_daily_summary|schema cache|function .*does not exist/i.test(rpcError.message)) { remoteFailure("consolidar resumo diário", rpcError.message); return false; }
-    const { error: summaryError } = await supabase.from("prisma_daily_summaries").upsert({ user_id: batch.userId, summary_date: batch.summaryDate, summary: safe, updated_at: now }, { onConflict: "user_id,summary_date" });
+    const { data: existing } = await supabase.from("prisma_daily_summaries").select("summary").eq("user_id", batch.userId).eq("summary_date", batch.summaryDate).maybeSingle();
+    const combined = existing?.summary ? `${existing.summary}\n${safe}`.slice(-1_200) : safe;
+    const { error: summaryError } = await supabase.from("prisma_daily_summaries").upsert({ user_id: batch.userId, summary_date: batch.summaryDate, summary: combined, updated_at: now }, { onConflict: "user_id,summary_date" });
     if (summaryError) { remoteFailure("salvar resumo diário", summaryError.message); return false; }
     const { error: deleteError } = await supabase.from("prisma_messages").delete().eq("user_id", batch.userId).in("message_id", messageIds);
     if (deleteError) { remoteFailure("apagar mensagens já resumidas", deleteError.message); return false; }
@@ -479,7 +481,7 @@ export async function saveDailySummaryAndDeleteMessages(batch: PrismaDailyBatch,
   return withLocal((db) => {
     const summaries = db.dailySummaries ??= [];
     const existing = summaries.find((item) => item.userId === batch.userId && item.summaryDate === batch.summaryDate);
-    if (existing) Object.assign(existing, { summary: safe, updatedAt: now });
+    if (existing) Object.assign(existing, { summary: `${existing.summary}\n${safe}`.slice(-1_200), updatedAt: now });
     else summaries.push({ userId: batch.userId, summaryDate: batch.summaryDate, summary: safe, updatedAt: now });
     const ids = new Set(messageIds);
     db.prismaMessages = (db.prismaMessages ?? []).filter((message) => !ids.has(message.messageId));
@@ -657,7 +659,6 @@ export async function checkSupabaseConnection(): Promise<boolean> {
   }
   const checks = await Promise.all([
     supabase.from("user_settings").select("discord_id").limit(1),
-    supabase.from("conversation_history").select("id").limit(1),
     supabase.from("ai_usage").select("id").limit(1),
     supabase.from("ai_events").select("id").limit(1),
     supabase.from("prisma_relationships").select("discord_id").limit(1),
@@ -672,7 +673,7 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     supabase.from("lfg_sessions").select("id").limit(1),
     supabase.from("prisma_self_learnings").select("id").limit(1),
   ]);
-  const tables = ["user_settings", "conversation_history", "ai_usage", "ai_events", "prisma_relationships", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_period_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
+  const tables = ["user_settings", "ai_usage", "ai_events", "prisma_relationships", "prisma_user_profiles", "prisma_memories", "prisma_messages", "prisma_emotional_states", "prisma_daily_summaries", "prisma_period_summaries", "prisma_operator_rules", "gallery_posts", "lfg_sessions", "prisma_self_learnings"];
   const failures = checks.map((result, index) => result.error ? `${tables[index]}: ${result.error.message}` : null).filter(Boolean);
   if (failures.length) {
     console.error(`[SUPABASE] Schema incompleto:\n${failures.join("\n")}`);
@@ -825,32 +826,8 @@ export async function applyPrismaStateUpdate(id: string, baseState: PrismaUserSt
   });
 }
 
-export function captureHistoryRevision(id: string): number {
-  return historyRevisions.get(id) ?? 0;
-}
-
-export async function addHistoryTurn(items: HistoryItem[], expectedRevision: number): Promise<boolean> {
-  const id = items[0]?.discordId;
-  if (!id || items.some((item) => item.discordId !== id)) return false;
-  return withKeyedLock(historyQueues, id, async () => {
-    if (expectedRevision !== (historyRevisions.get(id) ?? 0)) return false;
-    if (supabase) {
-      const rows = items.map((item) => ({ discord_id: item.discordId, channel_id: item.channelId, role: item.role, content: item.content, created_at: item.createdAt }));
-      const { error } = await supabase.from("conversation_history").insert(rows);
-      if (error) { remoteFailure("salvar histórico", error.message); return false; }
-      return true;
-    }
-    await withLocal((db) => { db.history.push(...items); }, true);
-    return true;
-  });
-}
-
-export async function addHistory(item: HistoryItem): Promise<void> {
-  await addHistoryTurn([item], captureHistoryRevision(item.discordId));
-}
-
 export function selectRecentHistory(items: HistoryItem[], id: string, channelId: string, limit: number, maxChars: number, now = new Date()): HistoryItem[] {
-  const cutoff = now.getTime() - 48 * 60 * 60_000;
+  const cutoff = now.getTime() - 24 * 60 * 60_000;
   const eligible = items
     .filter((item) => item.discordId === id && item.channelId === channelId && Date.parse(item.createdAt) >= cutoff)
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
@@ -868,26 +845,26 @@ export function selectRecentHistory(items: HistoryItem[], id: string, channelId:
 }
 
 export async function recentHistory(id: string, channelId: string, limit: number, maxChars: number): Promise<HistoryItem[]> {
-  const cutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
   if (supabase) {
-    const { data, error } = await supabase.from("conversation_history")
-      .select("id,discord_id,channel_id,role,content,created_at")
-      .eq("discord_id", id).eq("channel_id", channelId).gte("created_at", cutoff)
+    const { data, error } = await supabase.from("prisma_messages")
+      .select("id,user_id,channel_id,author_is_prisma,content,created_at")
+      .eq("user_id", id).eq("channel_id", channelId).gte("created_at", cutoff)
       .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(limit);
     if (error) { remoteFailure("ler histórico", error.message); return []; }
-    return selectRecentHistory((data ?? []).map(fromHistory), id, channelId, limit, maxChars);
+    return selectRecentHistory((data ?? []).map(historyFromPrismaMessage), id, channelId, limit, maxChars);
   }
-  return withLocal((db) => selectRecentHistory(db.history, id, channelId, limit, maxChars));
+  return withLocal((db) => selectRecentHistory((db.prismaMessages ?? []).map((message) => ({ discordId: message.userId, channelId: message.channelId, role: message.authorIsPrisma ? "assistant" : "user", content: message.content, createdAt: message.createdAt })), id, channelId, limit, maxChars));
 }
 
 export async function clearUserHistory(id: string): Promise<void> {
   await withKeyedLock(historyQueues, id, async () => {
     let remoteError: string | null = null;
     if (supabase) {
-      const { error } = await supabase.from("conversation_history").delete().eq("discord_id", id);
+      const { error } = await supabase.from("prisma_messages").delete().eq("user_id", id);
       if (error) { remoteFailure("apagar histórico", error.message); remoteError = error.message; }
     }
-    await withLocal((db) => { db.history = db.history.filter((item) => item.discordId !== id); }, true);
+    await withLocal((db) => { db.history = db.history.filter((item) => item.discordId !== id); db.prismaMessages = (db.prismaMessages ?? []).filter((item) => item.userId !== id); }, true);
     historyRevisions.set(id, (historyRevisions.get(id) ?? 0) + 1);
     if (remoteError) throw new Error("Não foi possível apagar todo o histórico no Supabase.");
   });
@@ -972,7 +949,7 @@ export async function addSpontaneous(id: string): Promise<void> {
 }
 
 export async function cleanupExpired(): Promise<void> {
-  const historyCutoff = new Date(Date.now() - 48 * 60 * 60_000).toISOString();
+  const historyCutoff = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
   const usageCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString();
   const dailyCutoff = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10);
   const weeklyCutoff = new Date(Date.now() - 90 * 24 * 60 * 60_000).toISOString().slice(0, 10);
@@ -986,7 +963,6 @@ export async function cleanupExpired(): Promise<void> {
       const { error: consolidationError } = await supabase.rpc("consolidate_prisma_summaries", { p_daily_before: dailyCutoff, p_weekly_before: weeklyCutoff });
       if (consolidationError) remoteFailure("consolidar resumos por período", consolidationError.message);
       const results = await Promise.all([
-        supabase.from("conversation_history").delete().lt("created_at", historyCutoff),
         supabase.from("ai_events").delete().lt("created_at", historyCutoff),
         supabase.from("ai_usage").delete().lt("created_at", usageCutoff),
         supabase.from("prisma_period_summaries").delete().lt("period_end", monthlyCutoff),
