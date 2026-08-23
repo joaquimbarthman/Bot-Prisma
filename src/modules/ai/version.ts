@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v4.7";
+export const PRISMA_AI_VERSION = "v4.9";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O painel pessoal agora mostra o sentimento predominante da Prisma por cada pessoa, com nome, intensidade percentual e uma barra visual atualizada.",
+  "Reciprocidade imediata de tom: quando alguém for diretamente grosso ou desrespeitoso, a Prisma pode responder com firmeza e grosseria proporcional no mesmo turno, sem esperar a próxima mensagem.",
   "Emoções mais dinâmicas: cada interação agora pode variar os estados emocionais entre +10 e -5 pontos conforme a intensidade real da mensagem.",
   "O modo de ignorância total agora entende e pode usar abreviações naturais de palavrões, mantendo o mesmo limite contextual e todas as proteções de segurança.",
   "Novo modo de ignorância total para provocações insistentes, permitindo respostas e xingamentos mais pesados sem liberar ameaças, conteúdo sexual, preconceito, discurso de ódio ou ataques a grupos protegidos.",
@@ -54,7 +56,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",
   "Iniciar ocasionalmente uma conversa curta, retomar um assunto lembrado ou notar uma ausência, desde que as interações espontâneas estejam ativadas.",
   "Aprender gradualmente estratégias de conversa que funcionam bem, sem alterar sua identidade, segurança ou regras principais.",
-  "Permitir que cada pessoa veja ou apague memórias, apague o histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
+  "Permitir que cada pessoa acompanhe o vínculo e o sentimento atual, veja ou apague memórias, apague o histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
 ] as const;
 
 export const PRISMA_AI_CAPABILITIES_PROMPT = [

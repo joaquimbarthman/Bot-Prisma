@@ -34,6 +34,7 @@ export const config = {
   logMonitoredMessages: boolean("LOG_MONITORED_MESSAGES", true),
   logMessageContent: boolean("LOG_MESSAGE_CONTENT", false),
   ignoreAdministrators: boolean("IGNORE_ADMINISTRATORS", false),
+  censorshipBypassRoleId: process.env.CENSORSHIP_BYPASS_ROLE_ID?.trim() || "1538337494355935302",
   punishmentRoleName: process.env.PUNISHMENT_ROLE_NAME?.trim() || "Mutado",
   punishmentRoleId: process.env.PUNISHMENT_ROLE_ID?.trim(),
   appealReferenceChannelName: process.env.APPEAL_REFERENCE_CHANNEL_NAME?.trim() || "Falando",

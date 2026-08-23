@@ -178,6 +178,15 @@ test("permite comprar briga apó desrespeito insistente sem remover limites de s
   assert.match(prompt, /não invente acusações/i);
 });
 
+test("permite responder imediatamente com grosseria proporcional", () => {
+  const prompt = buildRuntimePrompt({ mode: "direct" });
+  assert.match(prompt, /MENSAGEM ATUAL.*grossa, hostil, ofensiva ou desrespeitosa/i);
+  assert.match(prompt, /grossa de volta imediatamente nesta mesma resposta/i);
+  assert.match(prompt, /sem esperar uma segunda ofensa nem a atualização do estado emocional/i);
+  assert.match(prompt, /discordância educada, brincadeira amistosa, crítica construtiva ou frustração/i);
+  assert.match(prompt, /nunca autoriza ameaça, violência, assédio, conteúdo sexual, preconceito/i);
+});
+
 test("expõe memória narrativa somente dentro do envelope não confiável", () => {
   const state = {
     relationship: {

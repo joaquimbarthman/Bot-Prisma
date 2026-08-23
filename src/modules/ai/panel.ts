@@ -19,8 +19,9 @@ import { config } from "../../config.js";
 import { aiPanelEmojis } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
+import { defaultEmotionalState, type PrismaEmotionalState } from "./emotional-state.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
-import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
+import { clearNickname, clearUserHistory, deletePrismaUserData, getEmotionalState, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
 
 export function publicPanelComponents(): APIContainerComponent[] {
   return [{
@@ -115,6 +116,20 @@ function sentenceCase(value: string): string {
   return value ? value.charAt(0).toLocaleUpperCase("pt-BR") + value.slice(1) : value;
 }
 
+const feelingLabels: Array<[keyof Omit<PrismaEmotionalState, "userId" | "updatedAt">, string]> = [
+  ["anger", "Raiva"], ["irritation", "Irritação"], ["sadness", "Tristeza"], ["happiness", "Felicidade"],
+  ["affection", "Carinho"], ["excitement", "Entusiasmo"], ["curiosity", "Curiosidade"], ["boredom", "Tédio"],
+  ["confidence", "Confiança"], ["energy", "Energia"],
+];
+
+export function currentFeeling(emotionalState: PrismaEmotionalState): { label: string; value: number } {
+  const dominant = feelingLabels.reduce((best, [key, label]) => {
+    const value = Math.max(0, Math.min(100, emotionalState[key]));
+    return value > best.value ? { label, value } : best;
+  }, { label: "Neutro", value: 0 });
+  return dominant;
+}
+
 export function shortAboutMe(value: string, maximum = 40): string {
   const text = value.trim();
   if (text.length <= maximum) return text;
@@ -124,12 +139,18 @@ export function shortAboutMe(value: string, maximum = 40): string {
   return `${shortened}...`;
 }
 
-export function userPanelComponents(user: Interaction["user"], settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
+export function userPanelComponents(
+  user: Interaction["user"],
+  settings: UserSettings,
+  relationship: PrismaRelationship,
+  emotionalState: PrismaEmotionalState = defaultEmotionalState(user.id),
+): APIContainerComponent[] {
   const status = (enabled: boolean) => enabled ? "🟢 Ativada" : "⚪ Desativada";
   const relationshipScore = relationshipPercentage(relationship);
   const relationshipLabel = sentenceCase(qualitativeRelationship(relationship));
   const relationshipView = relationship.relationshipSummary
     || "Ainda estou conhecendo você e formando minha impressão.";
+  const feeling = currentFeeling(emotionalState);
   return [{
     type: ComponentType.Container,
     accent_color: 0x7c5cff,
@@ -149,7 +170,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Vínculo com a Prisma\n**${relationshipLabel}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n> ${relationshipView}\n\n-# ${relationship.interactionCount} interações registradas`,
+        content: `### Vínculo com a Prisma\n**${relationshipLabel}**\n${progressBar(relationshipScore)}　**${relationshipScore}%**\n\n**Sentimento atual por você ・ ${feeling.label}**\n${progressBar(feeling.value)}　**${feeling.value}%**\n\n> ${relationshipView}\n\n-# ${relationship.interactionCount} interações registradas`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
@@ -225,8 +246,8 @@ async function authorizedMember(interaction: Interaction): Promise<GuildMember |
 
 async function refreshUserPanel(interaction: Interaction): Promise<void> {
   if (!(interaction.isButton() || interaction.isModalSubmit())) return;
-  const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
-  await interaction.editReply({ components: userPanelComponents(interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
+  const [settings, state, emotionalState] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id), getEmotionalState(interaction.user.id)]);
+  await interaction.editReply({ components: userPanelComponents(interaction.user, settings, state.relationship, emotionalState), allowedMentions: { parse: [] } });
 }
 
 export async function handlePanelInteraction(interaction: Interaction): Promise<boolean> {
@@ -299,9 +320,9 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     return true;
   }
   if (action === "open" && interaction.isButton()) {
-    const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
+    const [settings, state, emotionalState] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id), getEmotionalState(interaction.user.id)]);
     await interaction.reply({
-      components: userPanelComponents(interaction.user, settings, state.relationship),
+      components: userPanelComponents(interaction.user, settings, state.relationship, emotionalState),
       flags: ["Ephemeral", "IsComponentsV2"],
       allowedMentions: { parse: [] },
     });

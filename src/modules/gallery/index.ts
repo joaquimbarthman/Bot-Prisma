@@ -3,6 +3,7 @@ import { config } from "../../config.js";
 import { aiPanelEmojis, galleryButtons } from "../../emoji-manager.js";
 import { aiModeration } from "../moderation/ai.js";
 import { localModeration } from "../moderation/filter.js";
+import { hasCensorshipBypassRole } from "../moderation/exemptions.js";
 import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
 import { addPhotoFrame } from "./image.js";
 
@@ -151,7 +152,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     if (action !== "comentar-modal") return false;
     const content = interaction.fields.getTextInputValue("comentario").trim().replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, GALLERY_COMMENT_MAX_LENGTH);
     if (!content) { await interaction.reply({ content: "Escreva um comentário antes de enviar.", flags: ["Ephemeral"] }); return true; }
-    if (await blockedGalleryComment(content)) {
+    if (!hasCensorshipBypassRole(interaction.member) && await blockedGalleryComment(content)) {
       await interaction.reply({ content: "Esse comentário não pode ser publicado. Mantenha a conversa respeitosa.", flags: ["Ephemeral"] });
       return true;
     }

@@ -12,7 +12,7 @@ Monitora mensagens, remove conteúdo ofensivo, aplica avisos progressivos e regi
 
 ## Deploy no Render
 
-O arquivo `render.yaml` cria um Web Service pago com build `npm ci && npm run build`, start `npm start`, health check em `/ready` e disco persistente para os arquivos em `DATA_DIR`. Na criação do serviço, preencha as variáveis marcadas como secretas e copie as demais variáveis do `.env` para o painel do Render. Não envie o `.env` para o repositório.
+O arquivo `render.yaml` cria um Web Service pago com build `npm ci && npm run build`, start `npm start`, health check em `/ready` e disco persistente para os arquivos em `DATA_DIR`. Na criação do serviço, preencha os segredos e os IDs específicos da instalação. As demais configurações já possuem padrões no código e não precisam ser copiadas para o painel. Não envie o `.env` para o repositório.
 
 Antes do primeiro deploy, execute `supabase/schema.sql` e todas as migrations pendentes no Supabase. O disco persistente protege os JSONs locais de reinícios, mas não substitui banco de dados para múltiplas instâncias.
 

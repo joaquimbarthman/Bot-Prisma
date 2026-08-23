@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { publicPanelComponents, relationshipPercentage, shortAboutMe, userPanelComponents } from "../src/modules/ai/panel.js";
+import { currentFeeling, publicPanelComponents, relationshipPercentage, shortAboutMe, userPanelComponents } from "../src/modules/ai/panel.js";
+import { defaultEmotionalState } from "../src/modules/ai/emotional-state.js";
 import { defaultRelationship } from "../src/modules/ai/state.js";
 
 const mockUser = {
@@ -41,8 +42,17 @@ test("painel privado mantém o vínculo e exibe a frase de percepção da Prisma
   const serialized = JSON.stringify(container);
   assert.match(serialized, /Ainda estou conhecendo você e formando minha impressão\./);
   assert.match(serialized, /Vínculo com a Prisma/);
+  assert.match(serialized, /Sentimento atual por você ・ Neutro/);
   assert.match(serialized, /interações registradas/);
   assert.doesNotMatch(serialized, /Somente você pode ver/);
+});
+
+test("painel exibe a emoção dominante e sua porcentagem", () => {
+  const emotionalState = { ...defaultEmotionalState("123"), anger: 17, irritation: 8, happiness: 4 };
+  assert.deepEqual(currentFeeling(emotionalState), { label: "Raiva", value: 17 });
+  const serialized = JSON.stringify(userPanelComponents(mockUser, settings, defaultRelationship("123"), emotionalState)[0]);
+  assert.match(serialized, /Sentimento atual por você ・ Raiva/);
+  assert.match(serialized, /▰▰▱▱▱▱▱▱▱▱　\*\*17%\*\*/);
 });
 
 test("painel público possui somente a entrada para o painel privado", () => {

@@ -3,6 +3,7 @@ import { aiModeration } from "./ai.js";
 import { config } from "../../config.js";
 import { moderationButtons } from "../../emoji-manager.js";
 import { localModeration } from "./filter.js";
+import { hasCensorshipBypassRole } from "./exemptions.js";
 import { getModerationState, isAiMonitoringActive, recordWarning, resetModerationState } from "./state.js";
 import { forgiveMember, punishMember } from "./punishment-role.js";
 
@@ -42,6 +43,7 @@ export async function handleModerationMessage(client: Client, message: Message):
   const inMonitoredChannel = config.monitoredChannelIds.has(message.channelId);
   const inMonitoredCategory = !!message.channel.parentId && config.monitoredCategoryIds.has(message.channel.parentId);
   if (!inMonitoredChannel && !inMonitoredCategory) return false;
+  if (hasCensorshipBypassRole(message.member)) { log(message, "IGNORADA_CARGO_SEM_CENSURA"); return false; }
   if (config.ignoreAdministrators && message.member?.permissions.has(PermissionFlagsBits.Administrator)) { log(message, "IGNORADA_ADMIN"); return false; }
 
   const local = localModeration(message.content);
