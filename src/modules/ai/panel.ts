@@ -99,16 +99,11 @@ function panelNoticeComponents(title: string, description: string, color = 0xed4
 
 export function relationshipPercentage(relationship: PrismaRelationship): number {
   return Math.round((
-    normalizedRelationshipScore(relationship.familiarity, 10)
-    + normalizedRelationshipScore(relationship.warmth, 50)
-    + normalizedRelationshipScore(relationship.trust, 0)
-    + normalizedRelationshipScore(relationship.banter, 30)
+    relationship.familiarity
+    + relationship.warmth
+    + relationship.trust
+    + relationship.banter
   ) / 4);
-}
-
-function normalizedRelationshipScore(value: number, initialValue: number): number {
-  if (value <= initialValue) return 0;
-  return Math.round(((value - initialValue) / (100 - initialValue)) * 100);
 }
 
 function progressBar(value: number): string {

@@ -46,7 +46,20 @@ test("interação neutra não aumenta confiança automaticamente", () => {
   );
 
   assert.equal(result.relationship.trust, 12);
+  assert.equal(result.relationship.familiarity, 1);
+  assert.equal(result.relationship.warmth, 1);
   assert.equal(result.relationship.interactionCount, 1);
+});
+
+test("sinais relacionais usam passos fixos de mais três e menos dois", () => {
+  const state = { relationship: { ...defaultRelationship("123"), familiarity: 10, warmth: 10, trust: 10 }, temperament: defaultTemperament("123") };
+  const positive = applyValidatedStateUpdate(state, { familiarity_delta: 1, trust_delta: 1 });
+  assert.equal(positive.relationship.familiarity, 13);
+  assert.equal(positive.relationship.trust, 13);
+  const negative = applyValidatedStateUpdate(state, { warmth_delta: -1, trust_delta: -1 });
+  assert.equal(negative.relationship.warmth, 8);
+  assert.equal(negative.relationship.trust, 8);
+  assert.equal(negative.relationship.familiarity, 10, "hostilidade não gera familiaridade automática");
 });
 
 test("temperamento normaliza após horas sem interação e relação permanece", () => {
@@ -195,7 +208,7 @@ for (const [label, candidate] of unsafeSummaryCandidates) {
 
 test("define estágios explícitos conforme o vínculo amadurece", () => {
   assert.equal(relationshipStage(defaultRelationship("123")).id, "newcomers");
-  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 10, familiarity: 45, trust: 40, warmth: 50 }).id, "growing");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 10, familiarity: 12, trust: 5, warmth: 12 }).id, "growing");
   assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 50, familiarity: 65, trust: 60, warmth: 70 }).id, "close");
   assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 150, familiarity: 80, trust: 75, warmth: 80 }).id, "accomplices");
 });

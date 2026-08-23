@@ -2,6 +2,7 @@ export const PRISMA_AI_VERSION = "v3.5";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Vínculos agora começam em zero e evoluem com mais naturalidade: conversas diretas criam familiaridade gradual, sinais positivos avançam em passos de 3 e negativos recuam em passos de 2, com progresso corrigido no painel.",
   "Histórico de conversa unificado em uma única fonte, com mensagens detalhadas mantidas por até 24 horas e consolidadas em resumo antes da remoção.",
   "Reconhecimento mais natural de perguntas sobre letras, entendendo referências indiretas como 'dela' e pedidos como 'o que mais te pega nessa letra', além de preservar corretamente títulos com apóstrofos.",
   "Pesquisa obrigatória de letras no LRCLIB quando perguntam qual parte, trecho ou verso de uma música a Prisma mais aprecia, usando somente a letra encontrada para fundamentar a resposta sem inventar versos.",

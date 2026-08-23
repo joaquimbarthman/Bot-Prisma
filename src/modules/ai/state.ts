@@ -212,15 +212,25 @@ export function applyValidatedStateUpdate(
 ): PrismaUserState {
   const update = validateStateUpdate(rawUpdate);
   const timestamp = now.toISOString();
+  const hasNegativeSignal = [update.familiarityDelta, update.warmthDelta, update.patienceDelta, update.banterDelta, update.trustDelta]
+    .some((delta) => delta !== undefined && delta < 0);
+  const fixedDelta = (delta: number | undefined, neutralGrowth = 0): number => {
+    if (delta === undefined) return hasNegativeSignal ? 0 : neutralGrowth;
+    if (delta > 0) return 3;
+    if (delta < 0) return -2;
+    return 0;
+  };
   const relationship: PrismaRelationship = {
     ...state.relationship,
-    familiarity: clampScore(state.relationship.familiarity + (update.familiarityDelta ?? 0)),
-    warmth: clampScore(state.relationship.warmth + (update.warmthDelta ?? 0)),
-    patience: clampScore(state.relationship.patience + (update.patienceDelta ?? 0)),
-    banter: clampScore(state.relationship.banter + (update.banterDelta ?? 0)),
+    // Conversar diretamente cria reconhecimento e receptividade aos poucos.
+    // Sinais explícitos usam passos fixos para tornar a evolução previsível.
+    familiarity: clampScore(state.relationship.familiarity + fixedDelta(update.familiarityDelta, 1)),
+    warmth: clampScore(state.relationship.warmth + fixedDelta(update.warmthDelta, 1)),
+    patience: clampScore(state.relationship.patience + fixedDelta(update.patienceDelta)),
+    banter: clampScore(state.relationship.banter + fixedDelta(update.banterDelta)),
     // Trust only grows from an explicit signal in the current conversation;
     // merely sending repeated messages must not manufacture intimacy.
-    trust: clampScore(state.relationship.trust + (update.trustDelta ?? 0)),
+    trust: clampScore(state.relationship.trust + fixedDelta(update.trustDelta)),
     interactionCount: Math.max(0, state.relationship.interactionCount + 1),
     updatedAt: timestamp,
   };
@@ -269,9 +279,9 @@ const relationshipStages: Record<RelationshipStage, { label: string; guidance: s
 export function relationshipStage(relationship: PrismaRelationship): { id: RelationshipStage; label: string; guidance: string } {
   const closeness = (relationship.familiarity + relationship.trust + relationship.warmth) / 3;
   let id: RelationshipStage = "newcomers";
-  if (relationship.interactionCount >= 120 && closeness >= 70) id = "accomplices";
-  else if (relationship.interactionCount >= 40 && closeness >= 55) id = "close";
-  else if (relationship.interactionCount >= 8 && closeness >= 35) id = "growing";
+  if (relationship.interactionCount >= 100 && closeness >= 65) id = "accomplices";
+  else if (relationship.interactionCount >= 30 && closeness >= 35) id = "close";
+  else if (relationship.interactionCount >= 8 && closeness >= 8) id = "growing";
   return { id, ...relationshipStages[id] };
 }
 

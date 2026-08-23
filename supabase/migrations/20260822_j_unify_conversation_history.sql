@@ -5,6 +5,32 @@ begin;
 -- fonte do histórico recente e também a fila dos resumos.
 drop table if exists public.conversation_history cascade;
 
+-- Recupera vínculos que deixaram de ser persistidos pelo fluxo antigo. Conversa
+-- registrada cria somente familiaridade e calor; confiança continua dependendo
+-- de sinais explícitos avaliados pela Prisma em novas interações.
+insert into public.prisma_relationships (
+  discord_id, familiarity, warmth, patience, banter, trust,
+  interaction_count, created_at, updated_at
+)
+select
+  user_id,
+  least(100, count(*)::integer),
+  least(100, count(*)::integer),
+  0,
+  0,
+  0,
+  count(*)::integer,
+  min(created_at),
+  max(created_at)
+from public.prisma_messages
+where not author_is_prisma
+group by user_id
+on conflict (discord_id) do update set
+  familiarity = greatest(public.prisma_relationships.familiarity, excluded.familiarity),
+  warmth = greatest(public.prisma_relationships.warmth, excluded.warmth),
+  interaction_count = greatest(public.prisma_relationships.interaction_count, excluded.interaction_count),
+  updated_at = greatest(public.prisma_relationships.updated_at, excluded.updated_at);
+
 create or replace function public.save_prisma_daily_summary(
   p_user_id text,
   p_summary_date date,
