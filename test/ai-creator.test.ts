@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRISMA_CREATOR_ID } from "../src/config.js";
-import { detectCreatorDiagnosticRequest, isPrismaCreator, prismaPermissionContext, redactConfiguredSecrets } from "../src/modules/ai/creator.js";
+import { asksAboutPrismaCreator, detectCreatorDiagnosticRequest, isPrismaCreator, prismaPermissionContext, redactConfiguredSecrets } from "../src/modules/ai/creator.js";
 import { buildInteractionEnvelope, buildRuntimePrompt } from "../src/modules/ai/provider.js";
 import { defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 
@@ -47,4 +47,11 @@ test("diagnóstico real estruturado entra somente no envelope do criador", () =>
 test("valores reais de credenciais são removidos de qualquer resposta administrativa", () => {
   const secret = "sk-proj-segredo-real-123";
   assert.equal(redactConfiguredSecrets(`a chave é ${secret}`, [secret]), "a chave é [segredo oculto]");
+});
+
+test("recognizes the Prisma owner without confusing unrelated creators", () => {
+  assert.equal(asksAboutPrismaCreator("quem eh seu dono?"), true);
+  assert.equal(asksAboutPrismaCreator("o criador da Prisma falou isso?"), true);
+  assert.equal(asksAboutPrismaCreator("quem te criou?"), true);
+  assert.equal(asksAboutPrismaCreator("quem eh o criador desse jogo?"), false);
 });

@@ -11,7 +11,17 @@ test("preserva somente menções de usuários autorizados", () => {
 });
 
 test("preserva usuários reais do contexto e neutraliza ID inventado", () => {
-  assert.equal(sanitizeOutput("<@101> <@102> <@999>", ["101", "102"]), "<@101> <@102> [menção removida]");
+  assert.equal(sanitizeOutput("<@101> <@102> <@999>", [], [{ id: "101", username: "Pedro" }, { id: "102", username: "Lucas" }]), "Pedro Lucas [menção removida]");
+});
+
+test("nome de contexto não vira autorização para outro ID inventado", () => {
+  assert.equal(sanitizeOutput("<@999>", [], [{ id: "101", username: "Pedro" }]), "[menção removida]");
+});
+
+test("prompt proíbe ping quando a mensagem atual não contém menções", () => {
+  const prompt = buildRuntimePrompt({ unmentionableUsers: [{ id: "300", username: "Pedro" }] });
+  assert.match(prompt, /MENSAGEM ATUAL não mencionou nenhum outro usuário autorizado/);
+  assert.match(prompt, /histórico, contexto do canal, reply, memória/);
 });
 
 test("continua bloqueando menções amplas, cargos e canais", () => {

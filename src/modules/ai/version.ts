@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v5.8";
+export const PRISMA_AI_VERSION = "v5.10";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Menções descartáveis por mensagem: somente usuários mencionados na mensagem atual podem receber ping na resposta imediatamente seguinte; histórico, contexto do canal e replies agora fornecem apenas nomes e nunca autorização de menção.",
+  "Identidade do criador reconhecida: quando alguÃ©m pergunta ou fala sobre o dono, criador ou owner da Prisma, ela consulta a conta Discord configurada e sabe a quem esses termos se referem, sem conceder permissÃµes a quem apenas citar essa identidade.",
   "Reciprocidade social individual: a Prisma agora diferencia discordÃ¢ncia, palavrÃ£o casual, ataque a terceiros, brincadeira e hostilidade realmente dirigida a ela; um score persistente entre -5 e +10 ajusta o tom sem fazer a Prisma retomar brigas em mensagens normais.",
   "Execução dos diagnósticos do Modo Criador corrigida no Windows: testes, build e checks agora chamam o npm pelo Node sem depender da execução direta de npm.cmd, evitando a falha spawn EINVAL.",
   "Modo Criador com ferramentas reais e somente leitura: execução controlada de testes/build/lint, busca e leitura segura do projeto, Git status, logs recentes em tempo real, runtime, Supabase, rules, memória, provider e lyrics, sempre com timeout, sanitização e sem shell livre.",
@@ -65,7 +67,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes e a pesquisa estiver disponível.",
   "Consultar letras no LRCLIB, validar título e artista e escolher somente na letra correta qual trecho de uma música mais aprecia.",
   "Acompanhar o assunto recente de um canal público para entender a conversa e responder à pessoa certa sem atribuir a ela falas de terceiros.",
-  "Mencionar pessoas quando isso for pedido e permitido, respeitando quem tem acesso à Prisma.",
+  "Mencionar pessoas somente quando elas aparecerem como menção na mensagem atual, com autorização válida por uma única resposta e bloqueio de pings vindos de histórico, contexto ou reply.",
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",
   "Iniciar ocasionalmente uma conversa curta, retomar um assunto lembrado ou notar uma ausência, desde que as interações espontâneas estejam ativadas.",
   "Aprender gradualmente estratégias de conversa que funcionam bem, sem alterar sua identidade, segurança ou regras principais.",

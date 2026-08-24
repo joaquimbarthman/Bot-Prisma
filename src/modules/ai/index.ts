@@ -11,7 +11,7 @@ import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext, determineContextNeeds } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
-import { detectCreatorDiagnosticRequest, prismaPermissionContext, redactConfiguredSecrets, type PrismaRuntimeDiagnostics } from "./creator.js";
+import { asksAboutPrismaCreator, detectCreatorDiagnosticRequest, prismaPermissionContext, redactConfiguredSecrets, type PrismaRuntimeDiagnostics } from "./creator.js";
 import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
 import { detectCreatorAdminIntent, executeCreatorAdminIntent, installCreatorLogCapture } from "./admin-tools.js";
@@ -212,14 +212,14 @@ export function explicitlyRequestedMentionUserIds(
     .filter((userId) => userId !== botId && userId !== authorId);
 }
 
-export function trustedMentionUserIdsFromContext(channelExcerpt?: string): string[] {
+export function contextUserIdsForNames(channelExcerpt?: string): string[] {
   if (!channelExcerpt) return [];
   return [...new Set([...channelExcerpt.matchAll(/\[autor_id=(\d{1,25})\]/g)].map((match) => match[1]))].slice(0, 25);
 }
 
-export function trustedMentionCandidates(mentionedIds: Iterable<string>, channelExcerpt?: string, referencedAuthorId?: string, botId?: string, authorId?: string): string[] {
-  return [...new Set([...mentionedIds, ...trustedMentionUserIdsFromContext(channelExcerpt), ...(referencedAuthorId ? [referencedAuthorId] : [])])]
-    .filter((id) => /^\d{1,25}$/.test(id) && id !== botId && id !== authorId)
+export function allowedMentionIdsForMessage(mentionedIds: Iterable<string>, botId?: string): string[] {
+  return [...new Set(mentionedIds)]
+    .filter((id) => /^\d{1,25}$/.test(id) && id !== botId)
     .slice(0, 25);
 }
 
@@ -233,6 +233,15 @@ async function resolveRequestedMentions(message: Message, requestedIds: string[]
     else unmentionableUsers.push({ id: userId, username });
   }
   return { allowedMentionUserIds, unmentionableUsers };
+}
+
+async function resolveContextUserNames(message: Message, userIds: string[]): Promise<Array<{ id: string; username: string }>> {
+  const users: Array<{ id: string; username: string }> = [];
+  for (const userId of userIds.slice(0, 25)) {
+    const member = message.guild?.members.cache.get(userId) ?? await message.guild?.members.fetch(userId).catch(() => null);
+    if (member) users.push({ id: userId, username: member.displayName || member.user.username });
+  }
+  return users;
 }
 
 async function topicAwareChannelContext(message: Message, limit: number): Promise<string> {
@@ -380,6 +389,12 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     };
     const creatorPermissions = prismaPermissionContext(message.author.id);
     if (creatorPermissions.isCreator) replyContext.creatorPermissions = creatorPermissions;
+    if (asksAboutPrismaCreator(content)) {
+      const creatorId = config.prismaAi.creatorUserId;
+      const creatorUser = client.users.cache.get(creatorId) ?? await client.users.fetch(creatorId).catch(() => null);
+      const creatorName = creatorUser?.username.replace(/[^\p{L}\p{N}_. -]/gu, "").trim().slice(0, 40) || null;
+      replyContext.creatorIdentity = { id: creatorId, username: creatorName };
+    }
     if (asksFavoriteSongPart(content)) {
       replyContext.lyricsResearchAttempted = true;
       replyContext.lyricsResearch = await researchLyrics(
@@ -396,10 +411,15 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
     const referencedAuthorId = message.reference?.messageId ? (await message.fetchReference().catch(() => null))?.author.id : undefined;
-    const trustedCandidateIds = trustedMentionCandidates(message.mentions.users.keys(), replyContext.channelExcerpt, referencedAuthorId, client.user?.id, message.author.id);
+    // Criada do zero para a mensagem atual e descartada ao fim desta resposta.
+    const currentMessageMentionIds = allowedMentionIdsForMessage(message.mentions.users.keys(), client.user?.id);
     const requestedMentionUserIds = explicitlyRequestedMentionUserIds(content, message.mentions.users.keys(), client.user?.id, message.author.id);
-    const { allowedMentionUserIds } = await resolveRequestedMentions(message, trustedCandidateIds);
-    const { unmentionableUsers } = await resolveRequestedMentions(message, requestedMentionUserIds);
+    const { allowedMentionUserIds, unmentionableUsers: unavailableCurrentMentions } = await resolveRequestedMentions(message, currentMessageMentionIds);
+    const requestedResolution = await resolveRequestedMentions(message, requestedMentionUserIds);
+    const contextUserIds = [...new Set([...contextUserIdsForNames(replyContext.channelExcerpt), ...(referencedAuthorId ? [referencedAuthorId] : [])])]
+      .filter((id) => id !== client.user?.id && !allowedMentionUserIds.includes(id));
+    const contextUsersForNames = await resolveContextUserNames(message, contextUserIds);
+    const unmentionableUsers = [...new Map([...unavailableCurrentMentions, ...requestedResolution.unmentionableUsers, ...contextUsersForNames].map((user) => [user.id, user])).values()];
     const recipientUsernames = requestedRecipientUsernames(message.cleanContent);
     const fallbackUsernames = [...new Set([
       ...requestedPlainUsernames(content),
@@ -469,6 +489,9 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, roles: [], repliedUser: false } });
+    // A autorização pertence a uma única resposta; descarte explícito após o envio.
+    allowedMentionUserIds.length = 0;
+    replyContext.allowedMentionUserIds = [];
     try {
       if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, { ...generated.stateUpdate, attitudeDelta: socialTreatment.relationshipDelta });
       if (settings.memoryEnabled && (await getSettings(message.author.id)).memoryEnabled) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { explicitlyRequestedMentionUserIds, trustedMentionCandidates, trustedMentionUserIdsFromContext } from "../src/modules/ai/index.js";
+import { allowedMentionIdsForMessage, contextUserIdsForNames, explicitlyRequestedMentionUserIds } from "../src/modules/ai/index.js";
 
 test("autoriza alvo mencionado explicitamente sem depender da menção ao autor", () => {
   const ids = explicitlyRequestedMentionUserIds(
@@ -35,8 +35,14 @@ test("autoriza menção no pedido informal de dar oi a um novo membro", () => {
   );
 });
 
-test("descobre usuários confiáveis na mensagem, no reply e no contexto recente", () => {
+test("contexto e reply fornecem nomes, mas nunca autorização de ping", () => {
   const excerpt = "ASSUNTO 1\n[autor_id=300] Pedro: eu topo jogar\n[autor_id=400] Ana: eu tbm";
-  assert.deepEqual(trustedMentionUserIdsFromContext(excerpt), ["300", "400"]);
-  assert.deepEqual(trustedMentionCandidates(["500"], excerpt, "600", "100", "200"), ["500", "300", "400", "600"]);
+  assert.deepEqual(contextUserIdsForNames(excerpt), ["300", "400"]);
+  assert.deepEqual(allowedMentionIdsForMessage([], "100"), []);
+});
+
+test("lista permitida nasce somente das menções da mensagem atual", () => {
+  assert.deepEqual(allowedMentionIdsForMessage(["100", "300", "400"], "100"), ["300", "400"]);
+  assert.deepEqual(allowedMentionIdsForMessage([], "100"), [], "a próxima mensagem começa vazia");
+  assert.deepEqual(allowedMentionIdsForMessage(["100"], "100"), [], "mencionar somente a Prisma não autoriza ninguém");
 });

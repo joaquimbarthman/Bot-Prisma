@@ -23,6 +23,10 @@ export type PrismaRuntimeDiagnostics = {
 };
 
 export function isPrismaCreator(userId: string): boolean { return userId === PRISMA_CREATOR_ID; }
+
+export function asksAboutPrismaCreator(content: string): boolean {
+  return /\b(?:seu|sua)\s+(?:dono|dona|criador|criadora|owner)\b|\b(?:dono|dona|criador|criadora|owner)\s+da\s+prisma\b|\bquem\s+(?:te|a)\s+criou\b|\bquem\s+(?:e|eh|Ã©)\s+(?:o|a)?\s*(?:dono|dona|criador|criadora|owner)\s+(?:da\s+prisma|seu|sua)\b/i.test(content);
+}
 export function prismaPermissionContext(userId: string): PrismaPermissionContext {
   const creator = isPrismaCreator(userId);
   return { isCreator: creator, canViewDiagnostics: creator, canViewInternalState: creator, canViewOperatorRules: creator, canBypassNormalRestrictions: creator, canViewSecrets: false };
