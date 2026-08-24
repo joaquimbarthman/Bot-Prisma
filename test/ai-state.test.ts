@@ -79,21 +79,21 @@ test("temperamento normaliza após horas sem interação e relação permanece",
   assert.equal(decayed.mood, "neutral");
   assert.equal(decayed.energy, 80);
   assert.equal(decayed.sarcasm, 70);
-  assert.equal(decayed.affection, 10);
+  assert.equal(decayed.affection, 30);
 });
 
-test("temperamento de vínculo novo começa vazio e cresce gradualmente", () => {
+test("temperamento de vínculo novo começa em baseline neutro e muda gradualmente", () => {
   const initial = defaultTemperament("123");
-  assert.equal(initial.energy, 0);
-  assert.equal(initial.sarcasm, 0);
-  assert.equal(initial.affection, 0);
+  assert.equal(initial.energy, 60);
+  assert.equal(initial.sarcasm, 35);
+  assert.equal(initial.affection, 50);
   const next = applyValidatedStateUpdate(
     { relationship: defaultRelationship("123"), temperament: initial },
     { energy: 80, sarcasm: 70, affection: 90 },
   );
-  assert.equal(next.temperament.energy, 3);
-  assert.equal(next.temperament.sarcasm, 3);
-  assert.equal(next.temperament.affection, 3);
+  assert.equal(next.temperament.energy, 63);
+  assert.equal(next.temperament.sarcasm, 38);
+  assert.equal(next.temperament.affection, 53);
 });
 
 test("toda interação limita aumentos a três e reduções a dois", () => {

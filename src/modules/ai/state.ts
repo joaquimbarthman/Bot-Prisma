@@ -1,9 +1,13 @@
+import { clampRelationScore } from "./social-reciprocity.js";
+export { clampRelationScore } from "./social-reciprocity.js";
+
 export const prismaMoods = ["neutral", "playful", "warm", "calm", "serious", "energetic", "annoyed"] as const;
 
 export type PrismaMood = typeof prismaMoods[number];
 
 export interface PrismaRelationship {
   discordId: string;
+  attitudeScore: number;
   familiarity: number;
   warmth: number;
   patience: number;
@@ -34,6 +38,7 @@ export interface PrismaUserState {
 }
 
 export interface PrismaStateUpdate {
+  attitudeDelta?: number;
   familiarityDelta?: number;
   warmthDelta?: number;
   patienceDelta?: number;
@@ -121,6 +126,8 @@ export function validateStateUpdate(value: unknown): PrismaStateUpdate {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const result: PrismaStateUpdate = {};
+  const attitudeDelta = finiteNumber(aliasedValue(source, "attitude_delta", "attitudeDelta"));
+  if (attitudeDelta !== null) result.attitudeDelta = Math.max(-2, Math.min(1, Math.round(attitudeDelta)));
   const deltas = [
     ["familiarity_delta", "familiarityDelta"],
     ["warmth_delta", "warmthDelta"],
@@ -149,6 +156,7 @@ export function validateStateUpdate(value: unknown): PrismaStateUpdate {
 export function defaultRelationship(discordId: string, now = new Date().toISOString()): PrismaRelationship {
   return {
     discordId,
+    attitudeScore: 0,
     familiarity: 0,
     warmth: 0,
     patience: 0,
@@ -167,9 +175,9 @@ export function defaultTemperament(discordId: string, now = new Date().toISOStri
   return {
     discordId,
     mood: "neutral",
-    energy: 0,
-    sarcasm: 0,
-    affection: 0,
+    energy: 60,
+    sarcasm: 35,
+    affection: 50,
     lastInteractionAt: null,
     updatedAt: now,
   };
@@ -193,9 +201,9 @@ export function decayTemperament(temperament: PrismaTemperament, now = new Date(
   return {
     ...temperament,
     mood: "neutral",
-    energy: moveToward(temperament.energy, 0, distance),
-    sarcasm: moveToward(temperament.sarcasm, 0, distance),
-    affection: moveToward(temperament.affection, 0, distance),
+    energy: moveToward(temperament.energy, 60, distance),
+    sarcasm: moveToward(temperament.sarcasm, 35, distance),
+    affection: moveToward(temperament.affection, 50, distance),
   };
 }
 
@@ -222,6 +230,7 @@ export function applyValidatedStateUpdate(
   };
   const relationship: PrismaRelationship = {
     ...state.relationship,
+    attitudeScore: clampRelationScore(state.relationship.attitudeScore + Math.max(-2, Math.min(1, Math.round(update.attitudeDelta ?? 0)))),
     // Conversar diretamente cria reconhecimento e receptividade aos poucos.
     // Sinais explícitos positivos variam de 0 a 3; os negativos recuam 2 pontos.
     familiarity: clampScore(state.relationship.familiarity + fixedDelta(update.familiarityDelta, 1)),

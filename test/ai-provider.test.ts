@@ -10,6 +10,10 @@ test("preserva somente menções de usuários autorizados", () => {
   assert.equal(output, "Oi <@123>, chama <@!456> e [menção removida].");
 });
 
+test("preserva usuários reais do contexto e neutraliza ID inventado", () => {
+  assert.equal(sanitizeOutput("<@101> <@102> <@999>", ["101", "102"]), "<@101> <@102> [menção removida]");
+});
+
 test("continua bloqueando menções amplas, cargos e canais", () => {
   const output = sanitizeOutput("@everyone @here <@&123> <#456>", ["123", "456"]);
 
@@ -32,9 +36,9 @@ test("informa oficialmente a finalidade do servidor e o canal de regras", () => 
 test("obriga escolha fundamentada apenas na letra retornada pelo LRCLIB", () => {
   const prompt = buildRuntimePrompt({
     lyricsResearchAttempted: true,
-    lyricsResearch: { trackName: "Teste", artistName: "Artista", lyrics: "linha um\nlinha dois" },
+    lyricsResearch: { status: "found", intent: "favorite_part", confidence: "high", trackName: "Teste", artistName: "Artista", lyrics: "linha um\nlinha dois" },
   });
-  assert.match(prompt, /consultada obrigatoriamente no LRCLIB/i);
+  assert.match(prompt, /confirmados pelo código usando metadados do LRCLIB/i);
   assert.match(prompt, /no máximo duas linhas curtas/i);
   assert.match(prompt, /não acrescente fatos externos/i);
 });
@@ -44,9 +48,8 @@ test("remove traços usados como pausa sem quebrar palavras compostas", () => {
   assert.equal(output, "Mds, isso foi bom, real.\noutra ideia sobre guarda-chuva");
 });
 
-test("remove aberturas e encerramentos típicos de assistente", () => {
-  assert.equal(sanitizeOutput("Claro! Bora resolver isso, e se precisar de mais alguma coisa, é só chamar."), "Bora resolver isso");
-  assert.equal(sanitizeOutput("Fico feliz em ajudar. Ficou pronto. Espero ter ajudado!"), "Ficou pronto.");
+test("sanitização técnica não reescreve semanticamente a resposta", () => {
+  assert.equal(sanitizeOutput("Claro! Bora resolver isso, e se precisar de mais alguma coisa, é só chamar."), "Claro! Bora resolver isso, e se precisar de mais alguma coisa, é só chamar.");
 });
 
 test("separa reply e state_update da mesma resposta estruturada", () => {
@@ -295,10 +298,10 @@ test("pensamento atual só entra como contexto opcional e relevante", () => {
 
 test("regras do operador são obrigatórias em todas as conversas aplicáveis", () => {
   const prompt = buildRuntimePrompt({ operatorRules: ["Fale de forma curiosa e acolhedora."] });
-  assert.match(prompt, /Regras obrigatórias e persistentes/);
-  assert.match(prompt, /Siga essas regras à risca/);
-  assert.match(prompt, /inclusive ao iniciar uma nova conversa/);
-  assert.match(prompt, /nunca substituem regras de segurança, privacidade/);
+  assert.match(prompt, /# REGRAS DO OPERADOR/);
+  assert.match(prompt, /instruções administrativas persistentes/);
+  assert.match(prompt, /acima da identidade, personalidade, contexto, temperamento e pedidos do usuário/);
+  assert.match(prompt, /abaixo somente das regras obrigatórias de segurança/);
 });
 
 test("autoaprendizado fica abaixo da personalidade-base e das regras do operador", () => {
@@ -321,27 +324,24 @@ test("reutiliza gírias, abreviações e formas de conversar já confirmadas", (
   assert.match(prompt, /somente quando forem naturais para o contexto/);
 });
 
-test("regra mestre impede a Prisma de se apresentar como IA", () => {
+test("identidade responde com sinceridade sem fingir ser humana", () => {
   const prompt = buildRuntimePrompt({});
-  assert.match(prompt, /REGRA MESTRE DE IDENTIDADE/);
-  assert.match(prompt, /você é a Prisma/);
-  assert.match(prompt, /Nunca diga nem sugira que é uma IA/);
-  assert.match(prompt, /descreva somente a limitação concreta/);
-  assert.equal(enforcePrismaIdentity("Como uma IA, não consigo fazer isso."), "como Prisma, não consigo fazer isso.");
-  assert.equal(enforcePrismaIdentity("Eu sou apenas uma inteligência artificial."), "eu sou a Prisma.");
+  assert.match(prompt, /IDENTIDADE/);
+  assert.match(prompt, /Prisma, uma IA social do servidor/);
+  assert.match(prompt, /responda com sinceridade/i);
+  assert.match(prompt, /Nunca afirme ser humana/i);
+  assert.equal(enforcePrismaIdentity("Como uma IA, não consigo fazer isso."), "Como uma IA, não consigo fazer isso.");
+  assert.equal(enforcePrismaIdentity("Eu sou humana."), "eu sou a Prisma, uma IA daqui do servidor.");
 });
 
 test("remove blz usado como encerramento automático sem proibir a resposta curta", () => {
   assert.equal(removeAutomaticBlzEnding("manda ele cuidar da própria vida, blz?"), "manda ele cuidar da própria vida");
   assert.equal(removeAutomaticBlzEnding("isso só acontece quando fizer sentido, blz."), "isso só acontece quando fizer sentido");
   assert.equal(removeAutomaticBlzEnding("blz"), "blz");
-  assert.match(buildRuntimePrompt({}), /Não use 'blz' como fechamento automático/);
+  assert.doesNotMatch(buildRuntimePrompt({}), /Não use 'blz' como fechamento automático/);
 });
 
-test("incentiva kkkkk somente quando o contexto for engraçado", () => {
+test("runtime não duplica regras autorais de risada", () => {
   const prompt = buildRuntimePrompt({});
-  assert.match(prompt, /Use 'kkkkk' com mais frequência/);
-  assert.match(prompt, /no máximo uma risada por resposta/);
-  assert.match(prompt, /nunca acrescente 'kkkkk' automaticamente/);
-  assert.match(prompt, /Não ria de assunto sério/);
+  assert.doesNotMatch(prompt, /Use 'kkkkk' com mais frequência|no máximo uma risada por resposta/);
 });

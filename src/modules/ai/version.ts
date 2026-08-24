@@ -1,7 +1,19 @@
-export const PRISMA_AI_VERSION = "v4.8";
+export const PRISMA_AI_VERSION = "v5.8";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Reciprocidade social individual: a Prisma agora diferencia discordÃ¢ncia, palavrÃ£o casual, ataque a terceiros, brincadeira e hostilidade realmente dirigida a ela; um score persistente entre -5 e +10 ajusta o tom sem fazer a Prisma retomar brigas em mensagens normais.",
+  "Execução dos diagnósticos do Modo Criador corrigida no Windows: testes, build e checks agora chamam o npm pelo Node sem depender da execução direta de npm.cmd, evitando a falha spawn EINVAL.",
+  "Modo Criador com ferramentas reais e somente leitura: execução controlada de testes/build/lint, busca e leitura segura do projeto, Git status, logs recentes em tempo real, runtime, Supabase, rules, memória, provider e lyrics, sempre com timeout, sanitização e sem shell livre.",
+  "Modo Criador exclusivo por Discord ID: o owner pode consultar diagnósticos reais de regras, memória, contexto, estado interno, provider e integrações, sem liberar tokens, chaves, credenciais, dados privados ou proteções do provedor.",
+  "Menções mais naturais e seguras: a Prisma pode mencionar usuários reais identificados na mensagem, no reply ou no contexto recente, enquanto IDs inventados, cargos, @everyone e @here continuam bloqueados antes do envio.",
+  "Regras administrativas persistentes agora são carregadas da tabela prisma_operator_rules com deduplicação, ordem estável e cache curto, entrando em um bloco próprio e prioritário do prompt sem impedir respostas quando o Supabase falhar.",
+  "Contexto mais focado: a Prisma prioriza a conversa recente e replies, carrega canal, memórias e resumos somente quando o assunto pede e mantém continuidade temporária mesmo com a memória permanente desativada.",
+  "Pesquisa de letras mais confiável: título e artista agora são identificados separadamente, resultados do LRCLIB recebem validação e pontuação, referências ao Spotify respeitam o contexto e títulos ambíguos geram uma pergunta em vez de uma escolha aleatória.",
+  "Abreviações casuais mais presentes e naturais: a Prisma agora prefere grafias comuns como vc, oq, q, n, pq, tbm e agr sem contar palavras, perseguir porcentagens ou inventar siglas, reduzindo esse estilo quando clareza ou sensibilidade forem mais importantes.",
+  "Personalidade mais natural e consistente: a Prisma agora recebe uma identidade estruturada, usa exemplos como referência de ritmo, varia saudações sem respostas fixas e deixa abreviações surgirem sem quotas artificiais.",
+  "Identidade transparente: quando perguntam diretamente, a Prisma responde de forma curta e sincera que é uma IA social do servidor, sem fingir ser humana nem usar discurso técnico.",
+  "Estados neutros corrigidos para novos vínculos, evitando que energia, confiança, sarcasmo e afeto comecem artificialmente zerados ou cansados.",
   "Reciprocidade imediata de tom: quando alguém for diretamente grosso ou desrespeitoso, a Prisma pode responder com firmeza e grosseria proporcional no mesmo turno, sem esperar a próxima mensagem.",
   "Emoções mais dinâmicas: cada interação agora pode variar os estados emocionais entre +10 e -5 pontos conforme a intensidade real da mensagem.",
   "O modo de ignorância total agora entende e pode usar abreviações naturais de palavrões, mantendo o mesmo limite contextual e todas as proteções de segurança.",
@@ -40,6 +52,8 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",
+  "Oferecer ao criador autenticado diagnósticos administrativos reais e somente leitura, incluindo testes, build, busca segura no projeto, Git, logs recentes em tempo real, runtime, banco, regras, memória, provider e letras, sem expor segredos nem liberar terminal ou alterações pelo Discord.",
   "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",
   "Conversar com personalidade própria e adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",

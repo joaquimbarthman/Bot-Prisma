@@ -5,20 +5,26 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
+import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaOperatorRulesStatus, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
-import { buildPrismaPersonalContext } from "./context-builder.js";
+import { buildPrismaPersonalContext, determineContextNeeds } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
+import { detectCreatorDiagnosticRequest, prismaPermissionContext, redactConfiguredSecrets, type PrismaRuntimeDiagnostics } from "./creator.js";
 import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
+import { detectCreatorAdminIntent, executeCreatorAdminIntent, installCreatorLogCapture } from "./admin-tools.js";
+import { analyzeSocialTreatment } from "./social-reciprocity.js";
+
+installCreatorLogCapture();
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
 const presenceSignatures = new Map<string, string>();
 const spontaneousReservations = new SpontaneousReservationLedger();
 const absenceOutreachAt = new Map<string, number>();
+const lastGenerationDiagnostics = new Map<string, { memoryIds: number[]; memoryCount: number; recentHistoryCount: number; channelContextUsed: boolean; operatorRuleCount: number; model: string }>();
 
 async function reserveSpontaneousSlot(discordId: string): Promise<boolean> {
   return spontaneousReservations.reserve(
@@ -153,7 +159,7 @@ function needsChannelContext(message: Message): boolean {
 
 function requestsDirectMention(content: string): boolean {
   const text = normalized(content);
-  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|responde|responda|cumprimenta|cumprimente|sauda|saude|interage|interaja)\b/i.test(text)
+  return /\b(?:chama|chame|marca|marque|menciona|mencione|convida|convide|manda|mande|envia|envie|escreve|escreva|fala|fale|diz|diga|pergunta|pergunte|responde|responda|cumprimenta|cumprimente|sauda|saude|interage|interaja)\b/i.test(text)
     || /\b(?:de|da)\s+(?:um\s+)?(?:oi|ola|bom dia|boa tarde|boa noite|boas?\s+vindas?)\b/i.test(text)
     || /\b(?:puxa|puxe|inicia|inicie|comeca|comece)\b.{0,45}\b(?:assunto|conversa|papo)\b.{0,45}\b(?:com|pro|pra|para)\b/i.test(text)
     || /\b(?:conversa|fale|fala|interage|interaja)\s+(?:ai\s+)?(?:com|pro|pra)\b/i.test(text);
@@ -200,10 +206,21 @@ export function explicitlyRequestedMentionUserIds(
   botId?: string,
   authorId?: string,
 ): string[] {
+  if (!requestsDirectMention(content) && !requestsContextualMention(content)) return [];
   const rawMentionIds = [...content.matchAll(/<@!?(\d{1,25})>/g)].map((match) => match[1]);
   return [...new Set([...mentionedUserIds, ...rawMentionIds])]
-    .filter((userId) => userId !== botId && userId !== authorId)
-    .slice(0, 3);
+    .filter((userId) => userId !== botId && userId !== authorId);
+}
+
+export function trustedMentionUserIdsFromContext(channelExcerpt?: string): string[] {
+  if (!channelExcerpt) return [];
+  return [...new Set([...channelExcerpt.matchAll(/\[autor_id=(\d{1,25})\]/g)].map((match) => match[1]))].slice(0, 25);
+}
+
+export function trustedMentionCandidates(mentionedIds: Iterable<string>, channelExcerpt?: string, referencedAuthorId?: string, botId?: string, authorId?: string): string[] {
+  return [...new Set([...mentionedIds, ...trustedMentionUserIdsFromContext(channelExcerpt), ...(referencedAuthorId ? [referencedAuthorId] : [])])]
+    .filter((id) => /^\d{1,25}$/.test(id) && id !== botId && id !== authorId)
+    .slice(0, 25);
 }
 
 async function resolveRequestedMentions(message: Message, requestedIds: string[]): Promise<{ allowedMentionUserIds: string[]; unmentionableUsers: Array<{ id: string; username: string }> }> {
@@ -219,13 +236,21 @@ async function resolveRequestedMentions(message: Message, requestedIds: string[]
 }
 
 async function topicAwareChannelContext(message: Message, limit: number): Promise<string> {
-  const first = await message.channel.messages.fetch({ limit: 100, before: message.id }).catch(() => null);
-  if (!first) return "";
-  const oldest = [...first.values()].at(-1);
-  const second = limit > 100 && oldest
-    ? await message.channel.messages.fetch({ limit: 100, before: oldest.id }).catch(() => null)
-    : null;
-  const records: ChannelContextMessage[] = [...(second?.values() ?? []), ...first.values()].map((item) => ({
+  const collected: Message[] = [];
+  let before = message.id;
+  for (const pageLimit of channelFetchPageSizes(limit)) {
+    const page = await message.channel.messages.fetch({ limit: pageLimit, before }).catch(() => null);
+    if (!page?.size) break;
+    const values = [...page.values()];
+    collected.push(...values);
+    before = values.at(-1)?.id ?? before;
+    if (values.length < pageLimit) break;
+  }
+  if (message.reference?.messageId && !collected.some((item) => item.id === message.reference?.messageId)) {
+    const referenced = await message.fetchReference().catch(() => null);
+    if (referenced) collected.push(referenced);
+  }
+  const records: ChannelContextMessage[] = collected.map((item) => ({
     id: item.id,
     authorId: item.author.id,
     authorName: item.member?.displayName ?? item.author.username,
@@ -234,6 +259,27 @@ async function topicAwareChannelContext(message: Message, limit: number): Promis
     replyToId: item.reference?.messageId,
   }));
   return selectTopicContext(records, message.cleanContent, message.reference?.messageId);
+}
+
+export function channelFetchPageSizes(limit: number): number[] {
+  const pages: number[] = [];
+  let remaining = Math.max(0, Math.floor(limit));
+  while (remaining > 0) { const size = Math.min(remaining, 100); pages.push(size); remaining -= size; }
+  return pages;
+}
+
+async function temporaryConversationHistory(message: Message, botId?: string): Promise<import("./store.js").HistoryItem[]> {
+  if (!botId) return [];
+  const fetched = await message.channel.messages.fetch({ limit: Math.min(config.prismaAi.historyMaxMessages, 12), before: message.id }).catch(() => null);
+  if (!fetched) return [];
+  return temporaryHistoryFromMessages([...fetched.values()].map((item) => ({ authorId: item.author.id, content: item.cleanContent, createdAt: item.createdAt })), message.author.id, botId, message.channelId);
+}
+
+export function temporaryHistoryFromMessages(messages: Array<{ authorId: string; content: string; createdAt: Date }>, userId: string, botId: string, channelId: string): import("./store.js").HistoryItem[] {
+  return messages.filter((item) => item.authorId === userId || item.authorId === botId)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .slice(-12)
+    .map((item) => ({ discordId: userId, channelId, role: item.authorId === botId ? "assistant" as const : "user" as const, content: item.content, createdAt: item.createdAt.toISOString() }));
 }
 
 async function recentChannelContext(message: Message): Promise<string> { return topicAwareChannelContext(message, config.prismaAi.channelHistoryLimit); }
@@ -307,8 +353,12 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     }
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
     const prismaState = await getPrismaState(message.author.id);
-    const { learnedProfile, relevantMemories, emotionalState, dailySummaries, selfLearnings } = await buildPrismaPersonalContext(message.author.id, settings, content);
-    const history = settings.memoryEnabled ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
+    const socialTreatment = analyzeSocialTreatment(content, prismaState.relationship.attitudeScore);
+    const contextNeeds = determineContextNeeds(content, { hasReply: !!message.reference?.messageId, mentionsOtherUser: message.mentions.users.some((user) => user.id !== client.user?.id && user.id !== message.author.id) });
+    const { learnedProfile, relevantMemories, emotionalState, dailySummaries, selfLearnings } = await buildPrismaPersonalContext(message.author.id, settings, content, contextNeeds);
+    const history = settings.memoryEnabled
+      ? await recentHistory(message.author.id, message.channelId, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars)
+      : await temporaryConversationHistory(message, client.user?.id);
     const currentPresence = message.guild?.presences.cache.get(message.author.id) ?? message.member.presence;
     const currentActivity = currentPresence ? publicActivity(currentPresence) : null;
     const [currentThought, operatorRules] = await Promise.all([
@@ -316,7 +366,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       listPrismaOperatorRules(config.prismaAi.operatorUserId),
     ]);
     const replyContext: ReplyContext = {
-      mode: botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
+      mode: socialTreatment.hostilityLevel > 0 || botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
       currentAuthorName: message.member.displayName,
       currentAuthorId: message.author.id,
       learnedProfile,
@@ -326,7 +376,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       emotionalState,
       operatorRules: operatorRules.map((item) => item.rule),
       currentThought,
+      socialTreatment,
     };
+    const creatorPermissions = prismaPermissionContext(message.author.id);
+    if (creatorPermissions.isCreator) replyContext.creatorPermissions = creatorPermissions;
     if (asksFavoriteSongPart(content)) {
       replyContext.lyricsResearchAttempted = true;
       replyContext.lyricsResearch = await researchLyrics(
@@ -336,13 +389,17 @@ export async function handleAiMessage(client: Client, message: Message): Promise
         currentActivity?.description ? [currentActivity.description] : [],
       );
     }
-    const requestedMentionUserIds = explicitlyRequestedMentionUserIds(
-      content,
-      message.mentions.users.keys(),
-      client.user?.id,
-      message.author.id,
-    );
-    const { allowedMentionUserIds, unmentionableUsers } = await resolveRequestedMentions(message, requestedMentionUserIds);
+    const mentionNeedsChannel = requestsDirectMention(content) && /\b(?:ele|ela|esse|essa|dele|dela)\b/iu.test(content);
+    if (contextNeeds.channelContext || needsChannelContext(message) || mentionNeedsChannel) {
+      let channelContext = await recentChannelContext(message);
+      if (contextNeeds.expandedChannelContext) channelContext = await expandedChannelContext(message) || channelContext;
+      if (channelContext) replyContext.channelExcerpt = channelContext;
+    }
+    const referencedAuthorId = message.reference?.messageId ? (await message.fetchReference().catch(() => null))?.author.id : undefined;
+    const trustedCandidateIds = trustedMentionCandidates(message.mentions.users.keys(), replyContext.channelExcerpt, referencedAuthorId, client.user?.id, message.author.id);
+    const requestedMentionUserIds = explicitlyRequestedMentionUserIds(content, message.mentions.users.keys(), client.user?.id, message.author.id);
+    const { allowedMentionUserIds } = await resolveRequestedMentions(message, trustedCandidateIds);
+    const { unmentionableUsers } = await resolveRequestedMentions(message, requestedMentionUserIds);
     const recipientUsernames = requestedRecipientUsernames(message.cleanContent);
     const fallbackUsernames = [...new Set([
       ...requestedPlainUsernames(content),
@@ -357,13 +414,43 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
     }
-    if (direct || needsChannelContext(message)) {
-      let channelContext = await recentChannelContext(message);
-      if (!channelContext || channelContext.length < 120) channelContext = await expandedChannelContext(message);
-      if (channelContext) replyContext.channelExcerpt = channelContext;
+    const diagnosticRequest = creatorPermissions.isCreator ? detectCreatorDiagnosticRequest(content) : null;
+    const adminRequest = creatorPermissions.isCreator ? detectCreatorAdminIntent(content) : null;
+    if (adminRequest) {
+      const adminTool = await executeCreatorAdminIntent(message.author.id, adminRequest, { guildCount: client.guilds.cache.size, connected: client.isReady() });
+      replyContext.runtimeDiagnostics = { adminTool };
+    }
+    if (diagnosticRequest?.requested || adminRequest) {
+      const diagnostics: PrismaRuntimeDiagnostics = { ...replyContext.runtimeDiagnostics };
+      if ((diagnosticRequest?.operatorRules || diagnosticRequest?.database) && adminRequest?.intent !== "rules" && adminRequest?.intent !== "database") {
+        const status = await getPrismaOperatorRulesStatus(config.prismaAi.operatorUserId);
+        replyContext.operatorRules = status.rules.map((item) => item.rule);
+        diagnostics.operatorRules = {
+          databaseReachable: status.databaseReachable,
+          loadedRules: status.loadedRules,
+          cacheEnabled: status.cacheEnabled,
+          cacheAgeMs: status.cacheAgeMs,
+          lastLoadAt: status.lastLoadAt,
+          enteringRuntimePrompt: status.rules.length === replyContext.operatorRules.length,
+          error: status.error,
+          ...(diagnosticRequest.listRules ? { activeRules: status.rules.map((item) => redactConfiguredSecrets(item.rule, [config.token, config.openAiKey, config.supabaseSecretKey])) } : {}),
+        };
+      }
+      if (diagnosticRequest?.memory) diagnostics.memory = { enabled: settings.memoryEnabled, relevantCount: relevantMemories.length };
+      if (diagnosticRequest?.context) { diagnostics.context = { recentMessages: history.length, channelContextUsed: !!replyContext.channelExcerpt }; diagnostics.lastGeneration = lastGenerationDiagnostics.get(message.author.id); }
+      if (diagnosticRequest?.internalState) { const stateTargetId = [...message.mentions.users.keys()].find((id) => id !== client.user?.id) ?? message.author.id; const diagnosedState = stateTargetId === message.author.id ? prismaState : await getPrismaState(stateTargetId); diagnostics.internalState = {
+        relationship: { targetUserId: stateTargetId, familiarity: diagnosedState.relationship.familiarity, warmth: diagnosedState.relationship.warmth, patience: diagnosedState.relationship.patience, banter: diagnosedState.relationship.banter, trust: diagnosedState.relationship.trust },
+        temperament: { mood: diagnosedState.temperament.mood, energy: diagnosedState.temperament.energy, sarcasm: diagnosedState.temperament.sarcasm, affection: diagnosedState.temperament.affection },
+        emotionalStateAvailable: !!emotionalState,
+      }; }
+      if (diagnosticRequest?.provider) diagnostics.provider = { configured: !!config.openAiKey, model: config.prismaAi.model };
+      if (diagnosticRequest?.lyrics) diagnostics.lyrics = { attempted: !!replyContext.lyricsResearchAttempted, status: replyContext.lyricsResearch?.status, ...(replyContext.lyricsResearch?.status === "found" ? { trackName: replyContext.lyricsResearch.trackName, artistName: replyContext.lyricsResearch.artistName } : {}) };
+      replyContext.runtimeDiagnostics = diagnostics;
     }
     const generated = await generateReply(message.author.id, settings, prismaState, history, content, replyContext);
+    lastGenerationDiagnostics.set(message.author.id, { memoryIds: relevantMemories.flatMap((item) => item.id === undefined ? [] : [item.id]), memoryCount: relevantMemories.length, recentHistoryCount: history.length, channelContextUsed: !!replyContext.channelExcerpt, operatorRuleCount: replyContext.operatorRules?.length ?? 0, model: config.prismaAi.model });
     let answer = suppressUnrequestedSelfActivity(generated.reply, asksWhatPrismaIsDoing(content)) || "entendi.";
+    if (creatorPermissions.isCreator) answer = redactConfiguredSecrets(answer, [config.token, config.openAiKey, config.supabaseSecretKey]);
     if (!answer) throw new Error("Resposta vazia.");
     const unavailableRecipient = unmentionableUsers.length ? recipientUsernames[0] ?? unmentionableUsers[0]?.username : undefined;
     const mentionableRecipientId = allowedMentionUserIds.length === 1 ? allowedMentionUserIds[0] : undefined;
@@ -383,7 +470,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, roles: [], repliedUser: false } });
     try {
-      if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, generated.stateUpdate);
+      if (!spontaneous && !unsafeOutput) await applyPrismaStateUpdate(message.author.id, prismaState, { ...generated.stateUpdate, attitudeDelta: socialTreatment.relationshipDelta });
       if (settings.memoryEnabled && (await getSettings(message.author.id)).memoryEnabled) {
         await addPrismaMessage({ messageId: message.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content, authorIsPrisma: false, replyToMessageId: message.reference?.messageId ?? null, createdAt: message.createdAt.toISOString() });
         await addPrismaMessage({ messageId: sent.id, guildId: message.guildId, channelId: message.channelId, userId: message.author.id, content: answer, authorIsPrisma: true, replyToMessageId: message.id, createdAt: sent.createdAt.toISOString() });

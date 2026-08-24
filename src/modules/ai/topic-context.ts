@@ -29,7 +29,7 @@ function topicLabel(topic: Topic): string {
 }
 
 /** Agrupa conversas paralelas e devolve primeiro o assunto da mensagem atual. */
-export function selectTopicContext(messages: ChannelContextMessage[], currentContent: string, replyToId?: string | null, maximumCharacters = 14_000): string {
+export function selectTopicContext(messages: ChannelContextMessage[], currentContent: string, replyToId?: string | null, maximumCharacters = 14_000, maximumTopics = 1): string {
   const topics: Topic[] = [];
   const ordered = [...messages].filter((message) => message.content.trim()).sort((a, b) => a.createdAt - b.createdAt);
   for (const message of ordered) {
@@ -50,7 +50,7 @@ export function selectTopicContext(messages: ChannelContextMessage[], currentCon
   const ranked = topics.map((topic) => ({
     topic,
     score: (topic === repliedTopic ? 1_000 : 0) + overlap(currentTokens, topic.tokens) * 100 + topic.updatedAt / 1e13,
-  })).sort((a, b) => b.score - a.score).slice(0, 3);
+  })).sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(3, maximumTopics)));
 
   const sections = ranked.map(({ topic }, index) => {
     const lines = topic.messages.slice(-12).map((message) => `[autor_id=${message.authorId}] ${message.authorName}: ${message.content.replace(/\s+/g, " ").slice(0, 350)}`);

@@ -58,6 +58,7 @@ alter table public.prisma_operator_rules
 
 create table if not exists public.prisma_relationships (
   discord_id text primary key,
+  attitude_score smallint not null default 0 check (attitude_score between -5 and 10),
   familiarity smallint not null default 0 check (familiarity between 0 and 100),
   warmth smallint not null default 0 check (warmth between 0 and 100),
   patience smallint not null default 0 check (patience between 0 and 100),

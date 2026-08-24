@@ -65,6 +65,8 @@ const stateRevisions = new Map<string, number>();
 const historyQueues = new Map<string, Promise<void>>();
 const historyRevisions = new Map<string, number>();
 const prismaThoughtPrefix = "PRISMA-THOUGHT:";
+const operatorRulesCache = new Map<string, { expiresAt: number; loadedAt: number; rules: PrismaOperatorRule[] }>();
+export const PRISMA_OPERATOR_RULES_CACHE_TTL_MS = 45_000;
 
 function remoteFailure(operation: string, error: unknown): void {
   console.error(`[SUPABASE] ${operation} falhou; operação mantida em modo seguro:`, error);
@@ -131,6 +133,7 @@ function fromRelationship(id: string, row: Record<string, unknown> | null, now: 
   if (!row) return fallback;
   return {
     discordId: id,
+    attitudeScore: Math.max(-5, Math.min(10, Math.round(Number(row.attitude_score ?? row.attitudeScore) || 0))),
     familiarity: score(row.familiarity, fallback.familiarity),
     warmth: score(row.warmth, fallback.warmth),
     patience: score(row.patience, fallback.patience),
@@ -603,7 +606,11 @@ async function readRemotePrismaState(id: string, now: Date): Promise<{ state: Pr
 async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.rpc("apply_prisma_state", stateRpcParameters(state));
-  if (!error) return true;
+  if (!error) {
+    const attitudeResult = await supabase.from("prisma_relationships").update({ attitude_score: state.relationship.attitudeScore }).eq("discord_id", state.relationship.discordId);
+    if (attitudeResult.error) { remoteFailure("atualizar atitude social", attitudeResult.error.message); return false; }
+    return true;
+  }
   const missingRpc = /apply_prisma_state|schema cache|function .*does not exist/i.test(error.message);
   if (!missingRpc) {
     remoteFailure("atualizar estado relacional", error.message);
@@ -617,6 +624,7 @@ async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> 
   const params = stateRpcParameters(state);
   const relationship = {
     discord_id: params.p_discord_id,
+    attitude_score: state.relationship.attitudeScore,
     familiarity: params.p_familiarity,
     warmth: params.p_warmth,
     patience: params.p_patience,
@@ -631,7 +639,7 @@ async function writeRemotePrismaState(state: PrismaUserState): Promise<boolean> 
   };
   let relationshipResult = await supabase.from("prisma_relationships").upsert(relationship, { onConflict: "discord_id" });
   if (relationshipResult.error && /recent_milestones|schema cache|column .* does not exist/i.test(relationshipResult.error.message)) {
-    const { recent_milestones: _ignored, ...legacyRelationship } = relationship;
+    const { recent_milestones: _ignored, attitude_score: _ignoredAttitude, ...legacyRelationship } = relationship;
     relationshipResult = await supabase.from("prisma_relationships").upsert(legacyRelationship, { onConflict: "discord_id" });
   }
   const temperamentResult = await supabase.from("prisma_emotional_states").upsert({
@@ -727,15 +735,59 @@ export async function clearNickname(id: string): Promise<void> {
   if (remoteError) throw new Error("Não foi possível remover seu apelido no Supabase agora.");
 }
 
-export async function listPrismaOperatorRules(ownerId: string): Promise<PrismaOperatorRule[]> {
-  if (supabase) {
-    const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true });
-    if (error) { remoteFailure("ler regras do operador", error.message); return []; }
-    return (data ?? [])
-      .map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string }))
-      .filter((item) => !item.rule.startsWith(prismaThoughtPrefix));
+export function validPrismaOperatorRules(items: PrismaOperatorRule[]): PrismaOperatorRule[] {
+  const seen = new Set<string>();
+  return [...items].filter((item) => typeof item.rule === "string" && item.rule.trim().length >= 5 && !item.rule.startsWith(prismaThoughtPrefix))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0))
+    .filter((item) => { const key = item.rule.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR"); if (seen.has(key)) return false; seen.add(key); return true; });
+}
+
+export function invalidatePrismaOperatorRulesCache(ownerId?: string): void {
+  if (ownerId) operatorRulesCache.delete(ownerId); else operatorRulesCache.clear();
+}
+
+export async function cachedPrismaOperatorRules(ownerId: string, loader: () => Promise<PrismaOperatorRule[]>, now = Date.now()): Promise<PrismaOperatorRule[]> {
+  const cached = operatorRulesCache.get(ownerId);
+  if (cached && cached.expiresAt > now) return cached.rules;
+  try {
+    const rules = validPrismaOperatorRules(await loader());
+    operatorRulesCache.set(ownerId, { expiresAt: now + PRISMA_OPERATOR_RULES_CACHE_TTL_MS, loadedAt: now, rules });
+    console.info(`[Prisma Rules] ${rules.length} regras carregadas.`);
+    return rules;
+  } catch (error) {
+    console.error("[Prisma Rules] Falha ao carregar regras; seguindo com o comportamento padrão:", error instanceof Error ? error.message : "erro desconhecido");
+    return [];
   }
-  return withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId && !item.rule.startsWith(prismaThoughtPrefix)));
+}
+
+export type OperatorRulesStatus = { databaseReachable: boolean; loadedRules: number; cacheEnabled: true; cacheAgeMs?: number; lastLoadAt?: string; error?: string; rules: PrismaOperatorRule[] };
+
+export async function getPrismaOperatorRulesStatus(ownerId: string, now = Date.now()): Promise<OperatorRulesStatus> {
+  const cached = operatorRulesCache.get(ownerId);
+  if (!supabase) {
+    const rules = validPrismaOperatorRules(await withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId)));
+    return { databaseReachable: false, loadedRules: rules.length, cacheEnabled: true, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString() } : {}), error: "Supabase não está configurado; regras locais em uso.", rules };
+  }
+  try {
+    const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true }).order("id", { ascending: true });
+    if (error) throw new Error(error.message);
+    const rules = validPrismaOperatorRules((data ?? []).map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string })));
+    operatorRulesCache.set(ownerId, { expiresAt: now + PRISMA_OPERATOR_RULES_CACHE_TTL_MS, loadedAt: now, rules });
+    return { databaseReachable: true, loadedRules: rules.length, cacheEnabled: true, cacheAgeMs: 0, lastLoadAt: new Date(now).toISOString(), rules };
+  } catch (error) {
+    return { databaseReachable: false, loadedRules: cached?.rules.length ?? 0, cacheEnabled: true, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString(), rules: cached.rules } : { rules: [] }), error: "Falha na consulta de prisma_operator_rules." };
+  }
+}
+
+export async function listPrismaOperatorRules(ownerId: string): Promise<PrismaOperatorRule[]> {
+  return cachedPrismaOperatorRules(ownerId, async () => {
+    if (supabase) {
+      const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true }).order("id", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string }));
+    }
+    return withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId));
+  });
 }
 
 function normalizePrismaThought(value: string): string {
@@ -790,12 +842,14 @@ export async function savePrismaOperatorRule(ownerId: string, rule: string): Pro
   if (supabase) {
     const { error } = await supabase.from("prisma_operator_rules").upsert({ owner_id: ownerId, rule: normalized }, { onConflict: "owner_id,rule", ignoreDuplicates: true });
     if (error) { remoteFailure("salvar regra do operador", error.message); throw new Error("Não foi possível salvar a regra agora."); }
+    invalidatePrismaOperatorRulesCache(ownerId);
     return true;
   }
   return withLocal((db) => {
     const rules = db.operatorRules ?? [];
     if (rules.some((item) => item.ownerId === ownerId && item.rule === normalized)) return false;
     db.operatorRules = [...rules, { ownerId, rule: normalized, createdAt: new Date().toISOString() }];
+    invalidatePrismaOperatorRulesCache(ownerId);
     return true;
   }, true);
 }

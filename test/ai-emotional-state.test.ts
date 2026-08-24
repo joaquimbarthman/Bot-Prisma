@@ -22,14 +22,16 @@ test("estado emocional satura em zero e cem", () => {
   assert.equal(low.sadness, 0);
 });
 
-test("emoções temporárias decaem para o estado inicial vazio", () => {
+test("emoções temporárias decaem para baselines neutros", () => {
   const initial = { ...defaultEmotionalState("u", "2026-01-01T00:00:00.000Z"), anger: 80, energy: 80 };
   const decayed = decayEmotionalState(initial, new Date("2026-01-01T06:00:00.000Z"));
   assert.ok(decayed.anger < initial.anger);
   assert.ok(decayed.energy < initial.energy);
 });
 
-test("um vínculo novo não nasce com emoções pré-carregadas", () => {
+test("um vínculo novo nasce sem emoções passageiras e com energia neutra", () => {
   const initial = defaultEmotionalState("u");
-  assert.deepEqual(Object.values(initial).slice(1, 11), Array(10).fill(0));
+  assert.deepEqual([initial.happiness, initial.sadness, initial.anger, initial.irritation, initial.affection, initial.curiosity, initial.excitement, initial.boredom], Array(8).fill(0));
+  assert.equal(initial.confidence, 50);
+  assert.equal(initial.energy, 50);
 });

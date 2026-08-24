@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { explicitlyRequestedMentionUserIds } from "../src/modules/ai/index.js";
+import { explicitlyRequestedMentionUserIds, trustedMentionCandidates, trustedMentionUserIdsFromContext } from "../src/modules/ai/index.js";
 
 test("autoriza alvo mencionado explicitamente sem depender da menção ao autor", () => {
   const ids = explicitlyRequestedMentionUserIds(
@@ -33,4 +33,10 @@ test("autoriza menção no pedido informal de dar oi a um novo membro", () => {
     ),
     ["300"],
   );
+});
+
+test("descobre usuários confiáveis na mensagem, no reply e no contexto recente", () => {
+  const excerpt = "ASSUNTO 1\n[autor_id=300] Pedro: eu topo jogar\n[autor_id=400] Ana: eu tbm";
+  assert.deepEqual(trustedMentionUserIdsFromContext(excerpt), ["300", "400"]);
+  assert.deepEqual(trustedMentionCandidates(["500"], excerpt, "600", "100", "200"), ["500", "300", "400", "600"]);
 });

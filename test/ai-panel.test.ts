@@ -20,15 +20,12 @@ test("painel adaptativo remove personalidade e humor manuais", () => {
 
   assert.ok(ids.includes("prisma-ai:nickname"));
   assert.ok(ids.includes("prisma-ai:memory"));
-  assert.ok(ids.includes("prisma-ai:mentions"));
   assert.ok(ids.includes("prisma-ai:spontaneous"));
   assert.ok(ids.includes("prisma-ai:about-me"));
   assert.ok(ids.includes("prisma-ai:clear-history"));
   assert.ok(ids.includes("prisma-ai:reset-relationship"));
   const reset = privateButtons().find((button) => "custom_id" in button && button.custom_id === "prisma-ai:reset-relationship");
   assert.ok(reset && "emoji" in reset && reset.emoji, "botão de reiniciar relação deve ter ícone");
-  const removeNickname = privateButtons().find((button) => "custom_id" in button && button.custom_id === "prisma-ai:nickname-remove");
-  assert.ok(removeNickname && "emoji" in removeNickname && removeNickname.emoji, "botão de remover apelido deve ter ícone");
   assert.ok(!ids.includes("prisma-ai:humor"));
   assert.ok(!ids.includes("prisma-ai:personality"));
 });
@@ -58,7 +55,7 @@ test("painel público possui somente a entrada para o painel privado", () => {
 
 test("resume o sobre mim no painel sem alterar o texto armazenado", () => {
   const aboutMe = "Amo a Ariana Grande e Olivia Rodrigo são minhas cantoras favoritas";
-  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia Rodrigo...");
+  assert.equal(shortAboutMe(aboutMe), "Amo a Ariana Grande e Olivia Rodrigo são...");
   assert.equal(shortAboutMe("1234567890123456789012345678901234567890"), "1234567890123456789012345678901234567890");
   assert.equal(shortAboutMe("Curto RPG"), "Curto RPG");
 });

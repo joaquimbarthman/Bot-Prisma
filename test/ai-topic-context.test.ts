@@ -25,6 +25,13 @@ test("prioriza a conversa da mensagem respondida", () => {
   assert.match(first, /Fortnite/i);
 });
 
+test("envia somente o assunto principal por padrão e preserva múltiplos quando solicitado", () => {
+  const focused = selectTopicContext(messages, "qual música da Billie vcs preferem?");
+  assert.equal((focused.match(/ASSUNTO \d/g) ?? []).length, 1);
+  const expanded = selectTopicContext(messages, "qual música da Billie vcs preferem?", null, 14_000, 3);
+  assert.ok((expanded.match(/ASSUNTO \d/g) ?? []).length > 1);
+});
+
 test("remove palavras genéricas ao identificar assunto", () => {
   assert.deepEqual([...topicTokens("eu acho que isso é muito legal")], ["acho", "legal"]);
 });
