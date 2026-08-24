@@ -1,14 +1,13 @@
-export const PRISMA_AI_VERSION = "v6.2";
+export const PRISMA_AI_VERSION = "v6.4";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Regras do operador reforçadas: as instruções válidas de prisma_operator_rules entram em um bloco de alta prioridade para o owner configurado, preservam o último cache seguro em falhas e podem aplicar proteções determinísticas, como omitir links automáticos quando uma regra exigir.",
+  "Modo administrador removido: a Prisma não executa mais testes, build, leitura de código, consultas internas ou diagnósticos administrativos por mensagens do Discord.",
   "Turnos multiusuário corrigidos: cada nova mensagem define o próprio autor como interlocutor exclusivo, replies e histórico permanecem apenas como contexto e nomes antigos deixam de ser inseridos automaticamente no começo das respostas.",
   "Menções descartáveis por mensagem: somente usuários mencionados na mensagem atual podem receber ping na resposta imediatamente seguinte; histórico, contexto do canal e replies agora fornecem apenas nomes e nunca autorização de menção.",
   "Identidade do criador reconhecida: quando alguÃ©m pergunta ou fala sobre o dono, criador ou owner da Prisma, ela consulta a conta Discord configurada e sabe a quem esses termos se referem, sem conceder permissÃµes a quem apenas citar essa identidade.",
   "Reciprocidade social individual: a Prisma agora diferencia discordÃ¢ncia, palavrÃ£o casual, ataque a terceiros, brincadeira e hostilidade realmente dirigida a ela; um score persistente entre -5 e +10 ajusta o tom sem fazer a Prisma retomar brigas em mensagens normais.",
-  "Execução dos diagnósticos do Modo Criador corrigida no Windows: testes, build e checks agora chamam o npm pelo Node sem depender da execução direta de npm.cmd, evitando a falha spawn EINVAL.",
-  "Modo Criador com ferramentas reais e somente leitura: execução controlada de testes/build/lint, busca e leitura segura do projeto, Git status, logs recentes em tempo real, runtime, Supabase, rules, memória, provider e lyrics, sempre com timeout, sanitização e sem shell livre.",
-  "Modo Criador exclusivo por Discord ID: o owner pode consultar diagnósticos reais de regras, memória, contexto, estado interno, provider e integrações, sem liberar tokens, chaves, credenciais, dados privados ou proteções do provedor.",
   "Menções mais naturais e seguras: a Prisma pode mencionar usuários reais identificados na mensagem, no reply ou no contexto recente, enquanto IDs inventados, cargos, @everyone e @here continuam bloqueados antes do envio.",
   "Regras administrativas persistentes agora são carregadas da tabela prisma_operator_rules com deduplicação, ordem estável e cache curto, entrando em um bloco próprio e prioritário do prompt sem impedir respostas quando o Supabase falhar.",
   "Contexto mais focado: a Prisma prioriza a conversa recente e replies, carrega canal, memórias e resumos somente quando o assunto pede e mantém continuidade temporária mesmo com a memória permanente desativada.",
@@ -56,7 +55,6 @@ export const PRISMA_AI_LATEST_UPDATE = [
  */
 export const PRISMA_AI_CAPABILITIES = [
   "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",
-  "Oferecer ao criador autenticado diagnósticos administrativos reais e somente leitura, incluindo testes, build, busca segura no projeto, Git, logs recentes em tempo real, runtime, banco, regras, memória, provider e letras, sem expor segredos nem liberar terminal ou alterações pelo Discord.",
   "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",
   "Conversar com personalidade própria e adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",

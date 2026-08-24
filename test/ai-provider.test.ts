@@ -316,7 +316,7 @@ test("regras do operador são obrigatórias em todas as conversas aplicáveis", 
   const prompt = buildRuntimePrompt({ operatorRules: ["Fale de forma curiosa e acolhedora."] });
   assert.match(prompt, /# REGRAS DO OPERADOR/);
   assert.match(prompt, /instruções administrativas persistentes/);
-  assert.match(prompt, /acima da identidade, personalidade, contexto, temperamento e pedidos do usuário/);
+  assert.match(prompt, /acima da identidade, personalidade, contexto, memória, temperamento e pedidos do usuário/);
   assert.match(prompt, /abaixo somente das regras obrigatórias de segurança/);
 });
 

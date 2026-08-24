@@ -5,26 +5,22 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaOperatorRulesStatus, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
+import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext, determineContextNeeds } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
-import { asksAboutPrismaCreator, detectCreatorDiagnosticRequest, prismaPermissionContext, redactConfiguredSecrets, type PrismaRuntimeDiagnostics } from "./creator.js";
+import { asksAboutPrismaCreator } from "./creator.js";
 import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
-import { detectCreatorAdminIntent, executeCreatorAdminIntent, installCreatorLogCapture } from "./admin-tools.js";
 import { analyzeSocialTreatment } from "./social-reciprocity.js";
-
-installCreatorLogCapture();
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
 const presenceSignatures = new Map<string, string>();
 const spontaneousReservations = new SpontaneousReservationLedger();
 const absenceOutreachAt = new Map<string, number>();
-const lastGenerationDiagnostics = new Map<string, { memoryIds: number[]; memoryCount: number; recentHistoryCount: number; channelContextUsed: boolean; operatorRuleCount: number; model: string }>();
 
 async function reserveSpontaneousSlot(discordId: string): Promise<boolean> {
   return spontaneousReservations.reserve(
@@ -404,8 +400,6 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       currentThought,
       socialTreatment,
     };
-    const creatorPermissions = prismaPermissionContext(message.author.id);
-    if (creatorPermissions.isCreator) replyContext.creatorPermissions = creatorPermissions;
     if (asksAboutPrismaCreator(content)) {
       const creatorId = config.prismaAi.creatorUserId;
       const creatorUser = client.users.cache.get(creatorId) ?? await client.users.fetch(creatorId).catch(() => null);
@@ -452,43 +446,8 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     if (asksAboutActivity(content)) {
       replyContext.activityDescription = currentActivity?.description ?? "Nenhuma atividade pública está visível agora.";
     }
-    const diagnosticRequest = creatorPermissions.isCreator ? detectCreatorDiagnosticRequest(content) : null;
-    const adminRequest = creatorPermissions.isCreator ? detectCreatorAdminIntent(content) : null;
-    if (adminRequest) {
-      const adminTool = await executeCreatorAdminIntent(message.author.id, adminRequest, { guildCount: client.guilds.cache.size, connected: client.isReady() });
-      replyContext.runtimeDiagnostics = { adminTool };
-    }
-    if (diagnosticRequest?.requested || adminRequest) {
-      const diagnostics: PrismaRuntimeDiagnostics = { ...replyContext.runtimeDiagnostics };
-      if ((diagnosticRequest?.operatorRules || diagnosticRequest?.database) && adminRequest?.intent !== "rules" && adminRequest?.intent !== "database") {
-        const status = await getPrismaOperatorRulesStatus(config.prismaAi.operatorUserId);
-        replyContext.operatorRules = status.rules.map((item) => item.rule);
-        diagnostics.operatorRules = {
-          databaseReachable: status.databaseReachable,
-          loadedRules: status.loadedRules,
-          cacheEnabled: status.cacheEnabled,
-          cacheAgeMs: status.cacheAgeMs,
-          lastLoadAt: status.lastLoadAt,
-          enteringRuntimePrompt: status.rules.length === replyContext.operatorRules.length,
-          error: status.error,
-          ...(diagnosticRequest.listRules ? { activeRules: status.rules.map((item) => redactConfiguredSecrets(item.rule, [config.token, config.openAiKey, config.supabaseSecretKey])) } : {}),
-        };
-      }
-      if (diagnosticRequest?.memory) diagnostics.memory = { enabled: settings.memoryEnabled, relevantCount: relevantMemories.length };
-      if (diagnosticRequest?.context) { diagnostics.context = { recentMessages: history.length, channelContextUsed: !!replyContext.channelExcerpt }; diagnostics.lastGeneration = lastGenerationDiagnostics.get(message.author.id); }
-      if (diagnosticRequest?.internalState) { const stateTargetId = [...message.mentions.users.keys()].find((id) => id !== client.user?.id) ?? message.author.id; const diagnosedState = stateTargetId === message.author.id ? prismaState : await getPrismaState(stateTargetId); diagnostics.internalState = {
-        relationship: { targetUserId: stateTargetId, familiarity: diagnosedState.relationship.familiarity, warmth: diagnosedState.relationship.warmth, patience: diagnosedState.relationship.patience, banter: diagnosedState.relationship.banter, trust: diagnosedState.relationship.trust },
-        temperament: { mood: diagnosedState.temperament.mood, energy: diagnosedState.temperament.energy, sarcasm: diagnosedState.temperament.sarcasm, affection: diagnosedState.temperament.affection },
-        emotionalStateAvailable: !!emotionalState,
-      }; }
-      if (diagnosticRequest?.provider) diagnostics.provider = { configured: !!config.openAiKey, model: config.prismaAi.model };
-      if (diagnosticRequest?.lyrics) diagnostics.lyrics = { attempted: !!replyContext.lyricsResearchAttempted, status: replyContext.lyricsResearch?.status, ...(replyContext.lyricsResearch?.status === "found" ? { trackName: replyContext.lyricsResearch.trackName, artistName: replyContext.lyricsResearch.artistName } : {}) };
-      replyContext.runtimeDiagnostics = diagnostics;
-    }
     const generated = await generateReply(message.author.id, settings, prismaState, history, content, replyContext);
-    lastGenerationDiagnostics.set(message.author.id, { memoryIds: relevantMemories.flatMap((item) => item.id === undefined ? [] : [item.id]), memoryCount: relevantMemories.length, recentHistoryCount: history.length, channelContextUsed: !!replyContext.channelExcerpt, operatorRuleCount: replyContext.operatorRules?.length ?? 0, model: config.prismaAi.model });
     let answer = suppressUnrequestedSelfActivity(generated.reply, asksWhatPrismaIsDoing(content)) || "entendi.";
-    if (creatorPermissions.isCreator) answer = redactConfiguredSecrets(answer, [config.token, config.openAiKey, config.supabaseSecretKey]);
     if (!answer) throw new Error("Resposta vazia.");
     if (requestsDirectMention(content)) {
       const unavailableRecipient = requestedResolution.unmentionableUsers[0]?.username;

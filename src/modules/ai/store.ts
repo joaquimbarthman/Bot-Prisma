@@ -66,6 +66,7 @@ const historyQueues = new Map<string, Promise<void>>();
 const historyRevisions = new Map<string, number>();
 const prismaThoughtPrefix = "PRISMA-THOUGHT:";
 const operatorRulesCache = new Map<string, { expiresAt: number; loadedAt: number; rules: PrismaOperatorRule[] }>();
+const operatorRulesLastErrors = new Map<string, { at: number; message: string }>();
 export const PRISMA_OPERATOR_RULES_CACHE_TTL_MS = 45_000;
 
 function remoteFailure(operation: string, error: unknown): void {
@@ -739,7 +740,7 @@ export function validPrismaOperatorRules(items: PrismaOperatorRule[]): PrismaOpe
   const seen = new Set<string>();
   return [...items].filter((item) => typeof item.rule === "string" && item.rule.trim().length >= 5 && !item.rule.startsWith(prismaThoughtPrefix))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0))
-    .filter((item) => { const key = item.rule.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR"); if (seen.has(key)) return false; seen.add(key); return true; });
+    .filter((item) => { if (seen.has(item.rule)) return false; seen.add(item.rule); return true; });
 }
 
 export function invalidatePrismaOperatorRulesCache(ownerId?: string): void {
@@ -747,35 +748,45 @@ export function invalidatePrismaOperatorRulesCache(ownerId?: string): void {
 }
 
 export async function cachedPrismaOperatorRules(ownerId: string, loader: () => Promise<PrismaOperatorRule[]>, now = Date.now()): Promise<PrismaOperatorRule[]> {
+  if (!ownerId.trim()) {
+    console.error("[Prisma Rules] owner_id do operador não está configurado; nenhuma regra foi carregada.");
+    return [];
+  }
   const cached = operatorRulesCache.get(ownerId);
   if (cached && cached.expiresAt > now) return cached.rules;
   try {
-    const rules = validPrismaOperatorRules(await loader());
+    const rules = validPrismaOperatorRules((await loader()).filter((item) => item.ownerId === ownerId));
     operatorRulesCache.set(ownerId, { expiresAt: now + PRISMA_OPERATOR_RULES_CACHE_TTL_MS, loadedAt: now, rules });
+    operatorRulesLastErrors.delete(ownerId);
     console.info(`[Prisma Rules] ${rules.length} regras carregadas.`);
     return rules;
   } catch (error) {
-    console.error("[Prisma Rules] Falha ao carregar regras; seguindo com o comportamento padrão:", error instanceof Error ? error.message : "erro desconhecido");
-    return [];
+    const message = error instanceof Error ? error.message : "erro desconhecido";
+    operatorRulesLastErrors.set(ownerId, { at: now, message });
+    console.error("[Prisma Rules] Falha ao carregar regras; mantendo o último conjunto seguro disponível:", message);
+    return cached?.rules ?? [];
   }
 }
 
-export type OperatorRulesStatus = { databaseReachable: boolean; loadedRules: number; cacheEnabled: true; cacheAgeMs?: number; lastLoadAt?: string; error?: string; rules: PrismaOperatorRule[] };
+export type OperatorRulesStatus = { databaseReachable: boolean; databaseRules?: number; loadedRules: number; cacheEnabled: true; cacheTtlMs: number; cacheAgeMs?: number; lastLoadAt?: string; lastErrorAt?: string; error?: string; rules: PrismaOperatorRule[] };
 
 export async function getPrismaOperatorRulesStatus(ownerId: string, now = Date.now()): Promise<OperatorRulesStatus> {
   const cached = operatorRulesCache.get(ownerId);
   if (!supabase) {
     const rules = validPrismaOperatorRules(await withLocal((db) => (db.operatorRules ?? []).filter((item) => item.ownerId === ownerId)));
-    return { databaseReachable: false, loadedRules: rules.length, cacheEnabled: true, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString() } : {}), error: "Supabase não está configurado; regras locais em uso.", rules };
+    return { databaseReachable: false, databaseRules: rules.length, loadedRules: cached?.rules.length ?? rules.length, cacheEnabled: true, cacheTtlMs: PRISMA_OPERATOR_RULES_CACHE_TTL_MS, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString() } : {}), error: "Supabase não está configurado; regras locais em uso.", rules: cached?.rules ?? rules };
   }
   try {
     const { data, error } = await supabase.from("prisma_operator_rules").select("id, owner_id, rule, created_at").eq("owner_id", ownerId).order("created_at", { ascending: true }).order("id", { ascending: true });
     if (error) throw new Error(error.message);
     const rules = validPrismaOperatorRules((data ?? []).map((row) => ({ id: row.id as number, ownerId: row.owner_id as string, rule: row.rule as string, createdAt: row.created_at as string })));
     operatorRulesCache.set(ownerId, { expiresAt: now + PRISMA_OPERATOR_RULES_CACHE_TTL_MS, loadedAt: now, rules });
-    return { databaseReachable: true, loadedRules: rules.length, cacheEnabled: true, cacheAgeMs: 0, lastLoadAt: new Date(now).toISOString(), rules };
+    operatorRulesLastErrors.delete(ownerId);
+    return { databaseReachable: true, databaseRules: data?.length ?? 0, loadedRules: rules.length, cacheEnabled: true, cacheTtlMs: PRISMA_OPERATOR_RULES_CACHE_TTL_MS, cacheAgeMs: 0, lastLoadAt: new Date(now).toISOString(), rules };
   } catch (error) {
-    return { databaseReachable: false, loadedRules: cached?.rules.length ?? 0, cacheEnabled: true, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString(), rules: cached.rules } : { rules: [] }), error: "Falha na consulta de prisma_operator_rules." };
+    const message = error instanceof Error ? error.message : "erro desconhecido";
+    operatorRulesLastErrors.set(ownerId, { at: now, message });
+    return { databaseReachable: false, loadedRules: cached?.rules.length ?? 0, cacheEnabled: true, cacheTtlMs: PRISMA_OPERATOR_RULES_CACHE_TTL_MS, ...(cached ? { cacheAgeMs: Math.max(0, now - cached.loadedAt), lastLoadAt: new Date(cached.loadedAt).toISOString(), rules: cached.rules } : { rules: [] }), lastErrorAt: new Date(now).toISOString(), error: `Falha na consulta de prisma_operator_rules: ${message}` };
   }
 }
 
