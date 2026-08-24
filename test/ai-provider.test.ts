@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInteractionEnvelope, buildRuntimePrompt, conversationTone, enforcePrismaIdentity, parseProviderOutput, PRISMA_RULES_CHANNEL_ID, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput, suppressUnrequestedSelfActivity } from "../src/modules/ai/provider.js";
+import { buildInteractionEnvelope, buildRuntimePrompt, conversationTone, enforcePrismaIdentity, parseProviderOutput, PRISMA_RULES_CHANNEL_ID, removeAutomaticBlzEnding, replyWordLimit, sanitizeOutput, selectReasoningDecision, selectReasoningEffort, suppressUnrequestedSelfActivity } from "../src/modules/ai/provider.js";
 import { applyValidatedStateUpdate, defaultRelationship, defaultTemperament } from "../src/modules/ai/state.js";
 import { defaultEmotionalState } from "../src/modules/ai/emotional-state.js";
 
@@ -135,6 +135,35 @@ test("mantém reply válida quando state_update é inválido", () => {
   const output = parseProviderOutput(JSON.stringify({ reply: "Resposta ainda funciona.", state_update: "inválido" }));
   assert.equal(output.reply, "Resposta ainda funciona.");
   assert.deepEqual(output.stateUpdate, {});
+});
+
+test("lê a avaliação estruturada de compreensão na mesma resposta", () => {
+  const output = parseProviderOutput(JSON.stringify({
+    reply: "isso veio criptografado pra mim KKKK, escreve dnv",
+    message_understanding: { confidence: 0.18, needs_clarification: true },
+    state_update: {},
+    emotional_update: {},
+    memory_candidates: [],
+  }));
+  assert.deepEqual(output.messageUnderstanding, { confidence: 0.18, needsClarification: true });
+});
+
+test("compreensão ausente ou inválida usa padrão seguro sem pedir repetição", () => {
+  const absent = parseProviderOutput(JSON.stringify({ reply: "entendi", state_update: {}, emotional_update: {}, memory_candidates: [] }));
+  const invalid = parseProviderOutput(JSON.stringify({ reply: "entendi", message_understanding: { confidence: 5, needs_clarification: "sim" }, state_update: {}, emotional_update: {}, memory_candidates: [] }));
+  assert.deepEqual(absent.messageUnderstanding, { confidence: 1, needsClarification: false });
+  assert.deepEqual(invalid.messageUnderstanding, { confidence: 1, needsClarification: false });
+});
+
+test("runtime tenta contexto e abreviações antes de pedir esclarecimento dinâmico", () => {
+  const prompt = buildRuntimePrompt({});
+  assert.match(prompt, /MENSAGENS CONFUSAS/);
+  assert.match(prompt, /histórico recente.*contexto anterior/i);
+  assert.match(prompt, /vc, vcs, oq, q, pq, n, agr, dps, tbm, tlgd, mds e kkkk/);
+  assert.match(prompt, /needs_clarification=false quando ainda der para inferir/i);
+  assert.match(prompt, /needs_clarification=true somente quando a intenção continuar genuinamente incompreensível/i);
+  assert.match(prompt, /Crie a brincadeira dinamicamente e varie a formulação/i);
+  assert.match(prompt, /NÃO escolha simplesmente uma dessas frases/i);
 });
 
 test("interpreta atualização emocional estruturada com intensidade variável", () => {
@@ -273,6 +302,32 @@ test("mantém conversa casual curta e só expande quando solicitado", () => {
   assert.equal(replyWordLimit("faça um guia completo passo a passo", "direct"), 80);
   assert.equal(replyWordLimit("atividade", "activity"), 20);
   assert.equal(replyWordLimit("saudade", "absence"), 20);
+});
+
+test("reasoning LOW é o padrão para conversa casual", () => {
+  for (const content of ["oi prisma", "td bem?", "kkkk vc é doida", "saudades", "qual jogo vc prefere?", `oi${"i".repeat(400)}`]) {
+    assert.equal(selectReasoningEffort({ content, useWebSearch: false, channelContextUsed: false, multipleUsersInContext: false, operatorRuleCount: 0, relevantMemoryCount: 0 }), "low");
+  }
+});
+
+test("reasoning MEDIUM atende pesquisa e análises realmente complexas", () => {
+  const base = { useWebSearch: false, channelContextUsed: false, multipleUsersInContext: false, operatorRuleCount: 0, relevantMemoryCount: 0 };
+  assert.deepEqual(selectReasoningDecision({ ...base, content: "pesquisa pra mim quando isso aconteceu", useWebSearch: true }), { effort: "medium", reason: "web_search" });
+  assert.equal(selectReasoningEffort({ ...base, content: "compare essas duas propostas" }), "medium");
+  assert.equal(selectReasoningEffort({ ...base, content: "analisa esse erro no TypeScript" }), "medium");
+  assert.equal(selectReasoningEffort({ ...base, content: "qual dessas duas ideias faz mais sentido e pq?" }), "medium");
+});
+
+test("reasoning MEDIUM usa somente contexto multiusuário relevante", () => {
+  const base = { content: "oi prisma", useWebSearch: false, operatorRuleCount: 0, relevantMemoryCount: 0 };
+  assert.equal(selectReasoningEffort({ ...base, channelContextUsed: false, multipleUsersInContext: true }), "low");
+  assert.equal(selectReasoningEffort({ ...base, content: "oq o Rafael quis dizer sobre oq o Miguel falou?", channelContextUsed: true, multipleUsersInContext: true }), "medium");
+});
+
+test("rules isoladas não mudam o reasoning, mas muitas rules combinadas com contexto podem mudar", () => {
+  const base = { content: "oi prisma", useWebSearch: false, channelContextUsed: false, multipleUsersInContext: false, relevantMemoryCount: 0 };
+  assert.equal(selectReasoningEffort({ ...base, operatorRuleCount: 8 }), "low");
+  assert.deepEqual(selectReasoningDecision({ ...base, operatorRuleCount: 5, relevantMemoryCount: 2 }), { effort: "medium", reason: "rules_and_context" });
 });
 
 test("impõe oitenta palavras como teto absoluto", () => {

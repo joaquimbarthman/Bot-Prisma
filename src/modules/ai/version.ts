@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v6.4";
+export const PRISMA_AI_VERSION = "v6.6";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Compreensão contextual: o Luna agora avalia na própria resposta se realmente entendeu a mensagem, tolera abreviações e erros pequenos e, somente diante de incompreensão genuína, pede para a pessoa repetir com uma brincadeira curta e criada dinamicamente.",
+  "Raciocínio adaptativo no GPT-5.6 Luna: conversas comuns usam LOW por padrão, enquanto pesquisas, análises complexas, questões técnicas e contexto multiusuário realmente necessário usam MEDIUM, sem depender de Modo Criador.",
   "Regras do operador reforçadas: as instruções válidas de prisma_operator_rules entram em um bloco de alta prioridade para o owner configurado, preservam o último cache seguro em falhas e podem aplicar proteções determinísticas, como omitir links automáticos quando uma regra exigir.",
   "Modo administrador removido: a Prisma não executa mais testes, build, leitura de código, consultas internas ou diagnósticos administrativos por mensagens do Discord.",
   "Turnos multiusuário corrigidos: cada nova mensagem define o próprio autor como interlocutor exclusivo, replies e histórico permanecem apenas como contexto e nomes antigos deixam de ser inseridos automaticamente no começo das respostas.",
