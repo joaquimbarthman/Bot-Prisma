@@ -106,7 +106,7 @@ function statusDisplay(state: State): string {
   if (state.status === "em_atendimento") return "Em atendimento";
   if (state.status === "aguardando_chamada") return "Aguardando chamada";
   if (state.status === "aprovada") return "✅ Verificação aprovada";
-  if (state.status === "recusada") return `🚫 Verificação recusada${state.reason ? `\nMotivo: ${state.reason}` : ""}`;
+  if (state.status === "recusada") return "🚫 Verificação recusada";
   if (state.status === "encerrada") return "⚪ Atendimento encerrado";
   return state.step === "ready" ? "Pronto para análise" : "Aguardando staff";
 }
@@ -129,6 +129,7 @@ function staffPanelComponents(state: State, showButtons = true): APIContainerCom
   const details = [
     `**Solicitado em**　　　　　 ** Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
   ];
+  if (state.status === "recusada" && state.reason) details.push(`**Motivo**\n${state.reason}`);
   if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
   if (state.name) details.push(`**Nome informado**\n${state.name}`);
   if (state.birthDate) details.push(`**Data de nascimento**\n${state.birthDate}`);
