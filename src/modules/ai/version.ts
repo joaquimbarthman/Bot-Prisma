@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v5.10";
+export const PRISMA_AI_VERSION = "v5.11";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Turnos multiusuário corrigidos: cada nova mensagem define o próprio autor como interlocutor exclusivo, replies e histórico permanecem apenas como contexto e nomes antigos deixam de ser inseridos automaticamente no começo das respostas.",
   "Menções descartáveis por mensagem: somente usuários mencionados na mensagem atual podem receber ping na resposta imediatamente seguinte; histórico, contexto do canal e replies agora fornecem apenas nomes e nunca autorização de menção.",
   "Identidade do criador reconhecida: quando alguÃ©m pergunta ou fala sobre o dono, criador ou owner da Prisma, ela consulta a conta Discord configurada e sabe a quem esses termos se referem, sem conceder permissÃµes a quem apenas citar essa identidade.",
   "Reciprocidade social individual: a Prisma agora diferencia discordÃ¢ncia, palavrÃ£o casual, ataque a terceiros, brincadeira e hostilidade realmente dirigida a ela; um score persistente entre -5 e +10 ajusta o tom sem fazer a Prisma retomar brigas em mensagens normais.",

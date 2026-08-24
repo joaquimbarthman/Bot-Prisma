@@ -35,3 +35,8 @@ test("envia somente o assunto principal por padrão e preserva múltiplos quando
 test("remove palavras genéricas ao identificar assunto", () => {
   assert.deepEqual([...topicTokens("eu acho que isso é muito legal")], ["acho", "legal"]);
 });
+
+test("contexto multiusuário preserva mensagem, autor, nome e conteúdo", () => {
+  const output = selectTopicContext([{ id: "m1", authorId: "111", authorName: "rafa", content: "prisma saudades", createdAt: 1 }], "saudades");
+  assert.match(output, /\[mensagem_id=m1\] \[autor_id=111\] rafa: prisma saudades/);
+});

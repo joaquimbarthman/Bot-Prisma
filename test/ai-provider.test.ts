@@ -24,6 +24,12 @@ test("prompt proíbe ping quando a mensagem atual não contém menções", () =>
   assert.match(prompt, /histórico, contexto do canal, reply, memória/);
 });
 
+test("prompt destaca exclusivamente o interlocutor do turno atual", () => {
+  const currentTurn = { speakerId: "111", speakerName: "rafa(el)", explicitlyMentionedUserIds: [], allowedMentionIds: [], replyToUserId: "222", replyToMessageId: "msg-222" };
+  const prompt = buildRuntimePrompt({ currentAuthorId: "111", currentAuthorName: "rafa(el)", currentTurn });
+  assert.match(prompt, /# INTERLOCUTOR ATUAL/); assert.match(prompt, /Nome: rafa\(el\)/); assert.match(prompt, /reply apenas fornece contexto e nunca troca o interlocutor/);
+});
+
 test("continua bloqueando menções amplas, cargos e canais", () => {
   const output = sanitizeOutput("@everyone @here <@&123> <#456>", ["123", "456"]);
 

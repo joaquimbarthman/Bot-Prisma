@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allowedMentionIdsForMessage, contextUserIdsForNames, explicitlyRequestedMentionUserIds } from "../src/modules/ai/index.js";
+import { allowedMentionIdsForMessage, contextUserIdsForNames, createCurrentTurnContext, explicitlyRequestedMentionUserIds, includeRequestedRecipient } from "../src/modules/ai/index.js";
 
 test("autoriza alvo mencionado explicitamente sem depender da menção ao autor", () => {
   const ids = explicitlyRequestedMentionUserIds(
@@ -45,4 +45,27 @@ test("lista permitida nasce somente das menções da mensagem atual", () => {
   assert.deepEqual(allowedMentionIdsForMessage(["100", "300", "400"], "100"), ["300", "400"]);
   assert.deepEqual(allowedMentionIdsForMessage([], "100"), [], "a próxima mensagem começa vazia");
   assert.deepEqual(allowedMentionIdsForMessage(["100"], "100"), [], "mencionar somente a Prisma não autoriza ninguém");
+});
+
+test("cada mensagem troca imediatamente o interlocutor atual", () => {
+  const speakers = [["1", "Joca"], ["2", "rafa(el)"], ["3", "Miguel"], ["4", "grimes"], ["5", "sam"]] as const;
+  for (const [id, name] of speakers) {
+    const turn = createCurrentTurnContext(id, name, [], "999");
+    assert.equal(turn.speakerId, id); assert.equal(turn.speakerName, name); assert.deepEqual(turn.allowedMentionIds, []);
+  }
+});
+
+test("reply não troca interlocutor nem autoriza ping", () => {
+  const turn = createCurrentTurnContext("111", "rafa", ["999"], "999", "message-222");
+  turn.replyToUserId = "222";
+  assert.equal(turn.speakerId, "111"); assert.equal(turn.replyToUserId, "222"); assert.deepEqual(turn.allowedMentionIds, []);
+});
+
+test("autor atual e usuários permitidos são conceitos separados", () => {
+  const turn = createCurrentTurnContext("111", "Joca", ["999", "333"], "999");
+  assert.equal(turn.speakerId, "111"); assert.deepEqual(turn.allowedMentionIds, ["333"]);
+});
+
+test("nome contextual não é acrescentado a uma resposta comum", () => {
+  assert.equal(includeRequestedRecipient("aaa saudades tbm", undefined), "aaa saudades tbm");
 });

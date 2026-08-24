@@ -190,7 +190,7 @@ function requestedRecipientUsernames(content: string): string[] {
     .slice(0, 3);
 }
 
-function includeRequestedRecipient(answer: string, recipient: string | undefined, recipientName?: string): string {
+export function includeRequestedRecipient(answer: string, recipient: string | undefined, recipientName?: string): string {
   if (!recipient) return answer;
   const hasRecipient = answer.includes(recipient) || (!!recipientName && answer.toLocaleLowerCase("pt-BR").includes(recipientName.toLocaleLowerCase("pt-BR")));
   if (hasRecipient) return answer;
@@ -198,6 +198,21 @@ function includeRequestedRecipient(answer: string, recipient: string | undefined
   return greeting.test(answer)
     ? answer.replace(greeting, (value) => `${value}${recipient}, `)
     : `${recipient}, ${answer}`;
+}
+
+export type CurrentTurnContext = {
+  speakerId: string;
+  speakerName: string;
+  explicitlyMentionedUserIds: string[];
+  allowedMentionIds: string[];
+  replyToUserId?: string;
+  replyToMessageId?: string;
+};
+
+export function createCurrentTurnContext(speakerId: string, speakerName: string, mentionedIds: Iterable<string>, botId?: string, replyToMessageId?: string): CurrentTurnContext {
+  const allowedMentionIds = allowedMentionIdsForMessage(mentionedIds, botId);
+  const safeSpeakerName = speakerName.replace(/[@<>`#\r\n]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) || "usuário atual";
+  return { speakerId, speakerName: safeSpeakerName, explicitlyMentionedUserIds: [...allowedMentionIds], allowedMentionIds: [...allowedMentionIds], replyToMessageId };
 }
 
 export function explicitlyRequestedMentionUserIds(
@@ -361,6 +376,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       catch (error) { console.error("[PRISMA-IA] Não foi possível persistir o apelido; continuando sem bloquear a resposta:", error); }
     }
     const content = message.content.replace(client.user ? new RegExp(`<@!?${client.user.id}>`, "g") : /$^/, "").trim() || "Olá!";
+    const currentTurn = createCurrentTurnContext(message.author.id, message.member.displayName, message.mentions.users.keys(), client.user?.id, message.reference?.messageId);
     const prismaState = await getPrismaState(message.author.id);
     const socialTreatment = analyzeSocialTreatment(content, prismaState.relationship.attitudeScore);
     const contextNeeds = determineContextNeeds(content, { hasReply: !!message.reference?.messageId, mentionsOtherUser: message.mentions.users.some((user) => user.id !== client.user?.id && user.id !== message.author.id) });
@@ -376,8 +392,9 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     ]);
     const replyContext: ReplyContext = {
       mode: socialTreatment.hostilityLevel > 0 || botInsult ? "light_roast" : spontaneous ? "spontaneous" : "direct",
-      currentAuthorName: message.member.displayName,
-      currentAuthorId: message.author.id,
+      currentAuthorName: currentTurn.speakerName,
+      currentAuthorId: currentTurn.speakerId,
+      currentTurn,
       learnedProfile,
       relevantMemories,
       dailySummaries,
@@ -411,8 +428,9 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
     const referencedAuthorId = message.reference?.messageId ? (await message.fetchReference().catch(() => null))?.author.id : undefined;
+    currentTurn.replyToUserId = referencedAuthorId;
     // Criada do zero para a mensagem atual e descartada ao fim desta resposta.
-    const currentMessageMentionIds = allowedMentionIdsForMessage(message.mentions.users.keys(), client.user?.id);
+    const currentMessageMentionIds = currentTurn.allowedMentionIds;
     const requestedMentionUserIds = explicitlyRequestedMentionUserIds(content, message.mentions.users.keys(), client.user?.id, message.author.id);
     const { allowedMentionUserIds, unmentionableUsers: unavailableCurrentMentions } = await resolveRequestedMentions(message, currentMessageMentionIds);
     const requestedResolution = await resolveRequestedMentions(message, requestedMentionUserIds);
@@ -472,10 +490,12 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     let answer = suppressUnrequestedSelfActivity(generated.reply, asksWhatPrismaIsDoing(content)) || "entendi.";
     if (creatorPermissions.isCreator) answer = redactConfiguredSecrets(answer, [config.token, config.openAiKey, config.supabaseSecretKey]);
     if (!answer) throw new Error("Resposta vazia.");
-    const unavailableRecipient = unmentionableUsers.length ? recipientUsernames[0] ?? unmentionableUsers[0]?.username : undefined;
-    const mentionableRecipientId = allowedMentionUserIds.length === 1 ? allowedMentionUserIds[0] : undefined;
-    const recipient = unavailableRecipient ?? (mentionableRecipientId ? `<@${mentionableRecipientId}>` : recipientUsernames[0]);
-    answer = includeRequestedRecipient(answer, recipient, recipientUsernames[0]);
+    if (requestsDirectMention(content)) {
+      const unavailableRecipient = requestedResolution.unmentionableUsers[0]?.username;
+      const mentionableRecipientId = requestedMentionUserIds.find((id) => allowedMentionUserIds.includes(id));
+      const recipient = unavailableRecipient ?? (mentionableRecipientId ? `<@${mentionableRecipientId}>` : recipientUsernames[0]);
+      answer = includeRequestedRecipient(answer, recipient, recipientUsernames[0]);
+    }
     const unsafeOutput = localModeration(answer).flagged;
     if (unsafeOutput) {
       console.warn("[PRISMA-IA] Saída bloqueada pelo filtro determinístico.");

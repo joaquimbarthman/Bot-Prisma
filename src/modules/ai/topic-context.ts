@@ -53,7 +53,7 @@ export function selectTopicContext(messages: ChannelContextMessage[], currentCon
   })).sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(3, maximumTopics)));
 
   const sections = ranked.map(({ topic }, index) => {
-    const lines = topic.messages.slice(-12).map((message) => `[autor_id=${message.authorId}] ${message.authorName}: ${message.content.replace(/\s+/g, " ").slice(0, 350)}`);
+    const lines = topic.messages.slice(-12).map((message) => `[mensagem_id=${message.id}] [autor_id=${message.authorId}] ${message.authorName}: ${message.content.replace(/\s+/g, " ").slice(0, 350)}`);
     return `ASSUNTO ${index + 1}${topic === repliedTopic ? " (mensagem respondida)" : ""}: ${topicLabel(topic)}\n${lines.join("\n")}`;
   });
   while (sections.join("\n\n").length > maximumCharacters && sections.length > 1) sections.pop();
