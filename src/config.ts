@@ -79,7 +79,8 @@ export const config = {
     targetRoleId: process.env.PAIRED_ROLE_TARGET_ID?.trim() || "1538257302606319716",
   },
   leveling: {
-    staffRoleId: process.env.LEVELING_STAFF_ROLE_ID?.trim() || "1537991738801659904",
+    staffRoleId: "1538337494355935302",
+    commandChannelId: "1541550093679730769",
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),

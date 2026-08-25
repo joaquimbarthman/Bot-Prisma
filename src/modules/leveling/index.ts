@@ -1,4 +1,4 @@
-import { ComponentType, EmbedBuilder, SeparatorSpacingSize, type APIContainerComponent, type ChatInputCommandInteraction, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
+import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
 import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
@@ -41,20 +41,34 @@ async function syncReward(member: GuildMember, rewards: LevelReward[], level: nu
   return deserved;
 }
 
-function levelUpEmbed(member: GuildMember, reward: LevelReward): EmbedBuilder {
+function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerComponent {
   const role = member.guild.roles.cache.get(reward.roleId);
-  return new EmbedBuilder()
-    .setTitle("NÍVEL AUMENTADO")
-    .setDescription(`${reward.emoji}・${reward.title}\n\n> **${member.displayName}** alcançou o **NÍVEL ${reward.level}** ₊˚⊹ ✦\n> ${reward.shortMessage}・<@&${reward.roleId}>`)
-    .setThumbnail(member.displayAvatarURL({ size: 256 }))
-    .setColor(role?.color || 0x7c5cff)
-    .setFooter({ text: `Prismoria • Sistema de Evolução • ${panelDate()}` });
+  return {
+    type: ComponentType.Container,
+    accent_color: role?.color || 0x7c5cff,
+    components: [
+      {
+        type: ComponentType.Section,
+        components: [{
+          type: ComponentType.TextDisplay,
+          content: `## Nivel Aumentado\n${reward.emoji}・${reward.title}\n\n> **${member.displayName}** alcançou o **NÍVEL ${reward.level}** ₊˚⊹ ✦\n> ${reward.shortMessage}・<@&${reward.roleId}>`,
+        }],
+        accessory: {
+          type: ComponentType.Thumbnail,
+          media: { url: member.displayAvatarURL({ size: 256 }) },
+          description: "Avatar do membro",
+        },
+      },
+      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+      { type: ComponentType.TextDisplay, content: `-# Prismoria • Sistema de Evolução • ${panelDate()}` },
+    ],
+  };
 }
 
 async function announce(member: GuildMember, reward: LevelReward, channelId: string): Promise<void> {
   const channel = await member.guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
-  await channel.send({ content: `<@${member.id}>`, embeds: [levelUpEmbed(member, reward)], allowedMentions: { parse: [], users: [member.id] } });
+  await channel.send({ components: [levelUpLayout(member, reward)], flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
 }
 
 async function processLevelChange(member: GuildMember, oldLevel: number, newLevel: number, announcementChannelId: string): Promise<void> {
@@ -140,8 +154,13 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (![".add-chat", ".remove-chat", ".list-chat", ".add-voice", ".remove-voice", ".list-voice", ".addl", ".removel", ".levels", ".testp", ".rank", ".top"].includes(command)) return false;
+  if (![".addb", ".remb", ".add-chat", ".remove-chat", ".add-voice", ".remove-voice", ".listab", ".addl", ".removel", ".levels", ".testep", ".testp", ".rank", ".top"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
+  if (message.channelId !== config.leveling.commandChannelId) {
+    const notice = await message.reply(`Use os comandos de evolucao somente em <#${config.leveling.commandChannelId}>.`);
+    setTimeout(() => void notice.delete().catch(() => undefined), 5_000).unref();
+    return true;
+  }
   if (command === ".rank") { await sendRank(message, message.mentions.members?.first() ?? message.member); return true; }
   if (command === ".top") {
     const rows = await getLeaderboard(message.guild.id);
@@ -152,9 +171,9 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
       type: ComponentType.Container,
       accent_color: 0x7c5cff,
       components: [
-        { type: ComponentType.TextDisplay, content: "## RANKING DE EVOLUÇÃO\n-# Os membros com maior experiência acumulada no servidor." },
+        { type: ComponentType.TextDisplay, content: "## Ranking de Evolução\n-# Os membros com maior experiência acumulada no servidor." },
         { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-        { type: ComponentType.TextDisplay, content: ranking ? `**Membros**\n>>> ${ranking}` : "**Membros**\n\nAinda não há participantes no ranking." },
+        { type: ComponentType.TextDisplay, content: ranking ? `**Lista de Membros**\n\n>>> ${ranking}` : "**Membros**\n\nAinda não há participantes no ranking." },
         { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
         { type: ComponentType.TextDisplay, content: `-# Prismoria • Sistema de Evolução • ${panelDate()}` },
       ],
@@ -163,16 +182,34 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
-  if (command === ".testp") {
-    const level = Number(input.match(/^\.testp\s+(\d{1,3})(?:\s|$)/i)?.[1]);
-    if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `.testp <nivel> [@membro]`."); return true; }
+  if (command === ".testep" || command === ".testp") {
+    const level = Number(input.match(/^\.teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
+    if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `.testep <nivel> [@membro]`."); return true; }
     const reward = (await getRewards(message.guild.id)).find((item) => item.level === level);
     if (!reward) { await message.reply(`O nivel ${level} ainda nao possui cargo configurado.`); return true; }
     const member = message.mentions.members?.first() ?? message.member;
-    await message.reply({ content: `<@${member.id}>`, embeds: [levelUpEmbed(member, reward)], allowedMentions: { parse: [], users: [member.id] } });
+    await message.reply({ components: [levelUpLayout(member, reward)], flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
     return true;
   }
-  const listMatch = command.match(/^\.(?:list)-(chat|voice)$/); if (listMatch) { const type = listMatch[1] as "chat" | "voice"; const entries = await getBlacklist(message.guild.id, type); await message.reply(entries.length ? entries.map((entry) => `${entry.targetType === "channel" ? "#" : "@"} <${entry.targetType === "channel" ? "#" : "@&"}${entry.targetId}>`).join("\n") : "A blacklist esta vazia."); return true; }
+  if (command === ".listab") {
+    const entries = (await Promise.all([getBlacklist(message.guild.id, "chat"), getBlacklist(message.guild.id, "voice")])).flat();
+    const unique = [...new Map(entries.map((entry) => [`${entry.targetType}:${entry.targetId}`, entry])).values()];
+    await message.reply(unique.length ? unique.map((entry) => `<${entry.targetType === "channel" ? "#" : "@&"}${entry.targetId}>`).join("\n") : "A lista negra esta vazia.");
+    return true;
+  }
+  const shortBlacklistMatch = input.match(/^\.(addb|remb)(?:\s|$)/i);
+  if (shortBlacklistMatch) {
+    const target = parseTarget(message);
+    if (!target) { await message.reply(`Use \`.${shortBlacklistMatch[1].toLowerCase()} #canal\` ou \`.${shortBlacklistMatch[1].toLowerCase()} @cargo\`.`); return true; }
+    const types: ("chat" | "voice")[] = ["chat", "voice"];
+    for (const type of types) {
+      const entry = { guildId: message.guild.id, type, ...target };
+      if (shortBlacklistMatch[1].toLowerCase() === "addb") await addBlacklist(entry); else await removeBlacklist(entry);
+    }
+    invalidate(message.guild.id);
+    await message.reply("Lista negra atualizada.");
+    return true;
+  }
   const blacklistMatch = command.match(/^\.(add|remove)-(chat|voice)$/); if (blacklistMatch) { const target = parseTarget(message); if (!target) { await message.reply("Mencione um canal ou cargo."); return true; } const entry = { guildId: message.guild.id, type: blacklistMatch[2] as "chat" | "voice", ...target }; if (blacklistMatch[1] === "add") await addBlacklist(entry); else await removeBlacklist(entry); invalidate(message.guild.id); await message.reply("Blacklist atualizada."); return true; }
   if (command === ".levels") { const rewards = await getRewards(message.guild.id); await message.reply(rewards.length ? rewards.map((item) => `Nivel ${item.level}: <@&${item.roleId}>`).join("\n") : "Nenhum cargo de evolucao configurado."); return true; }
   const shortLevel = input.match(/^\.(?:addl|removel)\s+(\d{1,3})(?:\s|$)/i)?.[1];
@@ -183,7 +220,7 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
   const role = message.mentions.roles.first(); if (!role) { await message.reply("Use `.addl <nivel> @cargo`."); return true; } const copy = rewardCopy[level] ?? ["✦", `Novo marco no nivel ${level}`, "Marco conquistado"]; await setReward({ guildId: message.guild.id, level, roleId: role.id, emoji: copy[0], title: copy[1], shortMessage: copy[2] }); await message.reply(`Nivel ${level} vinculado a ${role}.`); return true;
 }
 
-async function sendRank(target: Message | ChatInputCommandInteraction, member: GuildMember): Promise<void> {
+async function sendRank(target: Message, member: GuildMember): Promise<void> {
   const record = await getMemberLevel(member.guild.id, member.id);
   const settings = await getSettings(member.guild.id);
   const xp = record?.xpTotal ?? 0;
@@ -210,12 +247,12 @@ async function sendRank(target: Message | ChatInputCommandInteraction, member: G
         components: [{
           type: ComponentType.TextDisplay,
           content: [
-            "## PROGRESSO DE EVOLUÇÃO",
+            "## Progresso de Evolução",
             `### Nível ${level}`,
             level >= settings.maxLevel
               ? "**Evolução máxima alcançada**"
               : `**${levelProgressXp.toLocaleString("pt-BR")} / ${levelRequiredXp.toLocaleString("pt-BR")} XP**`,
-            `${progressBar} **${percent}%**`,
+            `${progressBar} **${percent}%\n**`,
             "-# Cada conversa fortalece sua presença. Continue participando e avance na jornada.",
           ].join("\n"),
         }],
@@ -228,14 +265,14 @@ async function sendRank(target: Message | ChatInputCommandInteraction, member: G
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `**CARGO ATUAL**\n${current ? `${current.emoji} <@&${current.roleId}>` : "Nenhum marco desbloqueado"}\n\n**POSIÇÃO NO SERVIDOR**\n#${position}`,
+        content: `**Cargo atual**\n${current ? `<@&${current.roleId}>` : "Nenhum marco desbloqueado"}\n\n**Posição no servidor**\n#${position}`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
         content: next
-          ? `**PRÓXIMO MARCO**\n${next.emoji} <@&${next.roleId}>\n\n-# Disponível no nível ${next.level}`
-          : "**JORNADA CONCLUÍDA**\nTodos os marcos foram conquistados.",
+          ? `**Próximo marco**\n<@&${next.roleId}>\n\n-# Disponível no nível ${next.level}`
+          : "**Jornada concluída**\nTodos os marcos foram conquistados.",
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       { type: ComponentType.TextDisplay, content: `-# Prismoria • Sistema de Evolução • ${panelDate()}` },
@@ -245,7 +282,6 @@ async function sendRank(target: Message | ChatInputCommandInteraction, member: G
   await target.reply({ components, flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
 }
 
-export async function handleLevelingInteraction(interaction: ChatInputCommandInteraction): Promise<boolean> { if (interaction.commandName !== "rank" || !interaction.inCachedGuild()) return false; const user = interaction.options.getUser("membro") ?? interaction.user; const member = await interaction.guild.members.fetch(user.id); await sendRank(interaction, member); return true; }
 export async function syncLevelingRoles(
   guild: Guild,
   members?: Collection<Snowflake, GuildMember>,

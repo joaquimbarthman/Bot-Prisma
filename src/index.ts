@@ -14,7 +14,7 @@ import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 import { handleDirectMessage } from "./modules/direct-message/index.js";
-import { handleLevelingInteraction, handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
+import { handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
 
 validateConfig();
 
@@ -145,7 +145,6 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (interaction.isChatInputCommand() && await handleLevelingInteraction(interaction)) return;
     if (await handleLfgInteraction(interaction)) return;
     if (await handleReportInteraction(interaction)) return;
     if (await handleVerificationInteraction(interaction)) return;
