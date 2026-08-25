@@ -210,7 +210,7 @@ async function sendRank(target: Message | ChatInputCommandInteraction, member: G
         components: [{
           type: ComponentType.TextDisplay,
           content: [
-            "### PROGRESSO DE EVOLUÇÃO",
+            "## PROGRESSO DE EVOLUÇÃO",
             `### Nível ${level}`,
             level >= settings.maxLevel
               ? "**Evolução máxima alcançada**"
