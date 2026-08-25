@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v6.6";
+export const PRISMA_AI_VERSION = "v6.8";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Resumos e aprendizados do fim do dia agora usam raciocínio MEDIUM para consolidar conversas densas com mais cuidado antes de salvar informações úteis e seguras.",
+  "Fechamento diário corrigido para funcionar com o GPT-5.6 Luna, com raciocínio compatível, espaço suficiente para gerar o resumo e os aprendizados e diagnóstico claro quando o modelo não concluir a resposta.",
   "Compreensão contextual: o Luna agora avalia na própria resposta se realmente entendeu a mensagem, tolera abreviações e erros pequenos e, somente diante de incompreensão genuína, pede para a pessoa repetir com uma brincadeira curta e criada dinamicamente.",
   "Raciocínio adaptativo no GPT-5.6 Luna: conversas comuns usam LOW por padrão, enquanto pesquisas, análises complexas, questões técnicas e contexto multiusuário realmente necessário usam MEDIUM, sem depender de Modo Criador.",
   "Regras do operador reforçadas: as instruções válidas de prisma_operator_rules entram em um bloco de alta prioridade para o owner configurado, preservam o último cache seguro em falhas e podem aplicar proteções determinísticas, como omitir links automáticos quando uma regra exigir.",
