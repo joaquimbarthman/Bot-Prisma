@@ -49,7 +49,7 @@ export async function buildPrismaPersonalContext(userId: string, settings: UserS
     settings.memoryEnabled && needs.memories ? getRelevantPrismaMemories(userId, 5, currentMessage) : [],
     getEmotionalState(userId),
     settings.memoryEnabled && needs.dailySummaries ? recentDailySummaries(userId, 5) : [],
-    listActiveSelfLearnings(8),
+    listActiveSelfLearnings(userId, 8),
   ]);
   return { learnedProfile, relevantMemories, emotionalState, dailySummaries, selfLearnings: uniqueSelfLearnings(selfLearnings) };
 }

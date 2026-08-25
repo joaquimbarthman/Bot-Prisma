@@ -5,7 +5,7 @@ import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getRelevantPrismaMemories, getSettings, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
+import { addAbsenceOutreach, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getSettings, lastAbsenceOutreachAt, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
@@ -20,7 +20,6 @@ const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
 const presenceSignatures = new Map<string, string>();
 const spontaneousReservations = new SpontaneousReservationLedger();
-const absenceOutreachAt = new Map<string, number>();
 
 async function reserveSpontaneousSlot(discordId: string): Promise<boolean> {
   return spontaneousReservations.reserve(
@@ -38,6 +37,9 @@ export function startAiCleanup(client: Client): void {
   refreshAiPanel(client).catch((error) => console.error("[PRISMA-IA] Falha ao atualizar painel:", error));
   cleanupExpired().catch(console.error);
   setInterval(() => cleanupExpired().catch(console.error), 60 * 60_000).unref();
+  // No início, fecha somente dias anteriores: isso recupera períodos pendentes sem
+  // consolidar o dia atual enquanto ele ainda recebe mensagens.
+  summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha no catch-up de resumos:", error));
   const runScheduledDailySummary = () => {
     if (!shouldRunDailySummary(new Date(), "America/Sao_Paulo")) return;
     summarizeCompletedConversationDays().catch((error) => console.error("[PRISMA-MEMÓRIA] Falha ao resumir conversas:", error));
@@ -73,21 +75,21 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
     const lastInteraction = state.temperament.lastInteractionAt ? Date.parse(state.temperament.lastInteractionAt) : NaN;
     const absentHours = Number.isFinite(lastInteraction) ? (Date.now() - lastInteraction) / 3_600_000 : 0;
     if (absentHours < 3 || state.relationship.interactionCount < 4) continue;
-    if (Date.now() - (absenceOutreachAt.get(member.id) ?? 0) < 24 * 60 * 60_000) continue;
+    if (Date.now() - await lastAbsenceOutreachAt(member.id) < 24 * 60 * 60_000) continue;
     if (Date.now() - await lastSpontaneousAt(member.id) < config.prismaAi.spontaneousCooldownMinutes * 60_000) continue;
     if (!await reserveSpontaneousSlot(member.id)) continue;
     try {
       const history = settings.memoryEnabled ? await recentHistory(member.id, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
-      const relevantMemories = settings.memoryEnabled ? await getRelevantPrismaMemories(member.id, 3, "sumiu conversa jogo música") : [];
+      const personalContext = await buildPrismaPersonalContext(member.id, settings, "sumiu conversa jogo música", { recentHistory: true, memories: true, channelContext: false, expandedChannelContext: false, dailySummaries: true, userProfile: true });
       const [currentThought, operatorRules] = await Promise.all([
         getPrismaThought(config.prismaAi.operatorUserId),
         listPrismaOperatorRules(config.prismaAi.operatorUserId),
       ]);
-      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, relevantMemories, currentThought, operatorRules: operatorRules.map((item) => item.rule) });
+      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, learnedProfile: personalContext.learnedProfile, relevantMemories: personalContext.relevantMemories, dailySummaries: personalContext.dailySummaries, selfLearnings: personalContext.selfLearnings, emotionalState: personalContext.emotionalState, currentThought, operatorRules: operatorRules.map((item) => item.rule) });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
       await channel.send({ content: `<@${member.id}> ${answer}`, allowedMentions: { parse: [], users: [member.id] } });
       await addSpontaneous(member.id);
-      absenceOutreachAt.set(member.id, Date.now());
+      await addAbsenceOutreach(member.id);
     } finally {
       releaseSpontaneousSlot(member.id);
     }
@@ -521,6 +523,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
     if (!channel?.isSendable()) return;
     const prismaState = await getPrismaState(newPresence.userId);
     const history = settings.memoryEnabled ? await recentHistory(newPresence.userId, channel.id, config.prismaAi.historyMaxMessages, config.prismaAi.historyMaxChars) : [];
+    const personalContext = await buildPrismaPersonalContext(newPresence.userId, settings, activity.description, { recentHistory: true, memories: true, channelContext: false, expandedChannelContext: false, dailySummaries: true, userProfile: true });
     const [currentThought, operatorRules] = await Promise.all([
       getPrismaThought(config.prismaAi.operatorUserId),
       listPrismaOperatorRules(config.prismaAi.operatorUserId),
@@ -536,6 +539,11 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
         currentAuthorName: newPresence.member.displayName,
         currentAuthorId: newPresence.userId,
         activityDescription: activity.description,
+        learnedProfile: personalContext.learnedProfile,
+        relevantMemories: personalContext.relevantMemories,
+        dailySummaries: personalContext.dailySummaries,
+        selfLearnings: personalContext.selfLearnings,
+        emotionalState: personalContext.emotionalState,
         currentThought,
         operatorRules: operatorRules.map((item) => item.rule),
       },

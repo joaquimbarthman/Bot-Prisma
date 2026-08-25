@@ -1,7 +1,14 @@
-export const PRISMA_AI_VERSION = "v6.8";
+export const PRISMA_AI_VERSION = "v7.2";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Aprendizados agora distinguem padrões pessoais de padrões globais, exigem evidência de pessoas e dias diferentes antes de influenciar toda a comunidade e perdem força quando deixam de ser confirmados.",
+  "Fechamentos diários agora recuperam dias pendentes após reinícios, resumem conversas longas em blocos antes de criar o diário final e usam um controle persistente para evitar consolidação duplicada.",
+  "Ações espontâneas e mensagens de ausência agora usam contexto pessoal mais completo e preservam o cooldown social mesmo após reinicializações.",
+  "Os estágios de relacionamento passaram a exigir confiança, familiaridade e calor mínimos, impedindo que muitas mensagens sozinhas acelerem a intimidade.",
+  "Autoaprendizados equivalentes agora recebem chaves canônicas e reforçam a mesma evidência mesmo quando a IA usa nomes diferentes, permitindo que padrões realmente recorrentes sejam ativados com confiança.",
+  "Os registros diários agora narram as conversas de forma social, começando naturalmente com 'Hoje conversei com outras pessoas sobre...', sem expor nomes de terceiros.",
+  "Os resumos diários agora são escritos como um registro de diário em primeira pessoa, narrando acontecimentos concretos para formar históricos semanais e mensais mais úteis, inclusive quando a IA estiver temporariamente indisponível.",
   "Resumos e aprendizados do fim do dia agora usam raciocínio MEDIUM para consolidar conversas densas com mais cuidado antes de salvar informações úteis e seguras.",
   "Fechamento diário corrigido para funcionar com o GPT-5.6 Luna, com raciocínio compatível, espaço suficiente para gerar o resumo e os aprendizados e diagnóstico claro quando o modelo não concluir a resposta.",
   "Compreensão contextual: o Luna agora avalia na própria resposta se realmente entendeu a mensagem, tolera abreviações e erros pequenos e, somente diante de incompreensão genuína, pede para a pessoa repetir com uma brincadeira curta e criada dinamicamente.",
@@ -74,6 +81,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",
   "Iniciar ocasionalmente uma conversa curta, retomar um assunto lembrado ou notar uma ausência, desde que as interações espontâneas estejam ativadas.",
   "Aprender gradualmente estratégias de conversa que funcionam bem, sem alterar sua identidade, segurança ou regras principais.",
+  "Adaptar estratégias aprendidas ao contexto de cada pessoa e só transformar padrões em hábitos globais após confirmação independente na comunidade.",
   "Permitir que cada pessoa veja ou apague memórias, apague o histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
 ] as const;
 

@@ -211,9 +211,14 @@ for (const [label, candidate] of unsafeSummaryCandidates) {
 
 test("define estágios explícitos conforme o vínculo amadurece", () => {
   assert.equal(relationshipStage(defaultRelationship("123")).id, "newcomers");
-  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 10, familiarity: 12, trust: 5, warmth: 12 }).id, "growing");
-  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 50, familiarity: 65, trust: 60, warmth: 70 }).id, "close");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 5 }).id, "known");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 30, familiarity: 35, trust: 20, warmth: 30 }).id, "growing");
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 60, familiarity: 55, trust: 40, warmth: 45 }).id, "close");
   assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 150, familiarity: 80, trust: 75, warmth: 80 }).id, "accomplices");
+});
+
+test("confiança baixa impede estágio alto mesmo com muita conversa", () => {
+  assert.equal(relationshipStage({ ...defaultRelationship("123"), interactionCount: 150, familiarity: 90, warmth: 90, trust: 10 }).id, "known");
 });
 
 test("celebra marcos uma vez e recupera lembranças em cadência moderada", () => {

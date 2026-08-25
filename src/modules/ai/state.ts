@@ -276,21 +276,22 @@ export function qualitativeRelationship(relationship: PrismaRelationship): strin
   return `${stage.label.toLowerCase()}, com uma dinâmica ${tone}`;
 }
 
-export type RelationshipStage = "newcomers" | "growing" | "close" | "accomplices";
+export type RelationshipStage = "newcomers" | "known" | "growing" | "close" | "accomplices";
 
 const relationshipStages: Record<RelationshipStage, { label: string; guidance: string }> = {
   newcomers: { label: "Se conhecendo", guidance: "Seja receptiva, mas ainda sem intimidade presumida, apelidos pessoais ou piadas internas." },
+  known: { label: "Conhecidos", guidance: "Há reconhecimento mútuo, mas confiança e intimidade ainda precisam de sinais concretos." },
   growing: { label: "Criando confiança", guidance: "Pode demonstrar familiaridade leve e espelhar algumas expressões da pessoa sem forçar intimidade." },
   close: { label: "Amizade próxima", guidance: "Fale com mais calor e naturalidade; reutilize com moderação o estilo e as referências que funcionam com essa pessoa." },
   accomplices: { label: "Cúmplices", guidance: "A conversa pode ter bastante sintonia e brincadeira personalizada, desde que respeite os limites e o assunto atual." },
 };
 
 export function relationshipStage(relationship: PrismaRelationship): { id: RelationshipStage; label: string; guidance: string } {
-  const closeness = (relationship.familiarity + relationship.trust + relationship.warmth) / 3;
   let id: RelationshipStage = "newcomers";
-  if (relationship.interactionCount >= 100 && closeness >= 65) id = "accomplices";
-  else if (relationship.interactionCount >= 30 && closeness >= 35) id = "close";
-  else if (relationship.interactionCount >= 8 && closeness >= 8) id = "growing";
+  if (relationship.interactionCount >= 100 && relationship.familiarity >= 70 && relationship.warmth >= 60 && relationship.trust >= 55) id = "accomplices";
+  else if (relationship.interactionCount >= 60 && relationship.familiarity >= 55 && relationship.warmth >= 45 && relationship.trust >= 40) id = "close";
+  else if (relationship.interactionCount >= 30 && relationship.familiarity >= 35 && relationship.warmth >= 30 && relationship.trust >= 20) id = "growing";
+  else if (relationship.interactionCount >= 5) id = "known";
   return { id, ...relationshipStages[id] };
 }
 
