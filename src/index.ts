@@ -14,11 +14,12 @@ import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 import { handleDirectMessage } from "./modules/direct-message/index.js";
+import { handleLevelingInteraction, handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
 
 validateConfig();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildVoiceStates],
   partials: [Partials.Channel],
 });
 
@@ -57,6 +58,7 @@ client.once(Events.ClientReady, async (ready) => {
       });
       console.log(`[CARGO-DUPLO] ${pairedRoleCount} membro(s) processado(s) nesta inicialização.`);
       await syncBoosterAccessRoles(guild, members).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
+      await syncLevelingRoles(guild, members).catch((error) => console.error("[LEVELING] Falha ao sincronizar cargos:", error));
     } else {
       console.error("[CARGO-DUPLO] Sincronização inicial ignorada porque os membros não foram carregados.");
       console.error("[PRISMA-IA] Sincronização inicial de Boosters ignorada porque os membros não foram carregados.");
@@ -66,6 +68,7 @@ client.once(Events.ClientReady, async (ready) => {
   startAiCleanup(ready);
   startLfgCleanup(ready);
   startBumpReminder(ready);
+  startLevelingModule(ready);
   console.log(`Prisma conectado como ${ready.user.tag}. IA: ${config.openAiKey ? "ativa" : "desativada"}.`);
   console.log(`[MONITOR] Canais: ${config.monitoredChannelIds.size ? [...config.monitoredChannelIds].join(", ") : "todos os canais de texto"}.`);
   for (const channelId of config.monitoredChannelIds) {
@@ -106,6 +109,10 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
   await handleAiPresenceUpdate(client, oldPresence, newPresence);
 });
 
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  await handleLevelingVoiceState(oldState, newState).catch((error) => console.error(`[LEVELING] Falha ao atualizar tempo de voz de ${newState.id}:`, error));
+});
+
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   if (config.guildId && newMember.guild.id !== config.guildId) return;
   await grantPairedRoleOnce(newMember).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar ${newMember.id}:`, error));
@@ -125,6 +132,7 @@ client.on(Events.MessageCreate, async (message) => {
   try {
     void handleBumpMessage(client, message);
     if (message.author.bot) return;
+    if (await handleLevelingMessage(message)) return;
     if (await handleDirectMessage(message)) return;
     if (await handleVerificationMessage(message)) return;
     if (await handleGalleryMessage(message)) return;
@@ -137,6 +145,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (interaction.isChatInputCommand() && await handleLevelingInteraction(interaction)) return;
     if (await handleLfgInteraction(interaction)) return;
     if (await handleReportInteraction(interaction)) return;
     if (await handleVerificationInteraction(interaction)) return;
