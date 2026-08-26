@@ -80,7 +80,7 @@ export const config = {
   },
   leveling: {
     staffRoleId: "1538337494355935302",
-    commandChannelId: "1541550093679730769",
+    publicCommandChannelId: "1538437757440106506",
   },
   supabaseUrl: process.env.SUPABASE_URL?.trim(),
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim(),

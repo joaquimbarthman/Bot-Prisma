@@ -14,7 +14,7 @@ import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 import { handleDirectMessage } from "./modules/direct-message/index.js";
-import { handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
+import { handleLevelingMemberRemove, handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
 
 validateConfig();
 
@@ -126,6 +126,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
   if (config.guildId && member.guild.id !== config.guildId) return;
   await grantPairedRoleOnce(member).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar novo membro ${member.id}:`, error));
   await grantAccessRoleToBooster(member).catch((error) => console.error(`[PRISMA-IA] Falha ao verificar cargo do novo membro ${member.id}:`, error));
+});
+
+client.on(Events.GuildMemberRemove, async (member) => {
+  if (config.guildId && member.guild.id !== config.guildId) return;
+  await handleLevelingMemberRemove(member).catch((error) => console.error(`[LEVELING] Falha ao excluir dados do membro ${member.id}:`, error));
 });
 
 client.on(Events.MessageCreate, async (message) => {

@@ -1,7 +1,7 @@
 import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
-import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
+import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
 const voiceEligibleSince = new Map<string, number>();
@@ -163,8 +163,9 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
   if (![".addb", ".remb", ".add-chat", ".remove-chat", ".add-voice", ".remove-voice", ".listab", ".addl", ".removel", ".levels", ".testep", ".testp", ".rank", ".top"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
-  if (message.channelId !== config.leveling.commandChannelId) {
-    const notice = await message.reply(`Use os comandos de evolucao somente em <#${config.leveling.commandChannelId}>.`);
+  const publicCommand = command === ".rank" || command === ".top";
+  if (publicCommand && message.channelId !== config.leveling.publicCommandChannelId) {
+    const notice = await message.reply(`Use este comando de evolucao somente em <#${config.leveling.publicCommandChannelId}>.`);
     setTimeout(() => void notice.delete().catch(() => undefined), 5_000).unref();
     return true;
   }
@@ -301,4 +302,11 @@ export async function syncLevelingRoles(
     const level = await getMemberLevel(guild.id, member.id);
     if (level) await syncReward(member, rewards, level.level);
   }
+}
+
+export async function handleLevelingMemberRemove(member: Pick<GuildMember, "guild" | "id">): Promise<void> {
+  const key = `${member.guild.id}:${member.id}`;
+  chatCooldowns.delete(key);
+  voiceEligibleSince.delete(key);
+  await removeMemberLevel(member.guild.id, member.id);
 }
