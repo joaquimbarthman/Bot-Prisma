@@ -138,7 +138,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
         type: ComponentType.Section,
         components: [{
           type: ComponentType.TextDisplay,
-          content: `## Prisma AI\n Usuário ・ <@${user.id}>\n\n-# Seu painel pessoal de preferências e vínculo.`,
+          content: `## Prisma AI\n**Usuário** ・ <@${user.id}>\n\n-# Seu painel pessoal de preferências e vínculo.`,
         }],
         accessory: {
           type: ComponentType.Thumbnail,
