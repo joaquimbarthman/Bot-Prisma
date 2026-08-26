@@ -142,7 +142,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
         }],
         accessory: {
           type: ComponentType.Thumbnail,
-          media: { url: user.displayAvatarURL({ size: 256 }) },
+          media: { url: user.displayAvatarURL({ size: 256, forceStatic: false }) },
           description: `Avatar de ${user.displayName}`,
         },
       },

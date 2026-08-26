@@ -5,7 +5,7 @@ import { aiModeration } from "../moderation/ai.js";
 import { localModeration } from "../moderation/filter.js";
 import { hasCensorshipBypassRole } from "../moderation/exemptions.js";
 import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
-import { addPhotoFrame } from "./image.js";
+import { prepareGalleryImage } from "./image.js";
 
 const GALLERY_COMMENT_MAX_LENGTH = 80;
 
@@ -111,22 +111,27 @@ export async function refreshGalleryButtons(client: Client): Promise<void> {
 
 export async function handleGalleryMessage(message: Message): Promise<boolean> {
   if (!message.inGuild() || message.channelId !== config.galleryChannelId) return false;
-  const image = message.attachments.find((attachment) => attachment.contentType?.startsWith("image/"));
-  if (!image) return false;
+  const media = message.attachments.find((attachment) => attachment.contentType?.startsWith("image/") || attachment.contentType?.startsWith("video/"));
+  if (!media) return false;
   try {
-    const response = await fetch(image.url);
+    const response = await fetch(media.url);
     if (!response.ok) throw new Error(`Não foi possível baixar a imagem (${response.status}).`);
-    const framed = await addPhotoFrame(Buffer.from(await response.arrayBuffer()));
-    const filename = `foto-${message.author.id}.png`;
+    const original = Buffer.from(await response.arrayBuffer());
+    const isVideo = media.contentType?.startsWith("video/") ?? false;
+    const prepared = isVideo ? null : await prepareGalleryImage(original);
+    const originalExtension = media.name?.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() || "mp4";
+    const filename = isVideo
+      ? `video-${message.author.id}.${originalExtension}`
+      : `foto-${message.author.id}.${prepared!.extension}`;
     const caption = message.content.trim();
     const galleryPost: GalleryPost = { ownerId: message.author.id, likes: [], comments: [] };
-    const post = await message.channel.send({ files: [new AttachmentBuilder(framed, { name: filename })], components: galleryPostComponents(message.author.id, `attachment://${filename}`, caption, galleryPost), flags: ["IsComponentsV2"] });
+    const post = await message.channel.send({ files: [new AttachmentBuilder(prepared?.data ?? original, { name: filename })], components: galleryPostComponents(message.author.id, `attachment://${filename}`, caption, galleryPost), flags: ["IsComponentsV2"] });
     await createGalleryPost(post.id, message.author.id);
     await message.delete().catch(() => undefined);
     console.log(`[GALERIA] Foto publicada por ${message.author.tag} (${post.id}).`);
   } catch (error) {
     console.error("[GALERIA] Falha ao processar imagem:", error);
-    const warning = await message.reply("Não consegui processar essa imagem. Tente enviar um arquivo PNG, JPEG ou WebP menor.").catch(() => null);
+    const warning = await message.reply("Não consegui processar essa mídia. Tente enviar uma imagem ou vídeo em um formato suportado e menor.").catch(() => null);
     if (warning) setTimeout(() => warning.delete().catch(() => undefined), 10_000);
   }
   return true;

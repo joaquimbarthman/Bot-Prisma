@@ -55,7 +55,7 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
         }],
         accessory: {
           type: ComponentType.Thumbnail,
-          media: { url: member.displayAvatarURL({ size: 256 }) },
+          media: { url: member.displayAvatarURL({ size: 256, forceStatic: false }) },
           description: "Avatar do membro",
         },
       },
@@ -270,7 +270,7 @@ async function sendRank(target: Message, member: GuildMember): Promise<void> {
         }],
         accessory: {
           type: ComponentType.Thumbnail,
-          media: { url: member.displayAvatarURL({ size: 256 }) },
+          media: { url: member.displayAvatarURL({ size: 256, forceStatic: false }) },
           description: "Avatar do membro",
         },
       },
