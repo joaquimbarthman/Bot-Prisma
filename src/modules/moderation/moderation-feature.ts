@@ -100,7 +100,7 @@ export async function handleModerationMessage(client: Client, message: Message):
           }],
           accessory: {
             type: ComponentType.Thumbnail,
-            media: { url: message.author.displayAvatarURL({ size: 256, forceStatic: false }) },
+            media: { url: message.author.displayAvatarURL({ size: 256, forceStatic: true }) },
             description: `Foto de ${message.author.username}`,
           },
         },

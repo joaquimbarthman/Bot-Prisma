@@ -441,7 +441,7 @@ export async function startVerificationModule(client: Client): Promise<void> {
         if (member) await textChannel.setName(`verificacao-${channelNickname(member)}`).catch(console.error);
         const staffPanel = await findStaffPanel(textChannel);
         if (staffPanel?.embeds.length) {
-          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username, avatarUrl: state.avatarUrl ?? member?.displayAvatarURL({ size: 256, forceStatic: false }) }), flags: ["IsComponentsV2"] }).catch(console.error);
+          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username, avatarUrl: state.avatarUrl ?? member?.displayAvatarURL({ size: 256, forceStatic: true }) }), flags: ["IsComponentsV2"] }).catch(console.error);
         }
       }
       if (!state?.deleteAt) continue;
@@ -554,7 +554,7 @@ async function handleStart(interaction: ButtonInteraction): Promise<true> {
       { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MentionEveryone] },
     ],
   });
-  const state: State = { userId: interaction.user.id, username: member.user.username, avatarUrl: member.displayAvatarURL({ size: 256, forceStatic: false }), status: "solicitada", createdAt, step: "idle" };
+  const state: State = { userId: interaction.user.id, username: member.user.username, avatarUrl: member.displayAvatarURL({ size: 256, forceStatic: true }), status: "solicitada", createdAt, step: "idle" };
   await channel.send({ components: staffPanelComponents(state), flags: ["IsComponentsV2"], allowedMentions: { users: [interaction.user.id], roles: [verification.staffRoleId] } });
   await interaction.editReply(`Seu canal privado foi criado: <#${channel.id}>.`); return true;
 }

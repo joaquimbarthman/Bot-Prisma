@@ -1,8 +1,8 @@
-export const PRISMA_AI_VERSION = "v8.0";
+export const PRISMA_AI_VERSION = "v8.1";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
-  "O painel da Prisma agora preserva avatares animados: quando a pessoa usa GIF no perfil, o avatar também aparece animado no painel.",
+  "O painel da Prisma agora usa uma miniatura estática confiável para avatares GIF, evitando falhas de carregamento nos cards.",
   "A Prisma passou a interpretar de forma mais flexível perguntas sobre letras, entendendo diferentes jeitos de perguntar qual trecho mais marca, toca, pega ou é preferido antes de pesquisar a música certa.",
   "A pesquisa de letras agora entende perguntas naturais como 'qual parte que vc mais gosta de...' e respostas curtas que continuam a conversa, sem misturar a pergunta com o título nem aceitar resultados de outra música.",
   "O aviso de acesso agora mostra diretamente o cargo Booster correto para quem quiser conversar com a Prisma.",

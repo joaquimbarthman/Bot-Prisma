@@ -43,6 +43,7 @@ async function syncReward(member: GuildMember, rewards: LevelReward[], level: nu
 
 function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerComponent {
   const role = member.guild.roles.cache.get(reward.roleId);
+  const avatarUrl = member.displayAvatarURL({ size: 256, forceStatic: true });
   return {
     type: ComponentType.Container,
     accent_color: role?.color || 0x7c5cff,
@@ -55,7 +56,7 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
         }],
         accessory: {
           type: ComponentType.Thumbnail,
-          media: { url: member.displayAvatarURL({ size: 256, forceStatic: false }) },
+          media: { url: avatarUrl },
           description: "Avatar do membro",
         },
       },
@@ -249,6 +250,7 @@ async function sendRank(target: Message, member: GuildMember): Promise<void> {
   const next = rewards.find((item) => item.level > level);
   const position = await getRankPosition(member.guild.id, xp);
   const roleColor = current ? member.guild.roles.cache.get(current.roleId)?.color : undefined;
+  const avatarUrl = member.displayAvatarURL({ size: 256, forceStatic: true });
 
   const components: APIContainerComponent[] = [{
     type: ComponentType.Container,
@@ -270,7 +272,7 @@ async function sendRank(target: Message, member: GuildMember): Promise<void> {
         }],
         accessory: {
           type: ComponentType.Thumbnail,
-          media: { url: member.displayAvatarURL({ size: 256, forceStatic: false }) },
+          media: { url: avatarUrl },
           description: "Avatar do membro",
         },
       },
