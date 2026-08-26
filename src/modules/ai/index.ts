@@ -408,7 +408,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       const creatorName = creatorUser?.username.replace(/[^\p{L}\p{N}_. -]/gu, "").trim().slice(0, 40) || null;
       replyContext.creatorIdentity = { id: creatorId, username: creatorName };
     }
-    if (asksFavoriteSongPart(content)) {
+    if (asksFavoriteSongPart(content, history)) {
       replyContext.lyricsResearchAttempted = true;
       replyContext.lyricsResearch = await researchLyrics(
         content,

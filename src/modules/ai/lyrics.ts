@@ -15,22 +15,32 @@ export type LyricsRuntimeStatus = { configured: true; lastQueryAt?: string; inte
 let lyricsRuntimeStatus: LyricsRuntimeStatus = { configured: true };
 export function getLyricsRuntimeStatus(): LyricsRuntimeStatus { return { ...lyricsRuntimeStatus }; }
 const VERSION_WORDS = /\b(?:remaster(?:ed)?|live|acoustic|sped up|slowed|remix|radio edit|extended|instrumental|karaoke)\b/gi;
+const LYRIC_REFERENCE_WORDS = /\b(?:letra|musica|cancao|trecho|verso|parte|linha|dela|dessa|nessa)\b/;
+function hasFavoriteSignal(text: string): boolean {
+  return /\bfavorit\w*\b|\bprefer\w*\b|\b(?:mais\s+)?(?:gost\w*|curt\w*)\b|\b(?:mais\s+)?(?:te|me)\s+(?:pega|toca|marca|bate|impacta)\w*\b|\bchama.{0,24}atencao\b/.test(text);
+}
 
 export function normalizeTrackText(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
 }
 
-export function detectLyricsIntent(content: string): LyricsIntent {
+export function detectLyricsIntent(content: string, history: HistoryItem[] = []): LyricsIntent {
   const text = normalizeTrackText(content.replace(/<@!?\d+>/g, " "));
-  if (!/\b(?:letra|musica|cancao|trecho|verso|parte|linha|dela|dessa|nessa)\b/.test(text)) return "unknown";
+  if (!LYRIC_REFERENCE_WORDS.test(text)) {
+    const shortPreferenceReply = text.length <= 100 && hasFavoriteSignal(text);
+    const continuesLyricsQuestion = [...history].reverse().slice(0, 6).some((item) => detectLyricsIntent(item.content) !== "unknown");
+    return shortPreferenceReply && continuesLyricsQuestion ? "favorite_part" : "unknown";
+  }
   if (/\b(?:oq|o que|que)\b.{0,30}\b(?:significa|quer dizer|fala|trata)\b|\b(?:significado|sentido)\b/.test(text)) return "meaning";
-  if (/\b(?:trecho|verso|parte|linha|letra)\b/.test(text) && /\b(?:favorit[oa]|mais gosta|mais curte|prefere|mais te (?:pega|toca|marca)|chama.*atencao)\b/.test(text)) return "favorite_part";
+  const namesLyricPart = /\b(?:trecho|verso|parte|linha|letra)\b/.test(text);
+  const refersToKnownSong = /\b(?:dela|dessa|desta|nessa|essa|esta)(?:\s+(?:musica|letra))?\b/.test(text);
+  if ((namesLyricPart || refersToKnownSong) && hasFavoriteSignal(text)) return "favorite_part";
   if (/\b(?:trecho|verso|linha|pedaco|frase|parte)\b/.test(text)) return "excerpt";
   if (/\bletra\b/.test(text) && /\b(?:manda|mande|qual|mostra|envia|pode|quero|queria)\b/.test(text)) return "full_lyrics";
   return "unknown";
 }
 
-export function asksFavoriteSongPart(content: string): boolean { return detectLyricsIntent(content) !== "unknown"; }
+export function asksFavoriteSongPart(content: string, history: HistoryItem[] = []): boolean { return detectLyricsIntent(content, history) !== "unknown"; }
 function trimValue(value: string): string { return value.replace(/^[\s"“”'`.,:;-]+|[\s"“”'`.,:;-]+$/g, "").replace(/\s+/g, " ").trim(); }
 function splitArtist(value: string): { trackName: string; artistName?: string } {
   const separators = [...value.matchAll(/\s+(?:da|do|de|por|by)\s+/giu)]; const separator = separators.at(-1);
@@ -41,6 +51,12 @@ function splitArtist(value: string): { trackName: string; artistName?: string } 
 
 export function trackQueryFromUser(content: string): TrackQuery | null {
   const text = content.replace(/<@!?\d+>/g, " ").replace(/^\s*prisma\s*[,;:!-]?\s*/iu, "").trim();
+  const preferenceSuffix = text.match(/\b(?:favorit\w*|prefer\w*|(?:mais\s+)?(?:gost\w*|curt\w*)|te\s+(?:pega|toca|marca)|chama.{0,24}aten[cç][aã]o|mais\s+(?:bate|impacta)\w*)\b\s*(?:mais\s*)?(?:da|do|de|em)\s+(.+?)\s*[?!.]*$/iu);
+  if (preferenceSuffix?.[1]) return { ...splitArtist(trimValue(preferenceSuffix[1])), source: "user" };
+  const clarification = text.match(/^(?:qual|que|oq|o que)\s+(?:o\s+|a\s+)?(?:trecho|verso|parte|linha)\s+(?:da|do|de)\s+(.+?)\s+(?:(?:q|que)\s+)?(?:vc|voce|você|tu)\s+(?:quer|queria|prefere)\b/iu);
+  if (clarification?.[1]) return { ...splitArtist(trimValue(clarification[1])), source: "user" };
+  const favorite = text.match(/^(?:qual|que|oq|o que)\s+(?:a\s+|o\s+|seu\s+|sua\s+)?(?:trecho|verso|parte|linha)(?:\s+(?:favorit[oa]|preferid[oa]))?\s+(?:q|que)\s+(?:vc|voce|você|tu)\s+(?:mais\s+)?(?:gosta|gostar|curte|prefere)\s+(?:da|do|de)\s+(.+?)\s*[?!.]*$/iu);
+  if (favorite?.[1]) return { ...splitArtist(trimValue(favorite[1])), source: "user" };
   const quoted = text.match(/["“]([^"”]{2,160})["”](?:\s+(?:da|do|de|por|by)\s+([^?!.]+))?/iu);
   if (quoted) return { trackName: trimValue(quoted[1]), ...(quoted[2] ? { artistName: trimValue(quoted[2]) } : {}), source: "user" };
   const wrapper = text.match(/^(?:(?:me\s+)?(?:manda|mande|envia|envie|mostra|mostre|diz|fala)\s+|(?:qual|oq|o que)\s+(?:e|é)?\s*)?(?:(?:a|um|uma|algum|qual)\s+)?(?:letra|trecho|verso|parte|linha|significado)(?:\s+(?:favorit[oa]|preferid[oa]))?\s+(?:(?:dessa|desta|nessa|da|de)\s+)?(.+?)\s*[?!.]*$/iu);
@@ -110,7 +126,7 @@ function found(track: LrclibTrack, intent: Exclude<LyricsIntent, "unknown">): Ly
 }
 
 export async function researchLyrics(content: string, history: HistoryItem[] = [], fetcher: typeof fetch = fetch, hints: string[] = []): Promise<LyricsResearchResult> {
-  const intent = detectLyricsIntent(content); if (intent === "unknown") return { status: "not_requested", intent };
+  const intent = detectLyricsIntent(content, history); if (intent === "unknown") return { status: "not_requested", intent };
   const queries = buildTrackCandidates(content, history, hints); if (!queries.length) return { status: "not_found", intent };
   let temporary = false; const ambiguous = new Map<string, { trackName: string; artistName: string }>();
   for (const query of queries) {

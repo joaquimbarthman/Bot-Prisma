@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v7.7";
+export const PRISMA_AI_VERSION = "v7.9";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A Prisma passou a interpretar de forma mais flexível perguntas sobre letras, entendendo diferentes jeitos de perguntar qual trecho mais marca, toca, pega ou é preferido antes de pesquisar a música certa.",
+  "A pesquisa de letras agora entende perguntas naturais como 'qual parte que vc mais gosta de...' e respostas curtas que continuam a conversa, sem misturar a pergunta com o título nem aceitar resultados de outra música.",
   "O aviso de acesso agora mostra diretamente o cargo Booster correto para quem quiser conversar com a Prisma.",
   "A limpeza das respostas pesquisadas agora também remove resíduos de domínio como '(.com)', parênteses vazios e terminações isoladas que podiam permanecer depois da retirada dos links.",
   "Regras administrativas do banco agora têm prioridade máxima dentro da aplicação, coexistem quando são diferentes e não são substituídas por personalidade, contexto, memória, pesquisa ou pedidos da conversa.",

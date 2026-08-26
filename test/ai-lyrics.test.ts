@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTrackCandidates, candidateScore, detectLyricsIntent, researchLyrics, trackQueryFromUser } from "../src/modules/ai/lyrics.js";
 
+test("interpreta diferentes formas de pedir o trecho preferido", () => {
+  assert.equal(detectLyricsIntent("qual linha mais te toca nessa letra"), "favorite_part");
+  assert.equal(detectLyricsIntent("oq mais te marca nessa musica"), "favorite_part");
+});
+
+test("extrai titulo e artista de uma pergunta natural de preferencia", () => {
+  assert.deepEqual(trackQueryFromUser("prisma qual parte que vc mais gosta de we can't be friends da Ariana Grande?"), { trackName: "we can't be friends", artistName: "Ariana Grande", source: "user" });
+  assert.deepEqual(trackQueryFromUser("qual linha te pega mais em vampires da Olivia Rodrigo?"), { trackName: "vampires", artistName: "Olivia Rodrigo", source: "user" });
+  assert.deepEqual(trackQueryFromUser("oq mais te marca de Espresso da Sabrina Carpenter?"), { trackName: "Espresso", artistName: "Sabrina Carpenter", source: "user" });
+});
+test("entende resposta curta como continuacao de uma pergunta sobre trecho", () => {
+  const history = [{ discordId: "1", channelId: "1", role: "assistant" as const, content: "qual trecho de intro (end of the world) vc quer q eu pesquise?", createdAt: new Date().toISOString() }];
+  assert.equal(detectLyricsIntent("o que vc mais gostar", history), "favorite_part");
+  assert.equal(detectLyricsIntent("a que mais me pega", history), "favorite_part");
+  assert.equal(buildTrackCandidates("o que vc mais gostar", history)[0]?.trackName, "intro (end of the world)");
+});
+test("nao aceita outra musica ao pesquisar we can't be friends", async () => {
+  const fakeFetch = async () => new Response(JSON.stringify([{ trackName: "Hampstead", artistName: "Ariana Grande", plainLyrics: "errada" }]), { status: 200 });
+  assert.equal((await researchLyrics("qual parte que vc mais gosta de we can't be friends da Ariana Grande?", [], fakeFetch as typeof fetch)).status, "not_found");
+});
+
 test("detecta pedidos gerais de letra, trecho, parte favorita e significado", () => {
   assert.equal(detectLyricsIntent("manda a letra de Bad Romance"), "full_lyrics");
   assert.equal(detectLyricsIntent("manda um trecho dessa música"), "excerpt");
