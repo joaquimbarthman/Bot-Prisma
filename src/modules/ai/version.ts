@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v7.4";
+export const PRISMA_AI_VERSION = "v7.5";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Regras administrativas do banco agora têm prioridade máxima dentro da aplicação, coexistem quando são diferentes e não são substituídas por personalidade, contexto, memória, pesquisa ou pedidos da conversa.",
+  "Pesquisas agora omitem fontes, domínios e links na resposta por padrão, mantendo a verificação interna e exibindo essas referências somente quando a pessoa pedir explicitamente.",
   "O fechamento diário agora confirma todos os aprendizados antes de remover as mensagens detalhadas, recupera gravações parciais e respeita as validações do banco antes de concluir o resumo.",
   "A tabela de autoaprendizado agora é exclusiva da Prisma, mantém uma única linha por padrão e removeu as colunas de escopo pessoal que não eram mais necessárias.",
   "Fechamentos diários agora recuperam dias pendentes após reinícios, resumem conversas longas em blocos antes de criar o diário final e usam um controle persistente para evitar consolidação duplicada.",
@@ -75,7 +77,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Desenvolver uma relação individual com cada pessoa, com familiaridade, confiança, afinidade, humor e temperamento que evoluem com as interações.",
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
   "Usar um apelido escolhido pela pessoa e uma apresentação opcional do painel para personalizar a conversa.",
-  "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes e a pesquisa estiver disponível.",
+  "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes, verificando as referências internamente e mostrando fontes, domínios ou links somente quando a pessoa pedir explicitamente.",
   "Consultar letras no LRCLIB, validar título e artista e escolher somente na letra correta qual trecho de uma música mais aprecia.",
   "Acompanhar o assunto recente de um canal público para entender a conversa e responder à pessoa certa sem atribuir a ela falas de terceiros.",
   "Mencionar pessoas somente quando elas aparecerem como menção na mensagem atual, com autorização válida por uma única resposta e bloqueio de pings vindos de histórico, contexto ou reply.",

@@ -868,7 +868,12 @@ export function validPrismaOperatorRules(items: PrismaOperatorRule[]): PrismaOpe
   const seen = new Set<string>();
   return [...items].filter((item) => typeof item.rule === "string" && item.rule.trim().length >= 5 && !item.rule.startsWith(prismaThoughtPrefix))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id ?? 0) - (b.id ?? 0))
-    .filter((item) => { if (seen.has(item.rule)) return false; seen.add(item.rule); return true; });
+    .filter((item) => {
+      const equivalentRule = item.rule.normalize("NFC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+      if (seen.has(equivalentRule)) return false;
+      seen.add(equivalentRule);
+      return true;
+    });
 }
 
 export function invalidatePrismaOperatorRulesCache(ownerId?: string): void {

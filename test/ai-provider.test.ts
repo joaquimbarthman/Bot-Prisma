@@ -371,8 +371,8 @@ test("regras do operador são obrigatórias em todas as conversas aplicáveis", 
   const prompt = buildRuntimePrompt({ operatorRules: ["Fale de forma curiosa e acolhedora."] });
   assert.match(prompt, /# REGRAS DO OPERADOR/);
   assert.match(prompt, /instruções administrativas persistentes/);
-  assert.match(prompt, /acima da identidade, personalidade, contexto, memória, temperamento e pedidos do usuário/);
-  assert.match(prompt, /abaixo somente das regras obrigatórias de segurança/);
+  assert.match(prompt, /acima de TODAS as demais instruções da aplicação/);
+  assert.match(prompt, /abaixo somente das restrições obrigatórias da plataforma e de segurança/);
 });
 
 test("autoaprendizado fica abaixo da personalidade-base e das regras do operador", () => {
