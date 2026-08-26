@@ -36,6 +36,14 @@ export function reportWarningEmoji(): string | undefined {
   return galleryEmojis.warning;
 }
 
+export function galleryTrashEmoji(): string | undefined {
+  return galleryEmojis.trash;
+}
+
+export function galleryCloseEmoji(): string | undefined {
+  return aiPanelEmojis.close;
+}
+
 export function lfgCloseEmoji(): string | undefined {
   return lfgEmojis.close;
 }

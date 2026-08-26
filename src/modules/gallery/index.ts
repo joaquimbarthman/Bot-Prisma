@@ -1,6 +1,6 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, escapeMarkdown, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "../../config.js";
-import { aiPanelEmojis, galleryButtons } from "../../emoji-manager.js";
+import { galleryButtons, galleryCloseEmoji, galleryTrashEmoji } from "../../emoji-manager.js";
 import { aiModeration } from "../moderation/ai.js";
 import { localModeration } from "../moderation/filter.js";
 import { hasCensorshipBypassRole } from "../moderation/exemptions.js";
@@ -30,8 +30,8 @@ function deleteConfirmationComponents(messageId: string, result?: "confirmed" | 
   if (!result) components.push(
     { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`galeria:excluir-confirm:${messageId}`).setLabel("Apagar").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`galeria:excluir-cancel:${messageId}`).setLabel("Cancelar").setEmoji(aiPanelEmojis.close ?? "✖️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`galeria:excluir-cancel:${messageId}`).setLabel("Cancelar").setEmoji(galleryCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`galeria:excluir-confirm:${messageId}`).setLabel("Apagar").setEmoji(galleryTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
     ).toJSON(),
   );
   return [{ type: ComponentType.Container, accent_color: result === "confirmed" ? 0x57f287 : result === "cancelled" ? 0x99aab5 : 0xed4245, components }];
