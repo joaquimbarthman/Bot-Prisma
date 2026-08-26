@@ -91,6 +91,7 @@ export const config = {
     testNoticeCooldownSeconds: Math.max(30, integer("AI_TEST_NOTICE_COOLDOWN_SECONDS", 45)),
     panelChannelId: process.env.AI_PANEL_CHANNEL_ID?.trim(),
     accessRoleId: process.env.AI_ACCESS_ROLE_ID?.trim() || "1538257302606319716",
+    boosterRoleId: process.env.AI_BOOSTER_ROLE_ID?.trim() || "1538022012591538176",
     model: process.env.PRISMA_AI_MODEL?.trim() || "gpt-5-mini",
     webSearchEnabled: boolean("AI_WEB_SEARCH_ENABLED", true),
     personalityConfigPath: process.env.PRISMA_PERSONALITY_CONFIG?.trim() || "data/personality/prisma.json",

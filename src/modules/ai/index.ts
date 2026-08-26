@@ -326,7 +326,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
   if (level === "none" && !operatorRuleCommand) {
     if (direct) {
-      const notice = await message.reply({ content: `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.accessRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
+      const notice = await message.reply({ content: `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.boosterRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
       setTimeout(() => notice.delete().catch(() => undefined), 10_000).unref();
     }
     return direct;
