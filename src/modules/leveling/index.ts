@@ -161,18 +161,23 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (![".addb", ".remb", ".add-chat", ".remove-chat", ".add-voice", ".remove-voice", ".listab", ".addl", ".removel", ".levels", ".testep", ".testp", ".rank", ".top"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
-  const publicCommand = command === ".rank" || command === ".top";
+  const publicCommand = command === "!rank" || command === "!top";
   if (publicCommand && message.channelId !== config.leveling.publicCommandChannelId) {
     const notice = await message.reply(`Use este comando de evolucao somente em <#${config.leveling.publicCommandChannelId}>.`);
     setTimeout(() => void notice.delete().catch(() => undefined), 5_000).unref();
     return true;
   }
-  if (command === ".rank") { await sendRank(message, message.mentions.members?.first() ?? message.member); return true; }
-  if (command === ".top") {
-    const rows = await getLeaderboard(message.guild.id);
-    const ranking = rows.map((row, index) =>
+  if (command === "!rank") { await sendRank(message, message.mentions.members?.first() ?? message.member); return true; }
+  if (command === "!top") {
+    const rows = await getLeaderboard(message.guild.id, 1_000);
+    const fetchedMembers = await message.guild.members.fetch().catch(() => null);
+    const members = fetchedMembers ?? message.guild.members.cache;
+    const staleRows = fetchedMembers ? rows.filter((row) => !fetchedMembers.has(row.userId)) : [];
+    await Promise.all(staleRows.map((row) => removeMemberLevel(row.guildId, row.userId)));
+    const activeRows = rows.filter((row) => members.has(row.userId)).slice(0, 10);
+    const ranking = activeRows.map((row, index) =>
       `**${index + 1} <@${row.userId}> - Nível ${row.level}** • ${row.xpTotal.toLocaleString("pt-BR")} XP`,
     ).join("\n");
     const components: APIContainerComponent[] = [{
@@ -190,25 +195,25 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
-  if (command === ".testep" || command === ".testp") {
-    const level = Number(input.match(/^\.teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
-    if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `.testep <nivel> [@membro]`."); return true; }
+  if (command === "!testep" || command === "!testp") {
+    const level = Number(input.match(/^!teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
+    if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `!testep <nivel> [@membro]`."); return true; }
     const reward = (await getRewards(message.guild.id)).find((item) => item.level === level);
     if (!reward) { await message.reply(`O nivel ${level} ainda nao possui cargo configurado.`); return true; }
     const member = message.mentions.members?.first() ?? message.member;
     await message.reply({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
     return true;
   }
-  if (command === ".listab") {
+  if (command === "!listab") {
     const entries = (await Promise.all([getBlacklist(message.guild.id, "chat"), getBlacklist(message.guild.id, "voice")])).flat();
     const unique = [...new Map(entries.map((entry) => [`${entry.targetType}:${entry.targetId}`, entry])).values()];
     await message.reply(unique.length ? unique.map((entry) => `<${entry.targetType === "channel" ? "#" : "@&"}${entry.targetId}>`).join("\n") : "A lista negra esta vazia.");
     return true;
   }
-  const shortBlacklistMatch = input.match(/^\.(addb|remb)(?:\s|$)/i);
+  const shortBlacklistMatch = input.match(/^!(addb|remb)(?:\s|$)/i);
   if (shortBlacklistMatch) {
     const target = parseTarget(message);
-    if (!target) { await message.reply(`Use \`.${shortBlacklistMatch[1].toLowerCase()} #canal\` ou \`.${shortBlacklistMatch[1].toLowerCase()} @cargo\`.`); return true; }
+    if (!target) { await message.reply(`Use \`!${shortBlacklistMatch[1].toLowerCase()} #canal\` ou \`!${shortBlacklistMatch[1].toLowerCase()} @cargo\`.`); return true; }
     const types: ("chat" | "voice")[] = ["chat", "voice"];
     for (const type of types) {
       const entry = { guildId: message.guild.id, type, ...target };
@@ -218,14 +223,14 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     await message.reply("Lista negra atualizada.");
     return true;
   }
-  const blacklistMatch = command.match(/^\.(add|remove)-(chat|voice)$/); if (blacklistMatch) { const target = parseTarget(message); if (!target) { await message.reply("Mencione um canal ou cargo."); return true; } const entry = { guildId: message.guild.id, type: blacklistMatch[2] as "chat" | "voice", ...target }; if (blacklistMatch[1] === "add") await addBlacklist(entry); else await removeBlacklist(entry); invalidate(message.guild.id); await message.reply("Blacklist atualizada."); return true; }
-  if (command === ".levels") { const rewards = await getRewards(message.guild.id); await message.reply(rewards.length ? rewards.map((item) => `Nivel ${item.level}: <@&${item.roleId}>`).join("\n") : "Nenhum cargo de evolucao configurado."); return true; }
-  const shortLevel = input.match(/^\.(?:addl|removel)\s+(\d{1,3})(?:\s|$)/i)?.[1];
+  const blacklistMatch = command.match(/^!(add|remove)-(chat|voice)$/); if (blacklistMatch) { const target = parseTarget(message); if (!target) { await message.reply("Mencione um canal ou cargo."); return true; } const entry = { guildId: message.guild.id, type: blacklistMatch[2] as "chat" | "voice", ...target }; if (blacklistMatch[1] === "add") await addBlacklist(entry); else await removeBlacklist(entry); invalidate(message.guild.id); await message.reply("Blacklist atualizada."); return true; }
+  if (command === "!levels") { const rewards = await getRewards(message.guild.id); await message.reply(rewards.length ? rewards.map((item) => `Nivel ${item.level}: <@&${item.roleId}>`).join("\n") : "Nenhum cargo de evolucao configurado."); return true; }
+  const shortLevel = input.match(/^!(?:addl|removel)\s+(\d{1,3})(?:\s|$)/i)?.[1];
   const legacyLevel = input.match(/nivel\((\d{1,3})\)/i)?.[1];
   const level = Number(shortLevel ?? legacyLevel);
-  if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply(command === ".addl" ? "Use `.addl <nivel> @cargo`." : "Use `.removel <nivel>`."); return true; }
-  if (command === ".removel") { await removeReward(message.guild.id, level); await message.reply(`Recompensa do nivel ${level} removida.`); return true; }
-  const role = message.mentions.roles.first(); if (!role) { await message.reply("Use `.addl <nivel> @cargo`."); return true; } const copy = rewardCopy[level] ?? ["✦", `Novo marco no nivel ${level}`, "Marco conquistado"]; await setReward({ guildId: message.guild.id, level, roleId: role.id, emoji: copy[0], title: copy[1], shortMessage: copy[2] }); await message.reply(`Nivel ${level} vinculado a ${role}.`); return true;
+  if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply(command === "!addl" ? "Use `!addl <nivel> @cargo`." : "Use `!removel <nivel>`."); return true; }
+  if (command === "!removel") { await removeReward(message.guild.id, level); await message.reply(`Recompensa do nivel ${level} removida.`); return true; }
+  const role = message.mentions.roles.first(); if (!role) { await message.reply("Use `!addl <nivel> @cargo`."); return true; } const copy = rewardCopy[level] ?? ["✦", `Novo marco no nivel ${level}`, "Marco conquistado"]; await setReward({ guildId: message.guild.id, level, roleId: role.id, emoji: copy[0], title: copy[1], shortMessage: copy[2] }); await message.reply(`Nivel ${level} vinculado a ${role}.`); return true;
 }
 
 async function sendRank(target: Message, member: GuildMember): Promise<void> {
