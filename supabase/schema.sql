@@ -38,18 +38,19 @@ alter table public.prisma_self_learnings drop constraint if exists prisma_self_l
 alter table public.prisma_self_learnings add constraint prisma_self_learnings_category_allowed
   check (category in ('conversation_style','language_pattern','tone_strategy','interaction_pattern','response_strategy','recurring_topic','topic_affinity','self_correction'));
 create index if not exists prisma_self_learnings_status_confidence_idx on public.prisma_self_learnings (status, confidence desc);
-alter table public.prisma_self_learnings add column if not exists scope text not null default 'global';
-alter table public.prisma_self_learnings add column if not exists user_id text;
 alter table public.prisma_self_learnings add column if not exists occurrences integer not null default 0;
 alter table public.prisma_self_learnings add column if not exists unique_users integer not null default 0;
 alter table public.prisma_self_learnings add column if not exists different_days integer not null default 0;
 alter table public.prisma_self_learnings drop constraint if exists prisma_self_learnings_scope_check;
-alter table public.prisma_self_learnings add constraint prisma_self_learnings_scope_check check (scope in ('personal', 'global'));
+alter table public.prisma_self_learnings drop constraint if exists prisma_self_learnings_global_user_check;
 alter table public.prisma_self_learnings drop constraint if exists prisma_self_learnings_status_check;
 alter table public.prisma_self_learnings add constraint prisma_self_learnings_status_check check (status in ('candidate', 'active', 'inactive', 'archived', 'rejected'));
 alter table public.prisma_self_learnings drop constraint if exists prisma_self_learnings_learning_key_key;
-create unique index if not exists prisma_self_learnings_global_key_uidx on public.prisma_self_learnings (learning_key) where scope = 'global';
-create unique index if not exists prisma_self_learnings_personal_key_uidx on public.prisma_self_learnings (user_id, learning_key) where scope = 'personal';
+drop index if exists public.prisma_self_learnings_personal_key_uidx;
+drop index if exists public.prisma_self_learnings_global_key_uidx;
+alter table public.prisma_self_learnings drop column if exists scope;
+alter table public.prisma_self_learnings drop column if exists user_id;
+create unique index if not exists prisma_self_learnings_key_uidx on public.prisma_self_learnings (learning_key);
 create table if not exists public.prisma_self_learning_evidence (
   learning_id bigint not null references public.prisma_self_learnings(id) on delete cascade,
   user_id text not null,

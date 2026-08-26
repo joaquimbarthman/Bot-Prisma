@@ -65,10 +65,17 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
   };
 }
 
+function levelUpMessageComponents(member: GuildMember, reward: LevelReward) {
+  return [
+    { type: ComponentType.TextDisplay as const, content: `<@${member.id}>` },
+    levelUpLayout(member, reward),
+  ];
+}
+
 async function announce(member: GuildMember, reward: LevelReward, channelId: string): Promise<void> {
   const channel = await member.guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
-  await channel.send({ components: [levelUpLayout(member, reward)], flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+  await channel.send({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
 }
 
 async function processLevelChange(member: GuildMember, oldLevel: number, newLevel: number, announcementChannelId: string): Promise<void> {
@@ -188,7 +195,7 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     const reward = (await getRewards(message.guild.id)).find((item) => item.level === level);
     if (!reward) { await message.reply(`O nivel ${level} ainda nao possui cargo configurado.`); return true; }
     const member = message.mentions.members?.first() ?? message.member;
-    await message.reply({ components: [levelUpLayout(member, reward)], flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+    await message.reply({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
     return true;
   }
   if (command === ".listab") {

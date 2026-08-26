@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDailySummary, dailySummaryScheduleParts, dailySummaryTranscript, dailySummaryTranscriptChunks, resetDailySummaryScheduleForTests, shouldRunDailySummary } from "../src/modules/ai/daily-summary.js";
+import { buildDailySummary, dailySummaryScheduleParts, dailySummaryTranscript, dailySummaryTranscriptChunks, persistDailySummaryResults, resetDailySummaryScheduleForTests, shouldRunDailySummary } from "../src/modules/ai/daily-summary.js";
 import type { PrismaDailyBatch } from "../src/modules/ai/store.js";
 
 function batch(contents: string[]): PrismaDailyBatch {
@@ -47,4 +47,24 @@ test("agenda o fechamento diário uma vez após a virada do dia em Brasília", (
   assert.equal(shouldRunDailySummary(atSchedule), true);
   assert.equal(shouldRunDailySummary(new Date("2026-08-24T03:00:50.000Z")), false);
   assert.equal(shouldRunDailySummary(new Date("2026-08-25T03:00:00.000Z")), true);
+});
+
+test("só remove as mensagens depois de persistir todos os aprendizados", async () => {
+  const events: string[] = [];
+  const learning = { learningKey: "tom_curioso", category: "tone_strategy", insight: "Um tom curioso funcionou bem ao conversar sobre hobbies novos.", confidence: 75 };
+  const completed = await persistDailySummaryResults(batch(["mensagem do dia"]), "Resumo seguro do dia.", [learning],
+    async () => { events.push("aprendizado"); return true; },
+    async () => { events.push("resumo-e-exclusão"); return true; });
+  assert.equal(completed, true);
+  assert.deepEqual(events, ["aprendizado", "resumo-e-exclusão"]);
+});
+
+test("mantém as mensagens para retry quando um aprendizado falha", async () => {
+  let completed = false;
+  const learning = { learningKey: "tom_curioso", category: "tone_strategy", insight: "Um tom curioso funcionou bem ao conversar sobre hobbies novos.", confidence: 75 };
+  const result = await persistDailySummaryResults(batch(["mensagem do dia"]), "Resumo seguro do dia.", [learning],
+    async () => false,
+    async () => { completed = true; return true; });
+  assert.equal(result, false);
+  assert.equal(completed, false);
 });

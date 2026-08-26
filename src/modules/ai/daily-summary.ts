@@ -3,6 +3,7 @@ import { memoryCandidates } from "./learning.js";
 import { claimDailySummary, completedDailyMessageBatches, failDailySummary, reinforceSelfLearning, saveDailySummaryAndDeleteMessages, type PrismaDailyBatch } from "./store.js";
 import { topicTokens } from "./topic-context.js";
 import { generateDailyConversationChunkSummary, generateDailyConversationSummary } from "./provider.js";
+import type { DailyReflectionResult } from "./provider.js";
 
 let running = false;
 let lastScheduledDate: string | null = null;
@@ -24,6 +25,21 @@ export function shouldRunDailySummary(now = new Date(), timezone = "America/Sao_
 
 export function resetDailySummaryScheduleForTests(): void {
   lastScheduledDate = null;
+}
+
+type DailyLearning = DailyReflectionResult["learnings"][number];
+
+export async function persistDailySummaryResults(
+  batch: PrismaDailyBatch,
+  summary: string,
+  learnings: DailyLearning[],
+  persistLearning = reinforceSelfLearning,
+  completeSummary = saveDailySummaryAndDeleteMessages,
+): Promise<boolean> {
+  for (const learning of learnings) {
+    if (!await persistLearning(learning, { userId: batch.userId, observedDate: batch.summaryDate })) return false;
+  }
+  return completeSummary(batch, summary);
 }
 
 export function buildDailySummary(batch: PrismaDailyBatch): string | null {
@@ -102,11 +118,11 @@ async function condenseDailyPartials(userId: string, summaryDate: string, partia
   return current;
 }
 
-export async function summarizeCompletedConversationDays(): Promise<number> {
+export async function summarizeCompletedConversationDays(includeCurrentDay = false): Promise<number> {
   if (running) return 0;
   running = true;
   try {
-    const batches = await completedDailyMessageBatches(config.prismaAi.timezone);
+    const batches = await completedDailyMessageBatches(config.prismaAi.timezone, new Date(), includeCurrentDay);
     let completed = 0;
     for (const batch of batches) {
       if (!await claimDailySummary(batch)) continue;
@@ -123,10 +139,9 @@ export async function summarizeCompletedConversationDays(): Promise<number> {
           : chunks[0] ?? dailySummaryTranscript(batch);
         const reflection = transcript ? await generateDailyConversationSummary(batch.userId, batch.summaryDate, transcript) : null;
         const summary = reflection?.summary ?? fallbackSummary;
-        if (await saveDailySummaryAndDeleteMessages(batch, summary)) {
-          for (const learning of reflection?.learnings ?? []) await reinforceSelfLearning(learning, { userId: batch.userId, observedDate: batch.summaryDate });
+        if (await persistDailySummaryResults(batch, summary, reflection?.learnings ?? [])) {
           completed += 1;
-        } else await failDailySummary(batch, "Não foi possível salvar o resumo final.");
+        } else await failDailySummary(batch, "Não foi possível salvar todos os aprendizados e concluir o resumo final.");
       } catch (error) {
         await failDailySummary(batch, error instanceof Error ? error.message : "Falha inesperada ao resumir o dia.");
       }

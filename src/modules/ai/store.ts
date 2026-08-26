@@ -34,7 +34,7 @@ export type PrismaDailyBatch = { userId: string; summaryDate: string; messages: 
 export type PrismaDailySummaryJob = { userId: string; summaryDate: string; status: "pending" | "processing" | "completed" | "failed"; startedAt?: string; completedAt?: string; messageCount: number; error?: string };
 export type UsageItem = { discordId: string; model: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; estimatedCostBrl: number; createdAt: string };
 export type PrismaOperatorRule = { id?: number; ownerId: string; rule: string; createdAt: string };
-export type PrismaSelfLearning = { id?: number; learningKey: string; category: string; insight: string; confidence: number; evidenceCount: number; status: "candidate" | "active" | "inactive" | "archived" | "rejected"; scope?: "personal" | "global"; userId?: string | null; uniqueUsers?: number; differentDays?: number; lastObservedAt?: string; updatedAt?: string; evidenceKeys?: string[] };
+export type PrismaSelfLearning = { id?: number; learningKey: string; category: string; insight: string; confidence: number; evidenceCount: number; status: "candidate" | "active" | "inactive" | "archived" | "rejected"; uniqueUsers?: number; differentDays?: number; lastObservedAt?: string; updatedAt?: string; evidenceKeys?: string[] };
 type SpontaneousEvent = { discordId: string; createdAt: string; interactionType?: "spontaneous" | "absence" };
 type Database = {
   settings: Record<string, UserSettings>;
@@ -448,8 +448,8 @@ function dateInTimezone(value: string, timezone: string): string {
 }
 
 export async function completedDailyMessageBatches(timezone: string, now = new Date(), includeCurrentDay = false): Promise<PrismaDailyBatch[]> {
-  // O fechamento roda às 23:59 no fuso configurado e inclui tudo que já foi
-  // persistido até o início da execução. Lotes antigos pendentes entram juntos.
+  // O fechamento roda à meia-noite no fuso configurado e inclui os dias que já
+  // terminaram. Lotes antigos pendentes entram juntos.
   const summaryCutoff = now.toISOString();
   const currentDate = dateInTimezone(summaryCutoff, timezone);
   let messages: PrismaMessage[];
@@ -583,80 +583,80 @@ export function safeSelfLearningCandidate(candidate: Pick<PrismaSelfLearning, "l
 
 type SelfLearningEvidence = { userId: string; observedDate: string };
 
-function learningStatus(scope: "personal" | "global", confidence: number, occurrences: number, uniqueUsers: number, differentDays: number): PrismaSelfLearning["status"] {
+function learningStatus(confidence: number, occurrences: number, uniqueUsers: number, differentDays: number): PrismaSelfLearning["status"] {
   if (confidence < 30) return "archived";
   if (confidence < 50) return "inactive";
-  if (scope === "personal") return occurrences >= 2 && confidence >= 60 ? "active" : "candidate";
   return uniqueUsers >= 2 && differentDays >= 2 && occurrences >= 3 && confidence >= 70 ? "active" : "candidate";
 }
 
-export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">, evidence: SelfLearningEvidence): Promise<void> {
+export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, "learningKey" | "category" | "insight" | "confidence">, evidence: SelfLearningEvidence): Promise<boolean> {
   const safeCandidate = safeSelfLearningCandidate(candidate);
-  if (!safeCandidate || !evidence.userId || !/^\d{4}-\d{2}-\d{2}$/.test(evidence.observedDate)) return;
+  if (!safeCandidate || !evidence.userId || !/^\d{4}-\d{2}-\d{2}$/.test(evidence.observedDate)) return true;
   candidate = { ...safeCandidate, learningKey: canonicalSelfLearningKey(safeCandidate) };
   const now = new Date().toISOString();
   if (supabase) {
-    for (const scope of ["personal", "global"] as const) {
-      let query = supabase.from("prisma_self_learnings").select("*").eq("scope", scope).eq("category", candidate.category);
-      query = scope === "personal" ? query.eq("user_id", evidence.userId) : query.is("user_id", null);
+    {
+      const query = supabase.from("prisma_self_learnings").select("*").eq("category", candidate.category);
       const { data: related, error: readError } = await query.limit(100);
-      if (readError) { remoteFailure("ler autoaprendizado", readError.message); continue; }
+      if (readError) { remoteFailure("ler autoaprendizado", readError.message); return false; }
       let existing = (related ?? []).find((item) => item.learning_key === candidate.learningKey)
         ?? (related ?? []).find((item) => canonicalSelfLearningKey({ learningKey: item.learning_key, category: item.category, insight: item.insight }) === candidate.learningKey);
       if (!existing) {
-        const row = { learning_key: candidate.learningKey, category: candidate.category, insight: candidate.insight, confidence: Math.min(candidate.confidence, 55), evidence_count: 0, occurrences: 0, unique_users: 0, different_days: 0, status: "candidate", scope, user_id: scope === "personal" ? evidence.userId : null, last_observed_at: now, updated_at: now };
+        const row = { learning_key: candidate.learningKey, category: candidate.category, insight: candidate.insight, confidence: Math.min(candidate.confidence, 55), evidence_count: 1, occurrences: 0, unique_users: 0, different_days: 0, status: "candidate", last_observed_at: now, updated_at: now };
         const { data, error } = await supabase.from("prisma_self_learnings").insert(row).select("*").single();
-        if (error) { remoteFailure("criar autoaprendizado", error.message); continue; }
+        if (error) { remoteFailure("criar autoaprendizado", error.message); return false; }
         existing = data;
       }
-      if (existing.status === "rejected") continue;
+      if (existing.status === "rejected") return true;
       const { error: evidenceError } = await supabase.from("prisma_self_learning_evidence").insert({ learning_id: existing.id, user_id: evidence.userId, observed_date: evidence.observedDate });
-      if (evidenceError && evidenceError.code !== "23505") { remoteFailure("salvar evidência de autoaprendizado", evidenceError.message); continue; }
-      if (evidenceError?.code === "23505") continue;
+      if (evidenceError && evidenceError.code !== "23505") { remoteFailure("salvar evidência de autoaprendizado", evidenceError.message); return false; }
+      // Recontar uma evidência duplicada recupera tentativas que caíram depois do
+      // INSERT, mas antes de atualizar os totais e o estado do aprendizado.
       const { data: evidenceRows, error: countError } = await supabase.from("prisma_self_learning_evidence").select("user_id,observed_date").eq("learning_id", existing.id);
-      if (countError) { remoteFailure("contar evidências de autoaprendizado", countError.message); continue; }
+      if (countError) { remoteFailure("contar evidências de autoaprendizado", countError.message); return false; }
       const occurrences = evidenceRows?.length ?? 0;
       const uniqueUsers = new Set((evidenceRows ?? []).map((item) => item.user_id)).size;
       const differentDays = new Set((evidenceRows ?? []).map((item) => item.observed_date)).size;
-      const confidence = Math.min(100, Math.max(Number(existing.confidence) || 0, Math.min(candidate.confidence, 70)) + (occurrences > 1 ? 5 : 0));
-      const row = { learning_key: candidate.learningKey, insight: candidate.insight, confidence, evidence_count: occurrences, occurrences, unique_users: uniqueUsers, different_days: differentDays, status: learningStatus(scope, confidence, occurrences, uniqueUsers, differentDays), last_observed_at: now, updated_at: now };
+      const evidenceConfidence = Math.min(candidate.confidence, 70) + Math.max(0, occurrences - 1) * 5;
+      const confidence = Math.min(100, Math.max(Number(existing.confidence) || 0, evidenceConfidence));
+      const row = { learning_key: candidate.learningKey, insight: candidate.insight, confidence, evidence_count: occurrences, occurrences, unique_users: uniqueUsers, different_days: differentDays, status: learningStatus(confidence, occurrences, uniqueUsers, differentDays), last_observed_at: now, updated_at: now };
       const { error } = await supabase.from("prisma_self_learnings").update(row).eq("id", existing.id);
-      if (error) remoteFailure("salvar autoaprendizado", error.message);
+      if (error) { remoteFailure("salvar autoaprendizado", error.message); return false; }
     }
-    return;
+    return true;
   }
   await withLocal((db) => {
-    const items = db.selfLearnings ??= [];
-    for (const scope of ["personal", "global"] as const) {
-      const scopedUserId = scope === "personal" ? evidence.userId : null;
-      let existing = items.find((item) => (item.scope ?? "global") === scope && (item.userId ?? null) === scopedUserId && item.learningKey === candidate.learningKey)
-        ?? items.find((item) => (item.scope ?? "global") === scope && (item.userId ?? null) === scopedUserId && item.category === candidate.category && canonicalSelfLearningKey(item) === candidate.learningKey);
+    db.selfLearnings ??= [];
+    {
+      let existing = db.selfLearnings.find((item) => item.learningKey === candidate.learningKey)
+        ?? db.selfLearnings.find((item) => item.category === candidate.category && canonicalSelfLearningKey(item) === candidate.learningKey);
       if (!existing) {
-        existing = { ...candidate, scope, userId: scopedUserId, confidence: Math.min(candidate.confidence, 55), evidenceCount: 0, uniqueUsers: 0, differentDays: 0, evidenceKeys: [], status: "candidate", lastObservedAt: now, updatedAt: now };
-        items.push(existing);
+        existing = { ...candidate, confidence: Math.min(candidate.confidence, 55), evidenceCount: 0, uniqueUsers: 0, differentDays: 0, evidenceKeys: [], status: "candidate", lastObservedAt: now, updatedAt: now };
+        db.selfLearnings.push(existing);
       }
-      if (existing.status === "rejected") continue;
+      if (existing.status === "rejected") return;
       const evidenceKey = `${evidence.userId}:${evidence.observedDate}`;
-      if ((existing.evidenceKeys ?? []).includes(evidenceKey)) continue;
+      if ((existing.evidenceKeys ?? []).includes(evidenceKey)) return;
       existing.evidenceKeys = [...(existing.evidenceKeys ?? []), evidenceKey];
       existing.learningKey = candidate.learningKey; existing.insight = candidate.insight; existing.category = candidate.category;
       existing.evidenceCount = existing.evidenceKeys.length;
       existing.uniqueUsers = new Set(existing.evidenceKeys.map((item) => item.split(":")[0])).size;
       existing.differentDays = new Set(existing.evidenceKeys.map((item) => item.slice(item.indexOf(":") + 1))).size;
       existing.confidence = Math.min(100, Math.max(existing.confidence, Math.min(candidate.confidence, 70)) + (existing.evidenceCount > 1 ? 5 : 0));
-      existing.status = learningStatus(scope, existing.confidence, existing.evidenceCount, existing.uniqueUsers, existing.differentDays);
+      existing.status = learningStatus(existing.confidence, existing.evidenceCount, existing.uniqueUsers, existing.differentDays);
       existing.lastObservedAt = now; existing.updatedAt = now;
     }
   }, true);
+  return true;
 }
 
-export async function listActiveSelfLearnings(userId: string, limit = 12): Promise<PrismaSelfLearning[]> {
+export async function listActiveSelfLearnings(_userId: string, limit = 12): Promise<PrismaSelfLearning[]> {
   if (supabase) {
-    const { data, error } = await supabase.from("prisma_self_learnings").select("*").eq("status", "active").or(`scope.eq.global,and(scope.eq.personal,user_id.eq.${userId})`).order("confidence", { ascending: false }).limit(limit);
+    const { data, error } = await supabase.from("prisma_self_learnings").select("*").eq("status", "active").order("confidence", { ascending: false }).limit(limit);
     if (error) { remoteFailure("ler autoaprendizados ativos", error.message); return []; }
-    return (data ?? []).map((row) => ({ id: row.id, learningKey: row.learning_key, category: row.category, insight: row.insight, confidence: Number(row.confidence), evidenceCount: Number(row.evidence_count), status: row.status, scope: row.scope, userId: row.user_id, uniqueUsers: Number(row.unique_users), differentDays: Number(row.different_days), lastObservedAt: row.last_observed_at, updatedAt: row.updated_at })).filter((item) => safeSelfLearningCandidate(item) !== null).slice(0, limit);
+    return (data ?? []).map((row) => ({ id: row.id, learningKey: row.learning_key, category: row.category, insight: row.insight, confidence: Number(row.confidence), evidenceCount: Number(row.evidence_count), status: row.status, uniqueUsers: Number(row.unique_users), differentDays: Number(row.different_days), lastObservedAt: row.last_observed_at, updatedAt: row.updated_at })).filter((item) => safeSelfLearningCandidate(item) !== null).slice(0, limit);
   }
-  return withLocal((db) => (db.selfLearnings ?? []).filter((item) => item.status === "active" && ((item.scope ?? "global") === "global" || item.userId === userId) && safeSelfLearningCandidate(item) !== null).sort((a, b) => b.confidence - a.confidence).slice(0, limit));
+  return withLocal((db) => (db.selfLearnings ?? []).filter((item) => item.status === "active" && safeSelfLearningCandidate(item) !== null).sort((a, b) => b.confidence - a.confidence).slice(0, limit));
 }
 
 export function decayedSelfLearningConfidence(confidence: number, lastObservedAt: string | undefined, now = new Date()): number {
@@ -674,7 +674,7 @@ export async function decaySelfLearnings(now = new Date()): Promise<void> {
     if (error) { remoteFailure("ler autoaprendizados para decay", error.message); return; }
     for (const item of data ?? []) {
       const confidence = decayedSelfLearningConfidence(Number(item.confidence), item.last_observed_at, now);
-      const status = learningStatus(item.scope ?? "global", confidence, Number(item.occurrences ?? item.evidence_count), Number(item.unique_users), Number(item.different_days));
+      const status = learningStatus(confidence, Number(item.occurrences ?? item.evidence_count), Number(item.unique_users), Number(item.different_days));
       const { error: updateError } = await supabase.from("prisma_self_learnings").update({ confidence, status, updated_at: now.toISOString() }).eq("id", item.id);
       if (updateError) remoteFailure("aplicar decay de autoaprendizado", updateError.message);
     }
@@ -684,7 +684,7 @@ export async function decaySelfLearnings(now = new Date()): Promise<void> {
     for (const item of db.selfLearnings ?? []) {
       if (item.status === "rejected" || (item.updatedAt && item.updatedAt >= cutoff)) continue;
       item.confidence = decayedSelfLearningConfidence(item.confidence, item.lastObservedAt, now);
-      item.status = learningStatus(item.scope ?? "global", item.confidence, item.evidenceCount, item.uniqueUsers ?? 0, item.differentDays ?? 0);
+      item.status = learningStatus(item.confidence, item.evidenceCount, item.uniqueUsers ?? 0, item.differentDays ?? 0);
       item.updatedAt = now.toISOString();
     }
   }, true);

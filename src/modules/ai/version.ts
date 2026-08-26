@@ -1,8 +1,9 @@
-export const PRISMA_AI_VERSION = "v7.2";
+export const PRISMA_AI_VERSION = "v7.4";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
-  "Aprendizados agora distinguem padrões pessoais de padrões globais, exigem evidência de pessoas e dias diferentes antes de influenciar toda a comunidade e perdem força quando deixam de ser confirmados.",
+  "O fechamento diário agora confirma todos os aprendizados antes de remover as mensagens detalhadas, recupera gravações parciais e respeita as validações do banco antes de concluir o resumo.",
+  "A tabela de autoaprendizado agora é exclusiva da Prisma, mantém uma única linha por padrão e removeu as colunas de escopo pessoal que não eram mais necessárias.",
   "Fechamentos diários agora recuperam dias pendentes após reinícios, resumem conversas longas em blocos antes de criar o diário final e usam um controle persistente para evitar consolidação duplicada.",
   "Ações espontâneas e mensagens de ausência agora usam contexto pessoal mais completo e preservam o cooldown social mesmo após reinicializações.",
   "Os estágios de relacionamento passaram a exigir confiança, familiaridade e calor mínimos, impedindo que muitas mensagens sozinhas acelerem a intimidade.",
@@ -37,7 +38,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
   "Aviso de acesso mais claro, informando que é necessário ser Prisma Booster e mostrando diretamente o cargo exigido.",
   "Concessões automáticas de acesso para Boosters agora são persistidas no Supabase, sem depender de arquivo JSON local.",
   "Armazenamento local corrigido: com Supabase configurado, a rotina de limpeza não cria mais o arquivo ai-module.json.",
-  "Resumo diário e autoaprendizado agora são executados uma vez por noite, às 23:59 no horário de Brasília; memórias pessoais continuam sendo aprendidas durante as conversas.",
+  "Resumo diário e autoaprendizado agora são executados uma vez por noite, à meia-noite no horário de Brasília; memórias pessoais continuam sendo aprendidas durante as conversas.",
   "Moderação contextual por IA durante 60 minutos após cada aviso, com renovação automática quando há uma nova ocorrência.",
   "Comentários em fotos agora são analisados pela IA antes da publicação e também passam pelos filtros locais.",
   "Detecção local reforçada contra abreviações, letras repetidas e separadores usados para esconder termos ofensivos.",
@@ -81,7 +82,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Comentar atividades públicas do Discord, como jogos, músicas, transmissões e vídeos, quando as interações espontâneas estiverem ativadas.",
   "Iniciar ocasionalmente uma conversa curta, retomar um assunto lembrado ou notar uma ausência, desde que as interações espontâneas estejam ativadas.",
   "Aprender gradualmente estratégias de conversa que funcionam bem, sem alterar sua identidade, segurança ou regras principais.",
-  "Adaptar estratégias aprendidas ao contexto de cada pessoa e só transformar padrões em hábitos globais após confirmação independente na comunidade.",
+  "Transformar padrões seguros em hábitos da Prisma somente após confirmação independente entre pessoas e dias diferentes.",
   "Permitir que cada pessoa veja ou apague memórias, apague o histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
 ] as const;
 
