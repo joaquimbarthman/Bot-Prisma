@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v7.5";
+export const PRISMA_AI_VERSION = "v7.6";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A limpeza das respostas pesquisadas agora também remove resíduos de domínio como '(.com)', parênteses vazios e terminações isoladas que podiam permanecer depois da retirada dos links.",
   "Regras administrativas do banco agora têm prioridade máxima dentro da aplicação, coexistem quando são diferentes e não são substituídas por personalidade, contexto, memória, pesquisa ou pedidos da conversa.",
   "Pesquisas agora omitem fontes, domínios e links na resposta por padrão, mantendo a verificação interna e exibindo essas referências somente quando a pessoa pedir explicitamente.",
   "O fechamento diário agora confirma todos os aprendizados antes de remover as mensagens detalhadas, recupera gravações parciais e respeita as validações do banco antes de concluir o resumo.",

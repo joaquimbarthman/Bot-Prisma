@@ -66,4 +66,5 @@ test("regra crítica impede links automáticos mas libera fonte pedida explicita
   assert.equal(enforceOperatorRulesOnReply("Lança amanhã. https://exemplo.com/fonte", "pesquisa quando lança o jogo", rules), "Lança amanhã.");
   assert.equal(enforceOperatorRulesOnReply("Lança amanhã. https://exemplo.com/fonte", "pesquisa e manda a fonte", rules), "Lança amanhã. https://exemplo.com/fonte");
   assert.equal(enforceOperatorRulesOnReply("Lança amanhã.\n\nFontes: exemplo.com • https://outra.com", "pesquisa quando lança o jogo", rules), "Lança amanhã.");
+  assert.equal(enforceOperatorRulesOnReply("Lança amanhã (exemplo.com) e chega às lojas (.com)", "pesquisa quando lança o jogo", rules), "Lança amanhã e chega às lojas");
 });
