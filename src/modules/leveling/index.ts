@@ -51,7 +51,7 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
         type: ComponentType.Section,
         components: [{
           type: ComponentType.TextDisplay,
-          content: `## Nivel Aumentado\n${reward.emoji}・${reward.title}\n\n> **${member.displayName}** alcançou o **NÍVEL ${reward.level}** ₊˚⊹ ✦\n> ${reward.shortMessage}・<@&${reward.roleId}>`,
+          content: `## Nivel Aumentado\n${reward.emoji}・${reward.title}\n\n> **<@${member.id}>** alcançou o **NÍVEL ${reward.level}** ₊˚⊹ ✦\n> ${reward.shortMessage}・<@&${reward.roleId}>`,
         }],
         accessory: {
           type: ComponentType.Thumbnail,
@@ -67,7 +67,6 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
 
 function levelUpMessageComponents(member: GuildMember, reward: LevelReward) {
   return [
-    { type: ComponentType.TextDisplay as const, content: `<@${member.id}>` },
     levelUpLayout(member, reward),
   ];
 }
