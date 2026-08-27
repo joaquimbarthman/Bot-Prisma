@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allowedMentionIdsForMessage, contextUserIdsForNames, createCurrentTurnContext, explicitlyRequestedMentionUserIds, includeRequestedRecipient } from "../src/modules/ai/index.js";
+import { allowedMentionIdsForMessage, contextUserIdsForNames, createCurrentTurnContext, explicitlyRequestedMentionUserIds, includeRequestedRecipient, operatorRuleFromMessage } from "../src/modules/ai/index.js";
+
+test("preserva literalmente a regra definida pelo operador", () => {
+  assert.equal(
+    operatorRuleFromMessage("Prisma, lembre disso: Nunca troque 'vc' por 'você'; mantenha exatamente essa grafia."),
+    "Nunca troque 'vc' por 'você'; mantenha exatamente essa grafia.",
+  );
+  assert.equal(operatorRuleFromMessage(`${"x".repeat(351)} lembre disso`), null);
+});
 
 test("autoriza alvo mencionado explicitamente sem depender da menção ao autor", () => {
   const ids = explicitlyRequestedMentionUserIds(

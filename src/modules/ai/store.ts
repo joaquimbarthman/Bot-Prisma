@@ -981,8 +981,8 @@ export async function clearPrismaThought(ownerId: string): Promise<void> {
 }
 
 export async function savePrismaOperatorRule(ownerId: string, rule: string): Promise<boolean> {
-  const normalized = rule.replace(/\s+/g, " ").trim().slice(0, 350);
-  if (!normalized) return false;
+  const normalized = rule.replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.length > 350) return false;
   if (supabase) {
     const { error } = await supabase.from("prisma_operator_rules").upsert({ owner_id: ownerId, rule: normalized }, { onConflict: "owner_id,rule", ignoreDuplicates: true });
     if (error) { remoteFailure("salvar regra do operador", error.message); throw new Error("Não foi possível salvar a regra agora."); }

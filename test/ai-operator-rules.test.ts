@@ -13,8 +13,17 @@ test("filtra, ordena e remove somente duplicações exatas sem alterar o conteú
 });
 
 test("mantém regras diferentes e ignora apenas regras equivalentes repetidas", () => {
-  const rules = validPrismaOperatorRules([row(1, "Nunca mostre fontes."), row(2, "  nunca   mostre FONTES.  "), row(3, "Responda de forma casual.")]);
-  assert.deepEqual(rules.map((item) => item.rule), ["Nunca mostre fontes.", "Responda de forma casual."]);
+  const rules = validPrismaOperatorRules([
+    row(1, "Nunca mostre fontes."),
+    row(2, "  nunca   mostre FONTES.  "),
+    row(3, "Responda de forma casual."),
+    row(4, "Não envie fontes automaticamente; envie quando pedirem."),
+  ]);
+  assert.deepEqual(rules.map((item) => item.rule), [
+    "Nunca mostre fontes.",
+    "Responda de forma casual.",
+    "Não envie fontes automaticamente; envie quando pedirem.",
+  ]);
 });
 
 test("regra adicionada entra no cache e regra removida sai após invalidação", async () => {

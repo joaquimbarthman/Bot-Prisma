@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { localModeration } from "../moderation/filter.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
-import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
+import { generateReply, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
 import { addAbsenceOutreach, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getSettings, lastAbsenceOutreachAt, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
@@ -144,12 +144,12 @@ function requestedNickname(content: string): string | null {
   return nickname && !/@(?:everyone|here)|<@|https?:\/\//i.test(nickname) ? nickname : null;
 }
 
-function operatorRuleFromMessage(content: string): string | null {
+export function operatorRuleFromMessage(content: string): string | null {
   const text = content.replace(/\s+/g, " ").trim();
   const startsWithTrigger = text.match(/^(?:prisma\s*[,!:.-]?\s*)?lembre\s+disso\b\s*[:,-]?\s*(.+)$/i);
   const endsWithTrigger = text.match(/^(.+?)\s*(?:[,;:—-]\s*|\s+)(?:prisma\s*[,!:.-]?\s*)?lembre\s+disso[.!?]*$/i);
   const instruction = (startsWithTrigger?.[1] ?? endsWithTrigger?.[1] ?? "").replace(/\s+/g, " ").trim();
-  if (instruction.length < 5 || instruction.length > 400) return null;
+  if (instruction.length < 5 || instruction.length > 350) return null;
   return instruction;
 }
 
@@ -356,18 +356,13 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   try {
     await message.channel.sendTyping();
     if (operatorRuleCommand) {
-      const rewrittenRule = await rewriteOperatorRule(operatorRuleCommand);
-      const saved = rewrittenRule ? await savePrismaOperatorRule(message.author.id, rewrittenRule) : false;
+      const saved = await savePrismaOperatorRule(message.author.id, operatorRuleCommand);
       const confirmation = await message.reply({
-        content: !rewrittenRule
-          ? "Não consegui reformular essa frase com segurança, então a regra não foi salva. Tente novamente em instantes."
-          : saved
-            ? `Regra salva: ${rewrittenRule}`
-            : "Essa regra já está salva.",
+        content: saved ? `Regra salva exatamente como definida: ${operatorRuleCommand}` : "Essa regra já está salva.",
         allowedMentions: { repliedUser: false },
       });
       setTimeout(() => confirmation.delete().catch(() => undefined), 10_000).unref();
-      if (rewrittenRule && saved) setTimeout(() => message.delete().catch(() => undefined), 10_000).unref();
+      if (saved) setTimeout(() => message.delete().catch(() => undefined), 10_000).unref();
       return true;
     }
     const preferredNickname = requestedNickname(message.content);
