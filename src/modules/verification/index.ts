@@ -392,7 +392,7 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
     if (!channel || channel.isThread()) continue;
     const isVerifiedChat = channel.id === verification.verifiedChatChannelId;
     const mustBePublicForOnboarding = onboardingChannelIds.has(channel.id);
-    const publicReadPermissions = { ViewChannel: true, ReadMessageHistory: true, AddReactions: true, SendMessages: false, SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false, AttachFiles: false, EmbedLinks: false, UseApplicationCommands: false };
+    const publicReadPermissions = { ViewChannel: true, ReadMessageHistory: true, SendMessages: false, SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false, AttachFiles: false, EmbedLinks: false, UseApplicationCommands: false };
     try {
       await channel.permissionOverwrites.edit(guild.roles.everyone, isVerifiedChat || mustBePublicForOnboarding
         ? publicReadPermissions
