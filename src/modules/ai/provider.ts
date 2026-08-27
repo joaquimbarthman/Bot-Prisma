@@ -631,6 +631,25 @@ export function stripAssistantCliches(content: string): string {
     .trim();
 }
 
+export function stripUnmatchedClosingParentheses(content: string): string {
+  let openParentheses = 0;
+  let sanitized = "";
+
+  for (const character of content) {
+    if (character === "(") openParentheses += 1;
+    if (character === ")") {
+      if (openParentheses === 0) continue;
+      openParentheses -= 1;
+    }
+    sanitized += character;
+  }
+
+  return sanitized
+    .replace(/\s+([,.!?])/g, "$1")
+    .replace(/[,;:]\s*$/g, "")
+    .trim();
+}
+
 export function sanitizeOutput(content: string, allowedMentionUserIds: string[] = [], unmentionableUsers: Array<{ id: string; username: string }> = [], fallbackUsernames: string[] = []): string {
   const allowedUsers = new Set(allowedMentionUserIds.filter((id) => /^\d{1,25}$/.test(id)).slice(0, 25));
   const fallbackNames = new Map(unmentionableUsers
@@ -649,12 +668,12 @@ export function sanitizeOutput(content: string, allowedMentionUserIds: string[] 
   for (const name of plainNames) {
     if (name) sanitized = sanitized.replace(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), name);
   }
-  return stripPausePunctuation(sanitized)
+  return stripUnmatchedClosingParentheses(stripPausePunctuation(sanitized)
     .replace(/\bcê\b/gi, "vc")
     .replace(/\bce\b/gi, "vc")
     .replace(/\bc\b/gi, "vc")
     .replace(/:(?!\/\/|\d{1,2}:\d{2})/g, ",")
-    .replace(/;/g, ",");
+    .replace(/;/g, ","));
 }
 
 export function replyWordLimit(content: string, mode: ReplyMode | undefined): number {

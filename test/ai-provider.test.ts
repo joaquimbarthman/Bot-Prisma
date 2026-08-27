@@ -68,6 +68,16 @@ test("sanitização técnica não reescreve semanticamente a resposta", () => {
   assert.equal(sanitizeOutput("Claro! Bora resolver isso, e se precisar de mais alguma coisa, é só chamar."), "Claro! Bora resolver isso, e se precisar de mais alguma coisa, é só chamar.");
 });
 
+test("remove fechamento de parêntese solto das saudações", () => {
+  assert.equal(sanitizeOutput("oii, )"), "oii");
+  assert.equal(sanitizeOutput("olá :)"), "olá");
+  assert.equal(sanitizeOutput("oi ))"), "oi");
+});
+
+test("preserva parênteses usados normalmente", () => {
+  assert.equal(sanitizeOutput("oi (de novo)"), "oi (de novo)");
+});
+
 test("separa reply e state_update da mesma resposta estruturada", () => {
   const output = parseProviderOutput(JSON.stringify({
     reply: "KKKK você não aprende né",
