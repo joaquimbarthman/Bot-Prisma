@@ -11,6 +11,7 @@ import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
 import { buildPrismaPersonalContext, determineContextNeeds } from "./context-builder.js";
 import { selectTopicContext, type ChannelContextMessage } from "./topic-context.js";
+import { loadPrismaBehavior } from "./behavior.js";
 import { asksAboutPrismaCreator } from "./creator.js";
 import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
@@ -85,7 +86,8 @@ async function sendOccasionalAbsenceMessage(client: Client): Promise<void> {
         getPrismaThought(config.prismaAi.operatorUserId),
         listPrismaOperatorRules(config.prismaAi.operatorUserId),
       ]);
-      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, learnedProfile: personalContext.learnedProfile, relevantMemories: personalContext.relevantMemories, dailySummaries: personalContext.dailySummaries, selfLearnings: personalContext.selfLearnings, emotionalState: personalContext.emotionalState, currentThought, operatorRules: operatorRules.map((item) => item.rule) });
+      const behavior = await loadPrismaBehavior(member.roles.cache.keys());
+      const generated = await generateReply(member.id, settings, state, history, "Faz um tempo que não conversamos. Puxe assunto de forma leve.", { mode: "absence", currentAuthorName: member.displayName, currentAuthorId: member.id, learnedProfile: personalContext.learnedProfile, relevantMemories: personalContext.relevantMemories, dailySummaries: personalContext.dailySummaries, selfLearnings: personalContext.selfLearnings, emotionalState: personalContext.emotionalState, currentThought, operatorRules: operatorRules.map((item) => item.rule), behavior });
       const answer = localModeration(generated.reply).flagged ? "Cadê você? Sumiu, hein." : generated.reply;
       await channel.send({ content: `<@${member.id}> ${answer}`, allowedMentions: { parse: [], users: [member.id] } });
       await addSpontaneous(member.id);
@@ -401,6 +403,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       operatorRules: operatorRules.map((item) => item.rule),
       currentThought,
       socialTreatment,
+      behavior: await loadPrismaBehavior(message.member.roles.cache.keys()),
     };
     if (asksAboutPrismaCreator(content)) {
       const creatorId = config.prismaAi.creatorUserId;
@@ -546,6 +549,7 @@ export async function handleAiPresenceUpdate(client: Client, oldPresence: Presen
         emotionalState: personalContext.emotionalState,
         currentThought,
         operatorRules: operatorRules.map((item) => item.rule),
+        behavior: await loadPrismaBehavior(newPresence.member.roles.cache.keys()),
       },
     );
     const answer = localModeration(generated.reply).flagged
