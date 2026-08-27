@@ -192,9 +192,9 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!removr"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
-  if (command === "!removr") {
+  if (command === "!remoji") {
     const currentNickname = message.member.nickname;
     const rewards = await getRewards(message.guild.id);
     const nickname = currentNickname ? removeLevelRewardEmoji(currentNickname, rewards) : null;
