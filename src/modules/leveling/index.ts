@@ -193,7 +193,7 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji", "!syncemoji"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji", "!semoji"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
   if (command === "!remoji") {
     const currentNickname = message.member.nickname;
@@ -249,7 +249,7 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
-  if (command === "!syncemoji") {
+  if (command === "!semoji") {
     const status = await message.reply("Aplicando os emojis de level nos membros atuais...");
     const [rewards, rows, members] = await Promise.all([
       getRewards(message.guild.id),
