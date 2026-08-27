@@ -28,6 +28,8 @@ test("gera prompt estruturado com personalidade-base fixa", () => {
   assert.match(prompt, /vc, vcs, n, oq, q, pq, tbm, mto, agr, dps, hj, qnd, msg, nd, algm, smp, cmg, ctz, qria, qro, pd, dboa, vdd e dnv/i);
   assert.match(prompt, /técnica, acadêmica, formal, séria ou delicada.*reduza automaticamente/i);
   assert.match(prompt, /mds, sla, tlgd e slk dependem do contexto/i);
+  assert.match(prompt, /não envie o caractere '\)' isolado/i);
+  assert.match(prompt, /use um emoji adequado no lugar/i);
   assert.doesNotMatch(prompt, /ao menos duas abreviações|80% das palavras|3 a 10 palavras/i);
   assert.match(prompt, /não é atendente/i);
   assert.match(prompt, /exemplos mostram estilo e ritmo/i);
