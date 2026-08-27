@@ -1,7 +1,7 @@
 import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
-import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
+import { addBlacklist, awardXp, getAllMemberLevels, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
 const voiceEligibleSince = new Map<string, number>();
@@ -96,13 +96,14 @@ export function removeLevelRewardEmoji(currentName: string, rewards: LevelReward
     : currentName.trimEnd();
 }
 
-async function awardNicknameEmoji(member: GuildMember, rewards: LevelReward[], reward: LevelReward): Promise<void> {
+async function awardNicknameEmoji(member: GuildMember, rewards: LevelReward[], reward: LevelReward): Promise<boolean> {
   const emoji = reward.emoji.trim();
-  if (!emoji || !member.manageable) return;
+  if (!emoji || !member.manageable) return false;
   const nickname = levelRewardNickname(member.displayName, rewards, emoji);
-  if (nickname === member.displayName) return;
-  await member.setNickname(nickname, `Emoji do marco de evolucao nivel ${reward.level}`).catch((error) => {
+  if (nickname === member.displayName) return false;
+  return member.setNickname(nickname, `Emoji do marco de evolucao nivel ${reward.level}`).then(() => true).catch((error) => {
     console.error(`[LEVELING] Falha ao colocar o emoji do nivel ${reward.level} no apelido de ${member.id}:`, error);
+    return false;
   });
 }
 
@@ -192,7 +193,7 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji", "!syncemoji"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
   if (command === "!remoji") {
     const currentNickname = message.member.nickname;
@@ -248,6 +249,25 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
+  if (command === "!syncemoji") {
+    const status = await message.reply("Aplicando os emojis de level nos membros atuais...");
+    const [rewards, rows, members] = await Promise.all([
+      getRewards(message.guild.id),
+      getAllMemberLevels(message.guild.id),
+      message.guild.members.fetch(),
+    ]);
+    let updated = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      const member = members.get(row.userId);
+      const reward = [...rewards].reverse().find((item) => item.level <= row.level);
+      if (!member || member.user.bot || !reward) { skipped += 1; continue; }
+      if (await awardNicknameEmoji(member, rewards, reward)) updated += 1;
+      else skipped += 1;
+    }
+    await status.edit(`Emojis sincronizados: ${updated} apelido(s) atualizado(s) e ${skipped} ignorado(s).`);
+    return true;
+  }
   if (command === "!testep" || command === "!testp") {
     const level = Number(input.match(/^!teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
     if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `!testep <nivel> [@membro]`."); return true; }

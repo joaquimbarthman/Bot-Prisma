@@ -53,4 +53,16 @@ export async function setCurrentRewardRole(guildId: string, userId: string, role
 export async function removeMemberLevel(guildId: string, userId: string): Promise<void> { if (supabase) { const { error } = await supabase.from("member_levels").delete().match({ guild_id: guildId, user_id: userId }); if (error) throw new Error(`[LEVELING] Falha ao excluir dados do membro: ${error.message}`); return; } await localMutation((db) => { db.members = db.members.filter((item) => item.guildId !== guildId || item.userId !== userId); }); }
 export async function getMemberLevel(guildId: string, userId: string): Promise<MemberLevel | null> { if (!supabase) { await queue; return (await readLocal()).members.find((item) => item.guildId === guildId && item.userId === userId) ?? null; } const { data, error } = await supabase.from("member_levels").select("*").match({ guild_id: guildId, user_id: userId }).maybeSingle(); if (error) throw new Error(error.message); return data ? memberFromRow(data) : null; }
 export async function getLeaderboard(guildId: string, limit = 10): Promise<MemberLevel[]> { if (!supabase) { await queue; return (await readLocal()).members.filter((item) => item.guildId === guildId).sort((a, b) => b.xpTotal - a.xpTotal).slice(0, limit); } const { data, error } = await supabase.from("member_levels").select("*").eq("guild_id", guildId).order("xp_total", { ascending: false }).limit(limit); if (error) throw new Error(error.message); return (data ?? []).map(memberFromRow); }
+export async function getAllMemberLevels(guildId: string): Promise<MemberLevel[]> {
+  if (!supabase) { await queue; return (await readLocal()).members.filter((item) => item.guildId === guildId); }
+  const members: MemberLevel[] = [];
+  const pageSize = 1_000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("member_levels").select("*").eq("guild_id", guildId).range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const page = (data ?? []).map(memberFromRow);
+    members.push(...page);
+    if (page.length < pageSize) return members;
+  }
+}
 export async function getRankPosition(guildId: string, xpTotal: number): Promise<number> { if (!supabase) { await queue; return (await readLocal()).members.filter((item) => item.guildId === guildId && item.xpTotal > xpTotal).length + 1; } const { count, error } = await supabase.from("member_levels").select("user_id", { count: "exact", head: true }).eq("guild_id", guildId).gt("xp_total", xpTotal); if (error) throw new Error(error.message); return (count ?? 0) + 1; }
