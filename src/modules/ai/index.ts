@@ -406,13 +406,14 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       const creatorName = creatorUser?.username.replace(/[^\p{L}\p{N}_. -]/gu, "").trim().slice(0, 40) || null;
       replyContext.creatorIdentity = { id: creatorId, username: creatorName };
     }
+    const referencedMessage = message.reference?.messageId ? await message.fetchReference().catch(() => null) : null;
     if (asksFavoriteSongPart(content, history)) {
       replyContext.lyricsResearchAttempted = true;
       replyContext.lyricsResearch = await researchLyrics(
         content,
         history,
         fetch,
-        currentActivity?.description ? [currentActivity.description] : [],
+        [referencedMessage?.cleanContent, currentActivity?.description].filter((value): value is string => !!value),
       );
     }
     const mentionNeedsChannel = requestsDirectMention(content) && /\b(?:ele|ela|esse|essa|dele|dela)\b/iu.test(content);
@@ -421,7 +422,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       if (contextNeeds.expandedChannelContext) channelContext = await expandedChannelContext(message) || channelContext;
       if (channelContext) replyContext.channelExcerpt = channelContext;
     }
-    const referencedAuthorId = message.reference?.messageId ? (await message.fetchReference().catch(() => null))?.author.id : undefined;
+    const referencedAuthorId = referencedMessage?.author.id;
     currentTurn.replyToUserId = referencedAuthorId;
     // Criada do zero para a mensagem atual e descartada ao fim desta resposta.
     const currentMessageMentionIds = currentTurn.allowedMentionIds;

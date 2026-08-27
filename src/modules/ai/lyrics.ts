@@ -76,14 +76,20 @@ function historyTrack(item: HistoryItem): TrackQuery | null {
   const named = item.content.match(/["“]([^"”]{2,160})["”]\s*(?:,?\s*(?:da|de|por)\s+)([^,.!?\n]{2,100})/iu);
   return named ? { trackName: trimValue(named[1]), artistName: trimValue(named[2]), source: "history" } : null;
 }
+function contextTrack(value: string): TrackQuery | null {
+  const activity = activityTrack(value); if (activity) return activity;
+  const direct = trackQueryFromUser(value); if (direct) return { ...direct, source: "context" };
+  const named = value.match(/["“]([^"”]{2,160})["”](?:\s*(?:,?\s*(?:da|de|por)\s+)([^,.!?\n]{2,100}))?/iu);
+  return named ? { trackName: trimValue(named[1]), ...(named[2] ? { artistName: trimValue(named[2]) } : {}), source: "context" } : null;
+}
 function sameQuery(a: TrackQuery, b: TrackQuery): boolean { return normalizeTrackText(a.trackName) === normalizeTrackText(b.trackName) && normalizeTrackText(a.artistName ?? "") === normalizeTrackText(b.artistName ?? ""); }
 
 export function buildTrackCandidates(content: string, history: HistoryItem[] = [], contextHints: string[] = []): TrackQuery[] {
   const explicit = trackQueryFromUser(content);
-  const reference = /\b(?:dela|dessa|desta|nessa|essa|esta)(?:\s+(?:musica|letra))?\b|\bessa\s+(?:q|que)\s+(?:eu\s+)?(?:to|estou)\s+ouvindo\b/iu.test(content);
   const recent = [...history].reverse().slice(0, 8).map(historyTrack).filter((x): x is TrackQuery => !!x);
-  const spotify = contextHints.map(activityTrack).filter((x): x is TrackQuery => !!x);
-  const ordered = explicit ? [explicit, ...recent, ...spotify] : reference ? [...recent, ...spotify] : [...recent];
+  // Os hints chegam em ordem de relevância: primeiro a mensagem respondida e depois a atividade atual.
+  const contextual = contextHints.map(contextTrack).filter((x): x is TrackQuery => !!x);
+  const ordered = explicit ? [explicit, ...contextual, ...recent] : [...contextual, ...recent];
   return ordered.filter((q, i, all) => q.trackName.length >= 2 && all.findIndex((other) => sameQuery(q, other)) === i).slice(0, 5);
 }
 export function lyricsSearchQueries(content: string, history: HistoryItem[] = [], hints: string[] = []): string[] { return buildTrackCandidates(content, history, hints).map((q) => [q.trackName, q.artistName].filter(Boolean).join(" ")); }

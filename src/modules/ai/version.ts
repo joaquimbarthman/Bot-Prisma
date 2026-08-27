@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v8.4";
+export const PRISMA_AI_VERSION = "v8.5";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Ao responder perguntas curtas sobre uma música, a Prisma agora confere primeiro a mensagem respondida e a atividade atual antes do histórico, evitando citar trechos de outra música.",
   "Regras do operador agora são salvas exatamente como foram definidas, sem paráfrase da IA; regras apenas semelhantes continuam coexistindo e somente duplicatas textualmente equivalentes são ignoradas.",
   "Pontuação casual mais natural: a Prisma evita enviar ')' isolado ou sem contexto e usa um emoji adequado quando quiser transmitir emoção ou descontração.",
   "A Prisma agora carrega dinamicamente, antes de cada resposta da IA, o comportamento correspondente aos cargos da pessoa; o modo relaxed tem prioridade sobre o padrão sem ultrapassar segurança crítica nem regras administrativas do banco.",
@@ -76,6 +77,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Manter o assunto exato de uma mensagem respondida, priorizando esse contexto em perguntas curtas e evitando trocar músicas ou temas pelo histórico anterior.",
   "Adaptar o comportamento por cargo em cada resposta, usando um modo relaxed mais livre e contextual quando autorizado, sem remover segurança crítica nem regras administrativas do banco.",
   "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",
   "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",

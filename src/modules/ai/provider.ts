@@ -474,7 +474,7 @@ export function buildRuntimePrompt(context: ReplyContext, state?: PrismaUserStat
   }
 
   if (context.channelExcerpt) {
-    lines.push("O trecho público do Discord está separado em blocos ASSUNTO. Use primeiro o ASSUNTO 1, que é o mais ligado à mensagem atual ou à mensagem respondida. Não misture fatos entre blocos diferentes. Cada fala contém autor_id e nome: atribua opiniões, gostos, experiências e pronomes somente àquele autor. Se várias pessoas discutirem temas paralelos, continue apenas o tema ao qual a fala atual se conecta; se a conexão continuar ambígua, faça uma pergunta curta em vez de adivinhar.");
+    lines.push("O trecho público do Discord está separado em blocos ASSUNTO. Use primeiro o ASSUNTO 1, que é o mais ligado à mensagem atual ou à mensagem respondida. Quando a mensagem atual for uma pergunta curta em reply, confira primeiro o conteúdo exato da mensagem respondida e mantenha a mesma música, pessoa ou assunto; não troque pelo tema de uma conversa anterior. Não misture fatos entre blocos diferentes. Cada fala contém autor_id e nome: atribua opiniões, gostos, experiências e pronomes somente àquele autor. Se várias pessoas discutirem temas paralelos, continue apenas o tema ao qual a fala atual se conecta; se a conexão continuar ambígua, faça uma pergunta curta em vez de adivinhar.");
   }
   if (context.lyricsResearchAttempted) {
     if (context.lyricsResearch?.status === "found") {

@@ -38,6 +38,14 @@ test("não destrói palavras comuns que fazem parte do título", () => {
 });
 test("usa Spotify para referência indireta", () => { assert.deepEqual(buildTrackCandidates("manda um trecho dessa", [], ['ouvindo "Flowers" de Miley Cyrus'])[0], { trackName: "Flowers", artistName: "Miley Cyrus", source: "spotify" }); });
 test("música explícita vence a atividade do Spotify", () => { assert.deepEqual(buildTrackCandidates("manda um trecho de Poker Face", [], ['ouvindo "Bad Romance" de Lady Gaga'])[0], { trackName: "Poker Face", source: "user" }); });
+test("pergunta curta prioriza a música da mensagem respondida sobre o histórico", () => {
+  const history = [{ discordId: "1", channelId: "1", role: "user" as const, content: "qual parte vc mais gosta de Kiss Me da Ariana Grande?", createdAt: new Date().toISOString() }];
+  assert.deepEqual(buildTrackCandidates("qual parte vc mais gosta?", history, ['“Sempre Você” é bem gostosinha, Luísa entregou nessa.'])[0], { trackName: "Sempre Você", source: "context" });
+});
+test("pergunta curta usa a atividade atual antes de uma música antiga", () => {
+  const history = [{ discordId: "1", channelId: "1", role: "user" as const, content: "qual parte vc mais gosta de Kiss Me da Ariana Grande?", createdAt: new Date().toISOString() }];
+  assert.deepEqual(buildTrackCandidates("qual parte vc mais gosta?", history, ['ouvindo "Sempre Você" de Luísa Sonza'])[0], { trackName: "Sempre Você", artistName: "Luísa Sonza", source: "spotify" });
+});
 test("consulta exata e estruturada antes da busca genérica", async () => {
   const urls: string[] = [];
   const fakeFetch = async (input: string | URL | Request) => { urls.push(String(input)); return new Response(JSON.stringify(urls.length === 1 ? {} : [{ trackName: "Bad Romance", artistName: "Lady Gaga", plainLyrics: "linha" }]), { status: urls.length === 1 ? 404 : 200 }); };
