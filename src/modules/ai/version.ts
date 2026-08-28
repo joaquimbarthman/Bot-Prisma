@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v8.11";
+export const PRISMA_AI_VERSION = "v8.12";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Cada pessoa agora pode ter até 99 memórias ativas, exibidas no painel com numeração fixa de 01 a 99.",
   "O painel da Prisma agora é atualizado no formato Components V2 sem enviar campos legados incompatíveis, evitando falhas na publicação.",
   "A atividade musical do Discord agora só é usada quando a pessoa perguntar explicitamente sobre a música que está ouvindo, escutando ou tocando; perguntas genéricas continuam no assunto do chat ou da mensagem respondida.",
   "Perguntas curtas sobre trechos de músicas agora preservam corretamente a música da mensagem respondida ou da atividade atual, sem interpretar palavras como 'vc mais gosta' como título.",
@@ -91,7 +92,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Conversar com personalidade própria, adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa e remover deterministicamente fechamentos de parêntese sem par que pareçam erros de digitação.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",
   "Aprender preferências, interesses, hobbies, jogos, mídias, projetos, objetivos, eventos, conquistas, rotinas, estilo de comunicação e outros fatos duráveis e não sensíveis compartilhados pela própria pessoa.",
-  "Criar memórias duráveis para retomar assuntos relevantes em conversas futuras quando a memória estiver ativada.",
+  "Criar e manter até 99 memórias duráveis por pessoa para retomar assuntos relevantes em conversas futuras quando a memória estiver ativada.",
   "Desenvolver uma relação individual com cada pessoa, com familiaridade, confiança, afinidade, humor e temperamento que evoluem com as interações.",
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
   "Usar naturalmente o apelido escolhido pela pessoa como forma preferida de tratamento e aproveitar a apresentação opcional do painel para personalizar a conversa.",

@@ -348,7 +348,7 @@ where status = 'active' and valid_until is null;
 revoke all on function public.set_prisma_memory_valid_until() from public, anon, authenticated;
 grant execute on function public.set_prisma_memory_valid_until() to service_role;
 
-create or replace function public.enforce_prisma_memory_limit(p_user_id text, p_limit integer default 300)
+create or replace function public.enforce_prisma_memory_limit(p_user_id text, p_limit integer default 99)
 returns integer
 language plpgsql
 security definer
@@ -356,7 +356,7 @@ set search_path = pg_catalog
 as $enforce_prisma_memory_limit$
 declare
   v_changed integer := 0;
-  v_limit integer := greatest(1, least(coalesce(p_limit, 300), 300));
+  v_limit integer := greatest(1, least(coalesce(p_limit, 99), 99));
 begin
   update public.prisma_memories
   set status = 'forgotten', updated_at = now()

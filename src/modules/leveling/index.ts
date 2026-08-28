@@ -232,7 +232,7 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     await Promise.all(staleRows.map((row) => removeMemberLevel(row.guildId, row.userId)));
     const activeRows = rows.filter((row) => members.has(row.userId)).slice(0, 10);
     const ranking = activeRows.map((row, index) =>
-      `**${index + 1} <@${row.userId}> - Nível ${row.level}** • ${row.xpTotal.toLocaleString("pt-BR")} XP`,
+      `**${String(index + 1).padStart(2, "0")} <@${row.userId}> - Nível ${row.level}** • ${row.xpTotal.toLocaleString("pt-BR")} XP`,
     ).join("\n");
     const components: APIContainerComponent[] = [{
       type: ComponentType.Container,

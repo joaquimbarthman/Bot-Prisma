@@ -163,17 +163,23 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
 }
 
 function memoriesViewComponents(memories: PrismaMemory[]): APIContainerComponent[] {
-  const memoryList = memories.slice(0, 12).map((memory, index) => `> **${String(index + 1).padStart(2, "0")}**　${memory.content}`).join("\n");
+  const lines = memories.slice(0, 99).map((memory, index) => `> **${String(index + 1).padStart(2, "0")}**　${memory.content}`);
+  const memoryBlocks: string[] = [];
+  for (const line of lines) {
+    const current = memoryBlocks.at(-1);
+    if (!current || current.length + line.length + 1 > 3_800) memoryBlocks.push(line);
+    else memoryBlocks[memoryBlocks.length - 1] = `${current}\n${line}`;
+  }
   const content = memories.length
-    ? `### Memórias salvas　${memories.length}\n\n${memoryList}`
-    : "### Ainda não há memórias salvas\n\nConverse com a Prisma sobre coisas de que você gosta, interesses ou preferências. Quando algo for útil para conversas futuras, poderá virar uma memória.";
+    ? [`### Memórias salvas　${String(memories.length).padStart(2, "0")}`, ...memoryBlocks]
+    : ["### Ainda não há memórias salvas\n\nConverse com a Prisma sobre coisas de que você gosta, interesses ou preferências. Quando algo for útil para conversas futuras, poderá virar uma memória."];
   return [{
     type: ComponentType.Container,
     accent_color: 0x7c5cff,
     components: [
       { type: ComponentType.TextDisplay, content: "## Memórias da Prisma\nInformações que foram aprendidas nas suas conversas." },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content },
+      ...content.map((text) => ({ type: ComponentType.TextDisplay as const, content: text })),
     ],
   }];
 }
@@ -332,9 +338,6 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   }
   if (action === "view-memories") {
     const memories = await listPrismaMemories(interaction.user.id);
-    const content = memories.length
-      ? `## O que a Prisma lembra\n${memories.map((memory, index) => `${index + 1}. ${memory.content}`).join("\n")}`
-      : "A Prisma ainda não tem memórias duráveis suas.";
     await interaction.reply({ components: memoriesViewComponents(memories), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
     return true;
   }

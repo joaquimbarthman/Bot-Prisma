@@ -355,8 +355,10 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   }, true);
 }
 
-export async function enforcePrismaMemoryLimit(userId: string, limit = 300): Promise<void> {
-  const safeLimit = Math.max(1, Math.min(300, Math.round(limit)));
+export const PRISMA_MEMORY_LIMIT = 99;
+
+export async function enforcePrismaMemoryLimit(userId: string, limit = PRISMA_MEMORY_LIMIT): Promise<void> {
+  const safeLimit = Math.max(1, Math.min(PRISMA_MEMORY_LIMIT, Math.round(limit)));
   if (supabase) {
     const { error } = await supabase.rpc("enforce_prisma_memory_limit", { p_user_id: userId, p_limit: safeLimit });
     if (error && !/enforce_prisma_memory_limit|schema cache|function .*does not exist/i.test(error.message)) remoteFailure("limitar memórias ativas", error.message);
@@ -374,7 +376,7 @@ export async function enforcePrismaMemoryLimit(userId: string, limit = 300): Pro
 }
 
 export async function listPrismaMemories(userId: string): Promise<PrismaMemory[]> {
-  return getRelevantPrismaMemories(userId, 30);
+  return getRelevantPrismaMemories(userId, PRISMA_MEMORY_LIMIT);
 }
 
 export async function deletePrismaMemory(userId: string, memoryId: number): Promise<boolean> {
