@@ -21,7 +21,7 @@ function draftKey(interaction: Interaction): string { return `${interaction.guil
 function isStaff(member: GuildMember): boolean { return member.permissions.has(PermissionFlagsBits.ManageGuild) || member.permissions.has(PermissionFlagsBits.Administrator) || (!!config.lfg.staffRoleId && member.roles.cache.has(config.lfg.staffRoleId)); }
 function canManage(session: LfgSession, interaction: ButtonInteraction): boolean { return session.creatorId === interaction.user.id || (!!interaction.member && "permissions" in interaction.member && isStaff(interaction.member as GuildMember)); }
 function safeName(value: string): string { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 75) || "usuario"; }
-export function lfgVoiceChannelName(username: string): string { return `lobby ${safeName(username)}`; }
+export function lfgVoiceChannelName(username: string): string { return `🕹️・lobby ${safeName(username)}`; }
 function sessionStatus(session: LfgSession): LfgSession["status"] { return session.status === "open" && session.participants.length >= session.maxPlayers ? "completed" : session.status; }
 function label(status: LfgSession["status"]): string { return ({ open: "🟢 Aberto", completed: "✅ Completo", closed: "🔒 Fechado", expired: "⌛ Expirado", deleted: "🗑️ Excluído" })[status]; }
 function publicationComponents(session: LfgSession): APIContainerComponent[] {

@@ -10,5 +10,5 @@ test("isLfgGameKey aceita somente jogos configurados", () => {
 });
 
 test("nomeia o canal e o cargo do lobby sem hífen após lobby", () => {
-  assert.equal(lfgVoiceChannelName("dscjoaquim"), "lobby dscjoaquim");
+  assert.equal(lfgVoiceChannelName("dscjoaquim"), "🕹️・lobby dscjoaquim");
 });
