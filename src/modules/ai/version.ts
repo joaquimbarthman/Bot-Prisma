@@ -1,10 +1,11 @@
-export const PRISMA_AI_VERSION = "v8.6";
+export const PRISMA_AI_VERSION = "v8.7";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Ao pedir para a Prisma lembrar uma regra, ela agora reformula a instrução em uma definição persistente, clara e detalhada antes de salvá-la.",
   "Saudações mais limpas: além da orientação de estilo, a Prisma agora remove automaticamente ')' sem par antes de enviar a resposta, evitando mensagens como 'oii, )' sem afetar parênteses usados normalmente.",
   "Ao responder perguntas curtas sobre uma música, a Prisma agora confere primeiro a mensagem respondida e a atividade atual antes do histórico, evitando citar trechos de outra música.",
-  "Regras do operador agora são salvas exatamente como foram definidas, sem paráfrase da IA; regras apenas semelhantes continuam coexistindo e somente duplicatas textualmente equivalentes são ignoradas.",
+  "Regras do operador são validadas antes do salvamento; regras diferentes continuam coexistindo e somente duplicatas textualmente equivalentes são ignoradas.",
   "Pontuação casual mais natural: a Prisma evita enviar ')' isolado ou sem contexto e usa um emoji adequado quando quiser transmitir emoção ou descontração.",
   "A Prisma agora carrega dinamicamente, antes de cada resposta da IA, o comportamento correspondente aos cargos da pessoa; o modo relaxed tem prioridade sobre o padrão sem ultrapassar segurança crítica nem regras administrativas do banco.",
   "O painel da Prisma agora usa uma miniatura estática confiável para avatares GIF, evitando falhas de carregamento nos cards.",
@@ -82,7 +83,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Adaptar o comportamento por cargo em cada resposta, usando um modo relaxed mais livre e contextual quando autorizado, sem remover segurança crítica nem regras administrativas do banco.",
   "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",
   "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",
-  "Cumprir cumulativamente as regras administrativas persistentes do operador, preservando o texto definido e sem substituir uma regra por outra apenas semelhante.",
+  "Reformular, validar e cumprir cumulativamente as regras administrativas persistentes do operador, sem substituir uma regra por outra apenas semelhante.",
   "Conversar com personalidade própria, adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa e remover deterministicamente fechamentos de parêntese sem par que pareçam erros de digitação.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",
   "Aprender preferências, interesses, hobbies, jogos, mídias, projetos, objetivos, eventos, conquistas, rotinas, estilo de comunicação e outros fatos duráveis e não sensíveis compartilhados pela própria pessoa.",

@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { localModeration } from "../moderation/filter.js";
 import { accessLevel } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
-import { generateReply, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
+import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
 import { addAbsenceOutreach, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getSettings, lastAbsenceOutreachAt, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
@@ -356,9 +356,18 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   try {
     await message.channel.sendTyping();
     if (operatorRuleCommand) {
-      const saved = await savePrismaOperatorRule(message.author.id, operatorRuleCommand);
+      const rewrittenRule = await rewriteOperatorRule(operatorRuleCommand);
+      if (!rewrittenRule) {
+        const confirmation = await message.reply({
+          content: "Não consegui reformular essa regra com segurança, então nada foi salvo. Tente defini-la de outra forma.",
+          allowedMentions: { repliedUser: false },
+        });
+        setTimeout(() => confirmation.delete().catch(() => undefined), 10_000).unref();
+        return true;
+      }
+      const saved = await savePrismaOperatorRule(message.author.id, rewrittenRule);
       const confirmation = await message.reply({
-        content: saved ? `Regra salva exatamente como definida: ${operatorRuleCommand}` : "Essa regra já está salva.",
+        content: saved ? `Regra reescrita e salva: ${rewrittenRule}` : "Essa regra já está salva.",
         allowedMentions: { repliedUser: false },
       });
       setTimeout(() => confirmation.delete().catch(() => undefined), 10_000).unref();
