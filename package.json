@@ -1,5 +1,5 @@
 {
-  "name": "bot-prisma-moderacao",
+  "name": "bot-prisma",
   "version": "1.0.0",
   "private": true,
   "description": "Bot de moderação para Discord com avisos e análise opcional por IA",
