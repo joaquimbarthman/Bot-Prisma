@@ -80,7 +80,7 @@ async function announce(member: GuildMember, reward: LevelReward, channelId: str
 
 export function levelRewardNickname(currentName: string, rewards: LevelReward[], emoji: string): string {
   const withoutReward = removeLevelRewardEmoji(currentName, rewards);
-  const suffix = `・${emoji.trim()}`;
+  const suffix = ` ・${emoji.trim()}`;
   const available = Math.max(0, 32 - [...suffix].length);
   return `${[...withoutReward].slice(0, available).join("").trimEnd()}${suffix}`;
 }

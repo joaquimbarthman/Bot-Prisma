@@ -51,6 +51,7 @@ function splitArtist(value: string): { trackName: string; artistName?: string } 
 
 export function trackQueryFromUser(content: string): TrackQuery | null {
   const text = content.replace(/<@!?\d+>/g, " ").replace(/^\s*prisma\s*[,;:!-]?\s*/iu, "").trim();
+  if (referencesCurrentListeningActivity(text) && !/["“][^"”]{2,160}["”]/u.test(text)) return null;
   const preferenceSuffix = text.match(/\b(?:favorit\w*|prefer\w*|(?:mais\s+)?(?:gost\w*|curt\w*)|te\s+(?:pega|toca|marca)|chama.{0,24}aten[cç][aã]o|mais\s+(?:bate|impacta)\w*)\b\s*(?:mais\s*)?(?:da|do|de|em)\s+(.+?)\s*[?!.]*$/iu);
   if (preferenceSuffix?.[1]) return { ...splitArtist(trimValue(preferenceSuffix[1])), source: "user" };
   const clarification = text.match(/^(?:qual|que|oq|o que)\s+(?:o\s+|a\s+)?(?:trecho|verso|parte|linha)\s+(?:da|do|de)\s+(.+?)\s+(?:(?:q|que)\s+)?(?:vc|voce|você|tu)\s+(?:quer|queria|prefere)\b/iu);
@@ -63,6 +64,7 @@ export function trackQueryFromUser(content: string): TrackQuery | null {
   if (!wrapper?.[1]) return null;
   const remainder = trimValue(wrapper[1]);
   if (!remainder || /^(?:dela|dessa|desta|nessa|essa|esta|musica|letra)$/iu.test(remainder)) return null;
+  if (/^(?:q(?:ue)?\s+)?(?:vc|voce|você|tu)\s+(?:mais\s+)?(?:gost\w*|curt\w*|prefer\w*)$/iu.test(remainder)) return null;
   return { ...splitArtist(remainder), source: "user" };
 }
 
@@ -84,11 +86,19 @@ function contextTrack(value: string): TrackQuery | null {
 }
 function sameQuery(a: TrackQuery, b: TrackQuery): boolean { return normalizeTrackText(a.trackName) === normalizeTrackText(b.trackName) && normalizeTrackText(a.artistName ?? "") === normalizeTrackText(b.artistName ?? ""); }
 
+export function referencesCurrentListeningActivity(content: string): boolean {
+  const text = normalizeTrackText(content.replace(/<@!?\d+>/g, " "));
+  return /\b(?:musica|som|faixa|cancao)\b.{0,35}\b(?:ouvindo|escutando|tocando)\b/.test(text)
+    || /\b(?:ouvindo|escutando)\b.{0,35}\b(?:agora|nesse momento|musica|som|faixa|cancao)\b/.test(text)
+    || /\b(?:oq|o que|que)\s+(?:vc|voce|tu)\s+acha\b.{0,35}\b(?:ouvindo|escutando|tocando)\b/.test(text);
+}
+
 export function buildTrackCandidates(content: string, history: HistoryItem[] = [], contextHints: string[] = []): TrackQuery[] {
   const explicit = trackQueryFromUser(content);
   const recent = [...history].reverse().slice(0, 8).map(historyTrack).filter((x): x is TrackQuery => !!x);
   // Os hints chegam em ordem de relevância: primeiro a mensagem respondida e depois a atividade atual.
-  const contextual = contextHints.map(contextTrack).filter((x): x is TrackQuery => !!x);
+  const useListeningActivity = referencesCurrentListeningActivity(content);
+  const contextual = contextHints.map(contextTrack).filter((x): x is TrackQuery => !!x && (x.source !== "spotify" || useListeningActivity));
   const ordered = explicit ? [explicit, ...contextual, ...recent] : [...contextual, ...recent];
   return ordered.filter((q, i, all) => q.trackName.length >= 2 && all.findIndex((other) => sameQuery(q, other)) === i).slice(0, 5);
 }

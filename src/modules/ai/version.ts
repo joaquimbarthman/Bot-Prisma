@@ -1,7 +1,10 @@
-export const PRISMA_AI_VERSION = "v8.7";
+export const PRISMA_AI_VERSION = "v8.10";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A atividade musical do Discord agora só é usada quando a pessoa perguntar explicitamente sobre a música que está ouvindo, escutando ou tocando; perguntas genéricas continuam no assunto do chat ou da mensagem respondida.",
+  "Perguntas curtas sobre trechos de músicas agora preservam corretamente a música da mensagem respondida ou da atividade atual, sem interpretar palavras como 'vc mais gosta' como título.",
+  "A Prisma agora trata o apelido configurado como a forma preferida de chamar cada pessoa e passa a usá-lo naturalmente em saudações, perguntas, reações e conversas comuns.",
   "Ao pedir para a Prisma lembrar uma regra, ela agora reformula a instrução em uma definição persistente, clara e detalhada antes de salvá-la.",
   "Saudações mais limpas: além da orientação de estilo, a Prisma agora remove automaticamente ')' sem par antes de enviar a resposta, evitando mensagens como 'oii, )' sem afetar parênteses usados normalmente.",
   "Ao responder perguntas curtas sobre uma música, a Prisma agora confere primeiro a mensagem respondida e a atividade atual antes do histórico, evitando citar trechos de outra música.",
@@ -79,7 +82,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
-  "Manter o assunto exato de uma mensagem respondida, priorizando esse contexto em perguntas curtas e evitando trocar músicas ou temas pelo histórico anterior.",
+  "Manter o assunto exato de uma mensagem respondida, priorizar o contexto do chat em perguntas curtas e consultar a atividade musical somente quando a pessoa falar explicitamente sobre o que está ouvindo.",
   "Adaptar o comportamento por cargo em cada resposta, usando um modo relaxed mais livre e contextual quando autorizado, sem remover segurança crítica nem regras administrativas do banco.",
   "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",
   "Analisar preventivamente comentários em fotos e, por 60 minutos após um aviso, mensagens de pessoas sob monitoramento, deixando as punições sob controle do sistema de moderação.",
@@ -90,7 +93,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Criar memórias duráveis para retomar assuntos relevantes em conversas futuras quando a memória estiver ativada.",
   "Desenvolver uma relação individual com cada pessoa, com familiaridade, confiança, afinidade, humor e temperamento que evoluem com as interações.",
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
-  "Usar um apelido escolhido pela pessoa e uma apresentação opcional do painel para personalizar a conversa.",
+  "Usar naturalmente o apelido escolhido pela pessoa como forma preferida de tratamento e aproveitar a apresentação opcional do painel para personalizar a conversa.",
   "Pesquisar informações atuais na internet quando a pergunta precisar de dados recentes, verificando as referências internamente e mostrando fontes, domínios ou links somente quando a pessoa pedir explicitamente.",
   "Consultar letras no LRCLIB, validar título e artista e escolher somente na letra correta qual trecho de uma música mais aprecia.",
   "Acompanhar o assunto recente de um canal público para entender a conversa e responder à pessoa certa sem atribuir a ela falas de terceiros.",

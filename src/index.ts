@@ -15,6 +15,7 @@ import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/in
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 import { handleDirectMessage } from "./modules/direct-message/index.js";
 import { handleLevelingMemberRemove, handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
+import { interactionErrorContext, messageErrorContext, publicInteractionAction, reportPublicError, type PublicFeature } from "./public-error-reporter.js";
 
 validateConfig();
 
@@ -134,38 +135,50 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
+  let activeFeature: PublicFeature | "ai" = "system";
   try {
     void handleBumpMessage(client, message);
     if (message.author.bot) return;
-    if (await handleLevelingMessage(message)) return;
+    activeFeature = "leveling"; if (await handleLevelingMessage(message)) return;
     if (await handleDirectMessage(message)) return;
-    if (await handleVerificationMessage(message)) return;
-    if (await handleGalleryMessage(message)) return;
-    if (await handleModerationMessage(client, message)) return;
+    activeFeature = "verification"; if (await handleVerificationMessage(message)) return;
+    activeFeature = "gallery"; if (await handleGalleryMessage(message)) return;
+    activeFeature = "moderation"; if (await handleModerationMessage(client, message)) return;
+    activeFeature = "ai";
     await handleAiMessage(client, message);
   } catch (error) {
     console.error(`[MENSAGEM] Falha ao processar mensagem ${message.id} no canal ${message.channelId}:`, error);
+    if (message.inGuild() && activeFeature !== "ai") {
+      await Promise.all([
+        reportPublicError(client, messageErrorContext(message, activeFeature), error),
+        message.reply({ content: "Não consegui concluir essa ação. A equipe foi avisada sobre o erro.", allowedMentions: { repliedUser: false } }).catch(() => undefined),
+      ]);
+    }
   }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  let activeFeature: PublicFeature | "ai" = "system";
   try {
-    if (await handleLfgInteraction(interaction)) return;
-    if (await handleReportInteraction(interaction)) return;
-    if (await handleVerificationInteraction(interaction)) return;
-    if (await handleAiInteraction(interaction)) return;
-    if (await handleGalleryInteraction(interaction)) return;
+    activeFeature = "lfg"; if (await handleLfgInteraction(interaction)) return;
+    activeFeature = "reports"; if (await handleReportInteraction(interaction)) return;
+    activeFeature = "verification"; if (await handleVerificationInteraction(interaction)) return;
+    activeFeature = "ai"; if (await handleAiInteraction(interaction)) return;
+    activeFeature = "gallery"; if (await handleGalleryInteraction(interaction)) return;
     if (interaction.isButton()) {
+      activeFeature = "moderation";
       if (await handleModerationButton(interaction)) return;
     }
-    if (interaction.isChatInputCommand()) await handleModerationCommand(interaction);
+    if (interaction.isChatInputCommand()) { activeFeature = "moderation"; await handleModerationCommand(interaction); }
   } catch (error) {
     console.error(`[INTERACAO] Falha ao processar ${interaction.id}:`, error);
+    const action = publicInteractionAction(interaction);
     if (interaction.isRepliable()) {
-      const errorMessage = { content: "Não consegui concluir esta ação. A equipe foi avisada.", flags: ["Ephemeral"] } as const;
+      const errorMessage = { content: activeFeature === "ai" ? "Não consegui concluir esta ação agora. Tente novamente mais tarde." : `Não consegui ${action}. A equipe foi avisada sobre o erro.`, flags: ["Ephemeral"] } as const;
       if (interaction.replied || interaction.deferred) await interaction.followUp(errorMessage).catch(() => undefined);
       else await interaction.reply(errorMessage).catch(() => undefined);
     }
+    if (interaction.inGuild() && activeFeature !== "ai") await reportPublicError(client, interactionErrorContext(interaction, activeFeature), error);
   }
 });
 

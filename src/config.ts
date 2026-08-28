@@ -26,6 +26,7 @@ export const config = {
   clientId: process.env.DISCORD_CLIENT_ID ?? "",
   guildId: process.env.DISCORD_GUILD_ID,
   modLogChannelId: process.env.MOD_LOG_CHANNEL_ID,
+  publicErrorChannelId: process.env.PUBLIC_ERROR_CHANNEL_ID?.trim() || "1538276823786455050",
   monitoredChannelIds: new Set(
     (process.env.MONITORED_CHANNEL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
   ),
