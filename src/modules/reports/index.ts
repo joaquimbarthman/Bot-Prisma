@@ -147,6 +147,7 @@ function reportLogComponents(userId: string, staffId: string, status: ReportStat
       },
       ...(transcript ? [
         { type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+        { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: "### Registro do chat" },
         ...transcriptChunks(transcript).map((chunk) => ({
           type: ComponentType.TextDisplay as ComponentType.TextDisplay,
           content: `\`\`\`text\n${chunk}\n\`\`\``,
