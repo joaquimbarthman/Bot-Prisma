@@ -441,7 +441,7 @@ export async function startVerificationModule(client: Client): Promise<void> {
         if (member) await textChannel.setName(`verificacao-${channelNickname(member)}`).catch(console.error);
         const staffPanel = await findStaffPanel(textChannel);
         if (staffPanel?.embeds.length) {
-          await staffPanel.edit({ content: null, embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username, avatarUrl: state.avatarUrl ?? member?.displayAvatarURL({ size: 256, forceStatic: true }) }), flags: ["IsComponentsV2"] }).catch(console.error);
+          await staffPanel.edit({ embeds: [], components: staffPanelComponents({ ...state, username: state.username ?? member?.user.username, avatarUrl: state.avatarUrl ?? member?.displayAvatarURL({ size: 256, forceStatic: true }) }), flags: ["IsComponentsV2"] }).catch(console.error);
         }
       }
       if (!state?.deleteAt) continue;

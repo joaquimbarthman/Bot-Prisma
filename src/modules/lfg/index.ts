@@ -17,6 +17,7 @@ const drafts = new Map<string, Draft>();
 export function isLfgGameKey(value: string | undefined): value is LfgGameKey {
   return value !== undefined && Object.prototype.hasOwnProperty.call(LFG_GAMES, value);
 }
+export function lfgGameRoleMention(game: LfgGameKey): string { return `<@&${LFG_GAMES[game].roleId}>`; }
 function draftKey(interaction: Interaction): string { return `${interaction.guildId ?? "dm"}:${interaction.user.id}`; }
 function isStaff(member: GuildMember): boolean { return member.permissions.has(PermissionFlagsBits.ManageGuild) || member.permissions.has(PermissionFlagsBits.Administrator) || (!!config.lfg.staffRoleId && member.roles.cache.has(config.lfg.staffRoleId)); }
 function canManage(session: LfgSession, interaction: ButtonInteraction): boolean { return session.creatorId === interaction.user.id || (!!interaction.member && "permissions" in interaction.member && isStaff(interaction.member as GuildMember)); }
@@ -45,7 +46,7 @@ function publicationComponents(session: LfgSession): APIContainerComponent[] {
         type: ComponentType.Section,
         components: [{
           type: ComponentType.TextDisplay,
-          content: `### PRISMA • LFG\n## ${game.name}\n-# Criado por <@${session.creatorId}>　•　<@&${game.roleId}>\n\n${session.note || "Monte seu grupo e entre no lobby quando estiver pronto."}`,
+          content: `### PRISMA • LFG\n## ${game.name}\n-# Criado por <@${session.creatorId}>　•　${lfgGameRoleMention(session.game)}\n\n${session.note || "Monte seu grupo e entre no lobby quando estiver pronto."}`,
         }],
         accessory: { type: ComponentType.Thumbnail, media: { url: game.img }, description: game.name },
       },
@@ -102,7 +103,7 @@ function draftView(draft: Draft): { components: APIContainerComponent[] } {
     ] }],
   };
 }
-async function updateMessage(client: Client, session: LfgSession): Promise<void> { if (!session.messageId) return; const channel = await client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await channel.messages.fetch(session.messageId).then((message) => message.edit({ content: null, embeds: [], components: publicationComponents(session), flags: ["IsComponentsV2"] })).catch(() => undefined); }
+async function updateMessage(client: Client, session: LfgSession): Promise<void> { if (!session.messageId) return; const channel = await client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await channel.messages.fetch(session.messageId).then((message) => message.edit({ embeds: [], components: publicationComponents(session), flags: ["IsComponentsV2"] })).catch(() => undefined); }
 async function createVoice(client: Client, sessionId: string): Promise<LfgSession | null> {
   const session = (await sessions()).find((value) => value.id === sessionId); if (!session || session.voiceChannelId || session.status === "deleted") return session ?? null;
   const guild = await client.guilds.fetch(session.guildId).catch(() => null); if (!guild) return null;
@@ -134,6 +135,10 @@ async function submitCreate(interaction: ButtonInteraction, draft: Draft): Promi
   const publishedSession = session.autoVoiceEnabled ? await createVoice(interaction.client, id) ?? session : session;
   const channel = interaction.channel; if (!channel?.isTextBased()) { await interaction.editReply({ content: "Não encontrei um canal de texto para publicar este LFG." }); return; }
   const gameRoleId = LFG_GAMES[game].roleId;
+  const gameRole = await interaction.guild!.roles.fetch(gameRoleId).catch(() => null);
+  const botCanMentionAnyRole = channel.permissionsFor(interaction.client.user!)?.has(PermissionFlagsBits.MentionEveryone) ?? false;
+  if (!gameRole) { await interaction.editReply({ content: `O cargo configurado para ${LFG_GAMES[game].name} não existe mais. Avise a equipe para atualizar o painel.` }); return; }
+  if (!gameRole.mentionable && !botCanMentionAnyRole) { await interaction.editReply({ content: `Não consigo mencionar o cargo ${gameRole}. Deixe o cargo mencionável ou conceda ao bot a permissão de mencionar cargos.` }); return; }
   const message = await channel.send({ components: publicationComponents(publishedSession), flags: ["IsComponentsV2"], allowedMentions: { parse: [], roles: [gameRoleId] } });
   await mutate((db) => { const current = db.sessions.find((value) => value.id === id)!; current.messageId = message.id; current.updatedAt = new Date().toISOString(); });
   createdCooldowns.set(interaction.user.id, Date.now()); drafts.delete(draftKey(interaction)); await interaction.editReply({ components: [{ type: ComponentType.Container, accent_color: 0x57f287, components: [{ type: ComponentType.TextDisplay, content: "LFG criado e publicado." }] }] });

@@ -192,7 +192,7 @@ async function updateOrCreatePanel(client: Client, channel: SendableChannels): P
   const recent = await channel.messages.fetch({ limit: 100 });
   const existing = recent.filter((message) => message.author.id === client.user?.id && hasPrismaControls(message));
   const current = existing.first();
-  if (current) await current.edit({ content: null, embeds: [], components: publicPanelComponents(), flags: ["IsComponentsV2"] });
+  if (current) await current.edit({ embeds: [], components: publicPanelComponents(), flags: ["IsComponentsV2"] });
   else await channel.send({ components: publicPanelComponents(), flags: ["IsComponentsV2"] });
   for (const duplicate of existing.filter((message) => message.id !== current?.id).values()) {
     await duplicate.edit({ components: [] }).catch(() => undefined);

@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v8.10";
+export const PRISMA_AI_VERSION = "v8.11";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O painel da Prisma agora é atualizado no formato Components V2 sem enviar campos legados incompatíveis, evitando falhas na publicação.",
   "A atividade musical do Discord agora só é usada quando a pessoa perguntar explicitamente sobre a música que está ouvindo, escutando ou tocando; perguntas genéricas continuam no assunto do chat ou da mensagem respondida.",
   "Perguntas curtas sobre trechos de músicas agora preservam corretamente a música da mensagem respondida ou da atividade atual, sem interpretar palavras como 'vc mais gosta' como título.",
   "A Prisma agora trata o apelido configurado como a forma preferida de chamar cada pessoa e passa a usá-lo naturalmente em saudações, perguntas, reações e conversas comuns.",
