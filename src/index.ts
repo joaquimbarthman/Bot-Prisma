@@ -9,7 +9,7 @@ import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCl
 import { grantAccessRoleToBooster, grantVerifiedRoleToBooster, startedBoosting, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
-import { handleLfgInteraction, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
+import { handleLfgInteraction, handleLfgMessageDelete, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
@@ -21,7 +21,7 @@ validateConfig();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildVoiceStates],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel, Partials.Message],
 });
 
 const discordRecoveryTimeoutMs = 5 * 60_000;
@@ -155,6 +155,10 @@ client.on(Events.MessageCreate, async (message) => {
       ]);
     }
   }
+});
+
+client.on(Events.MessageDelete, async (message) => {
+  await handleLfgMessageDelete(message).catch((error) => console.error(`[LFG] Falha ao limpar recursos do anúncio ${message.id}:`, error));
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

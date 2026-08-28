@@ -1,7 +1,7 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, EmbedBuilder, PermissionFlagsBits, SeparatorSpacingSize,
   StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type ButtonInteraction, type Client,
-  type APIContainerComponent, type GuildMember, type Interaction, type ModalSubmitInteraction,
+  type APIContainerComponent, type GuildMember, type Interaction, type Message, type ModalSubmitInteraction, type PartialMessage,
 } from "discord.js";
 import { config } from "../../config.js";
 import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgSoundEmoji, lfgTrashEmoji, lfgWarningEmoji } from "../../emoji-manager.js";
@@ -127,6 +127,25 @@ async function createVoice(client: Client, sessionId: string): Promise<LfgSessio
   else await Promise.all(saved!.participants.map((userId) => guild.members.fetch(userId).then((member) => member.roles.add(role, `Participante do LFG ${session.id}`)).catch(() => undefined)));
   return saved;
 }
+async function deleteLfgResources(client: Client, session: LfgSession, reason: string): Promise<void> {
+  const guild = await client.guilds.fetch(session.guildId).catch(() => null);
+  const voice = session.voiceChannelId ? await client.channels.fetch(session.voiceChannelId).catch(() => null) : null;
+  if (voice?.isVoiceBased()) await voice.delete(reason).catch((error) => console.error(`[LFG] Falha ao apagar a call ${voice.id}:`, error));
+  if (guild && session.temporaryRoleId) {
+    await guild.roles.fetch(session.temporaryRoleId).then((role) => role?.delete(reason)).catch((error) => console.error(`[LFG] Falha ao apagar o cargo temporário ${session.temporaryRoleId}:`, error));
+  }
+}
+
+export async function handleLfgMessageDelete(message: Message | PartialMessage): Promise<void> {
+  if (!message.guildId) return;
+  const session = (await sessions()).find((value) => value.guildId === message.guildId && value.messageId === message.id);
+  if (!session) return;
+  await deleteLfgResources(message.client, session, "Anúncio do LFG apagado");
+  await mutate((db) => {
+    const current = db.sessions.find((value) => value.id === session.id);
+    if (current) { current.status = "deleted"; current.deleteVoiceWhenEmpty = false; current.updatedAt = new Date().toISOString(); }
+  });
+}
 async function showCreate(interaction: ButtonInteraction): Promise<void> {
   await interaction.deferReply({ flags: ["Ephemeral"] });
   const last = createdCooldowns.get(interaction.user.id) ?? 0; if (Date.now() - last < config.lfg.createCooldownSeconds * 1000) { await interaction.editReply({ content: "Aguarde um instante antes de criar outro LFG." }); return; }
@@ -181,7 +200,13 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
   const session = (await sessions()).find((value) => value.id === id); if (!session) { if (deferredReply || deferredUpdate) await interaction.editReply({ content: "Este LFG não existe mais.", components: [] }); else await interaction.reply({ content: "Este LFG não existe mais.", flags: ["Ephemeral"] }); return true; }
   if (action === "delete") { if (!canManage(session, interaction)) { await interaction.reply({ content: "Somente o criador ou a equipe pode apagar este LFG.", flags: ["Ephemeral"] }); return true; } const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete:${id}`).setLabel("Excluir").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete:${id}`).setLabel("Cancelar").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary)); await interaction.reply({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "## Excluir LFG\nIsso encerrará o grupo e removerá a postagem." }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, buttons.toJSON()] }], flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (action === "cancel-delete") { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0x99aab5, components: [{ type: ComponentType.TextDisplay, content: "Exclusão cancelada." }] }] }); return true; }
-  if (action === "confirm-delete") { if (!canManage(session, interaction)) { await interaction.editReply({ content: "Sem permissão.", components: [] }); return true; } const saved = await mutate((db) => { const value = db.sessions.find((item) => item.id === id)!; value.status = "deleted"; value.deleteVoiceWhenEmpty = true; value.updatedAt = new Date().toISOString(); return value; }); const voice = saved.voiceChannelId ? await interaction.guild?.channels.fetch(saved.voiceChannelId).catch(() => null) : null; if (voice?.isVoiceBased() && voice.members.size === 0) await voice.delete("LFG apagado").catch(() => undefined); if (saved.temporaryRoleId) await interaction.guild?.roles.fetch(saved.temporaryRoleId).then((role) => role?.delete("LFG apagado")).catch(() => undefined); if (session.messageId || session.roleMentionMessageId) { const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await Promise.all([session.messageId, session.roleMentionMessageId].filter((messageId): messageId is string => !!messageId).map((messageId) => channel.messages.fetch(messageId).then((message) => message.delete()).catch(() => undefined))); } await interaction.editReply({ components: [{ type: ComponentType.Container, accent_color: 0x57f287, components: [{ type: ComponentType.TextDisplay, content: "LFG excluído e anúncio apagado." }] }] }); return true; }
+  if (action === "confirm-delete") {
+    if (!canManage(session, interaction)) { await interaction.editReply({ content: "Sem permissão.", components: [] }); return true; }
+    await deleteLfgResources(interaction.client, session, "LFG apagado");
+    await mutate((db) => { const value = db.sessions.find((item) => item.id === id); if (value) { value.status = "deleted"; value.deleteVoiceWhenEmpty = false; value.updatedAt = new Date().toISOString(); } });
+    if (session.messageId || session.roleMentionMessageId) { const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await Promise.all([session.messageId, session.roleMentionMessageId].filter((messageId): messageId is string => !!messageId).map((messageId) => channel.messages.fetch(messageId).then((message) => message.delete()).catch(() => undefined))); }
+    await interaction.editReply({ components: creationResultComponents("LFG excluído, call encerrada e anúncio apagado.", true) }); return true;
+  }
   if (action === "voice") { if (!canManage(session, interaction)) { await interaction.editReply({ content: "Somente o criador ou a equipe pode usar esta ação." }); return true; } const saved = await createVoice(interaction.client, id); if (saved) await updateMessage(interaction.client, saved); await interaction.editReply({ content: saved?.voiceChannelId ? `Lobby pronto: <#${saved.voiceChannelId}>` : "Não foi possível criar o lobby." }); return true; }
   const saved = await mutate((db) => { const value = db.sessions.find((item) => item.id === id)!; if (action === "join") { if (value.status !== "open" || value.participants.length >= value.maxPlayers || value.participants.includes(interaction.user.id)) return value; value.participants.push(interaction.user.id); if (value.participants.length >= value.maxPlayers) value.status = "completed"; } else if (action === "leave") { value.participants = value.participants.filter((userId) => userId !== interaction.user.id); if (value.status === "completed") value.status = "open"; } value.updatedAt = new Date().toISOString(); return value; });
   if (saved.temporaryRoleId && interaction.guild) { const role = await interaction.guild.roles.fetch(saved.temporaryRoleId).catch(() => null); const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null); if (role && member) { if (action === "join" && saved.participants.includes(interaction.user.id)) await member.roles.add(role, `Participante do LFG ${id}`).catch(() => undefined); if (action === "leave") await member.roles.remove(role, `Saiu do LFG ${id}`).catch(() => undefined); } }
