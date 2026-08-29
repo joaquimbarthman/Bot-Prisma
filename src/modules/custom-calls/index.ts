@@ -119,7 +119,14 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     `<@&${call.roleId}>`,
     "",
     "### Membros",
-    memberIds.map((id) => `<@${id}>`).join(" "),
+    Array.from(
+      { length: Math.ceil(memberIds.length / 4) },
+      (_, index) =>
+        memberIds
+          .slice(index * 4, index * 4 + 4)
+          .map((id) => `<@${id}>`)
+          .join(" "),
+    ).join("\n"),
   ].join("\n");
   const headerComponent: APIComponentInContainer = { type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: header }], accessory: { type: ComponentType.Thumbnail, media: { url: panelOwner.displayAvatarURL({ extension: "png", size: 256 }) }, description: `Avatar de ${panelOwner.user.username}` } };
   const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: color, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
