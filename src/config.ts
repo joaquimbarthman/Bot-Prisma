@@ -58,13 +58,17 @@ export const config = {
     logChannelId: process.env.REPORT_LOG_CHANNEL_ID?.trim() || "1538276823786455050",
   },
   lfg: {
-    voiceCategoryId: process.env.LFG_VOICE_CATEGORY_ID?.trim() || "1538663337011707944",
     panelChannelId: process.env.LFG_PANEL_CHANNEL_ID?.trim() || "1538659348631519303",
     staffRoleId: process.env.LFG_STAFF_ROLE_ID?.trim(),
     maxOpenPerUser: integer("LFG_MAX_OPEN_PER_USER", 2),
     createCooldownSeconds: integer("LFG_CREATE_COOLDOWN_SECONDS", 30),
     nowExpiryMinutes: integer("LFG_NOW_EXPIRY_MINUTES", 120),
-    voiceEmptyGraceMinutes: integer("LFG_VOICE_EMPTY_GRACE_MINUTES", 60),
+  },
+  customCalls: {
+    panelChannelId: process.env.CUSTOM_CALL_PANEL_CHANNEL_ID?.trim() || "1543322103766327305",
+    categoryId: process.env.CUSTOM_CALL_CATEGORY_ID?.trim() || "1538663337011707944",
+    accessRoleId: process.env.CUSTOM_CALL_ACCESS_ROLE_ID?.trim() || "1543322771420086362",
+    logChannelId: process.env.CUSTOM_CALL_LOG_CHANNEL_ID?.trim(),
   },
   bumpReminder: {
     channelId: process.env.BUMP_REMINDER_CHANNEL_ID?.trim() || "1537991941512237067",

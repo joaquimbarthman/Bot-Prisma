@@ -1,10 +1,11 @@
 import { EmbedBuilder, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "./config.js";
 
-export type PublicFeature = "lfg" | "reports" | "verification" | "gallery" | "moderation" | "leveling" | "ai" | "system";
+export type PublicFeature = "lfg" | "custom-calls" | "reports" | "verification" | "gallery" | "moderation" | "leveling" | "ai" | "system";
 
 const featureNames: Record<PublicFeature, string> = {
   lfg: "LFG",
+  "custom-calls": "Calls Personalizadas",
   reports: "Atendimentos",
   verification: "Verificação",
   gallery: "Galeria",
@@ -20,9 +21,14 @@ const actionNames: Record<string, string> = {
   "lfg:draft-create": "criar e publicar o LFG",
   "lfg:join": "entrar no LFG",
   "lfg:leave": "sair do LFG",
-  "lfg:voice": "criar o lobby de voz",
   "lfg:delete": "apagar o LFG",
   "lfg:confirm-delete": "confirmar a exclusão do LFG",
+  "custom-call:open": "abrir o painel de calls personalizadas",
+  "custom-call:create": "criar a call personalizada",
+  "custom-call:add": "adicionar uma pessoa à call personalizada",
+  "custom-call:remove": "remover uma pessoa da call personalizada",
+  "custom-call:members": "ver integrantes da call personalizada",
+  "custom-call:delete": "excluir a call personalizada",
   "verification:start": "iniciar a verificação",
   "verification:approve-confirm": "aprovar a verificação",
   "verification:reject-submit": "recusar a verificação",

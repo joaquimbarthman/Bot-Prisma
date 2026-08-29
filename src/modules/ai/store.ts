@@ -598,15 +598,23 @@ export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, 
   const now = new Date().toISOString();
   if (supabase) {
     {
-      const query = supabase.from("prisma_self_learnings").select("*").eq("category", candidate.category);
-      const { data: related, error: readError } = await query.limit(100);
+      const { data: exact, error: exactError } = await supabase.from("prisma_self_learnings").select("*").eq("learning_key", candidate.learningKey).maybeSingle();
+      if (exactError) { remoteFailure("ler autoaprendizado", exactError.message); return false; }
+      const { data: related, error: readError } = exact
+        ? { data: [], error: null }
+        : await supabase.from("prisma_self_learnings").select("*").eq("category", candidate.category).limit(100);
       if (readError) { remoteFailure("ler autoaprendizado", readError.message); return false; }
-      let existing = (related ?? []).find((item) => item.learning_key === candidate.learningKey)
+      let existing = exact
         ?? (related ?? []).find((item) => canonicalSelfLearningKey({ learningKey: item.learning_key, category: item.category, insight: item.insight }) === candidate.learningKey);
       if (!existing) {
         const row = { learning_key: candidate.learningKey, category: candidate.category, insight: candidate.insight, confidence: Math.min(candidate.confidence, 55), evidence_count: 1, occurrences: 0, unique_users: 0, different_days: 0, status: "candidate", last_observed_at: now, updated_at: now };
-        const { data, error } = await supabase.from("prisma_self_learnings").insert(row).select("*").single();
-        if (error) { remoteFailure("criar autoaprendizado", error.message); return false; }
+        const { error: insertError } = await supabase.from("prisma_self_learnings").upsert(row, { onConflict: "learning_key", ignoreDuplicates: true });
+        // Uma disputa entre fechamentos pode ainda chegar como 23505 quando o
+        // cache de schema do PostgREST estiver desatualizado. A linha vencedora
+        // já existe, então basta recarregá-la em vez de abortar a operação.
+        if (insertError && insertError.code !== "23505") { remoteFailure("criar autoaprendizado", insertError.message); return false; }
+        const { data, error: reloadError } = await supabase.from("prisma_self_learnings").select("*").eq("learning_key", candidate.learningKey).single();
+        if (reloadError) { remoteFailure("recarregar autoaprendizado", reloadError.message); return false; }
         existing = data;
       }
       if (existing.status === "rejected") return true;
@@ -621,7 +629,7 @@ export async function reinforceSelfLearning(candidate: Pick<PrismaSelfLearning, 
       const differentDays = new Set((evidenceRows ?? []).map((item) => item.observed_date)).size;
       const evidenceConfidence = Math.min(candidate.confidence, 70) + Math.max(0, occurrences - 1) * 5;
       const confidence = Math.min(100, Math.max(Number(existing.confidence) || 0, evidenceConfidence));
-      const row = { learning_key: candidate.learningKey, insight: candidate.insight, confidence, evidence_count: occurrences, occurrences, unique_users: uniqueUsers, different_days: differentDays, status: learningStatus(confidence, occurrences, uniqueUsers, differentDays), last_observed_at: now, updated_at: now };
+      const row = { insight: candidate.insight, confidence, evidence_count: occurrences, occurrences, unique_users: uniqueUsers, different_days: differentDays, status: learningStatus(confidence, occurrences, uniqueUsers, differentDays), last_observed_at: now, updated_at: now };
       const { error } = await supabase.from("prisma_self_learnings").update(row).eq("id", existing.id);
       if (error) { remoteFailure("salvar autoaprendizado", error.message); return false; }
     }

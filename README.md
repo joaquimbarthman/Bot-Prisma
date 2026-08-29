@@ -60,4 +60,8 @@ Sem as duas variáveis do Supabase, o módulo usa `data/ai-module.json` em modo 
 
 ## LFG
 
-O painel LFG é publicado como uma mensagem no chat , sem uso de fórum. Use `LFG_PANEL_CHANNEL_ID` apenas se precisar substituir esse canal. As calls temporárias são sempre criadas na categoria configurada pela especificação. O nome segue `🕹️・call-<criador>`, por exemplo `🕹️・call-dscjoaquim`. O módulo persiste sessões em `data/lfg-module.json`; configure opcionalmente `LFG_STAFF_ROLE_ID`, `LFG_MAX_OPEN_PER_USER`, `LFG_CREATE_COOLDOWN_SECONDS`, `LFG_NOW_EXPIRY_MINUTES` e `LFG_VOICE_EMPTY_GRACE_MINUTES`.
+O painel LFG é publicado como uma mensagem no chat, sem uso de fórum ou criação de calls privadas. O módulo persiste sessões em `data/lfg-module.json`; configure opcionalmente `LFG_PANEL_CHANNEL_ID`, `LFG_STAFF_ROLE_ID`, `LFG_MAX_OPEN_PER_USER`, `LFG_CREATE_COOLDOWN_SECONDS` e `LFG_NOW_EXPIRY_MINUTES`.
+
+## Calls Personalizadas
+
+O painel público de Calls Personalizadas abre uma interface privada em Components V2. O cargo `🫧 Personalizado` controla o acesso administrativo; cada call recebe um canal de voz e um cargo próprios com o nome `💦 • Call {username}`. Os IDs podem ser substituídos com `CUSTOM_CALL_PANEL_CHANNEL_ID`, `CUSTOM_CALL_CATEGORY_ID`, `CUSTOM_CALL_ACCESS_ROLE_ID` e, opcionalmente, `CUSTOM_CALL_LOG_CHANNEL_ID`.

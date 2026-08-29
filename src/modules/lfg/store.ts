@@ -8,8 +8,8 @@ export type LfgStatus = "open" | "completed" | "closed" | "expired" | "deleted";
 export type LfgSession = {
   id: string; guildId: string; channelId: string; messageId: string | null; roleMentionMessageId: string | null; creatorId: string;
   game: LfgGameKey; maxPlayers: number; participants: string[];
-  note: string; autoVoiceEnabled: boolean; voiceChannelId: string | null; temporaryRoleId: string | null; status: LfgStatus;
-  createdAt: string; updatedAt: string; expiresAt: string; deleteVoiceWhenEmpty: boolean;
+  note: string; status: LfgStatus;
+  createdAt: string; updatedAt: string; expiresAt: string;
 };
 type Database = { sessions: LfgSession[] };
 const file = path.resolve(config.dataDir, "lfg-module.json");
@@ -25,11 +25,9 @@ function fromRemote(row: Record<string, unknown>): LfgSession {
     roleMentionMessageId: typeof row.role_mention_message_id === "string" ? row.role_mention_message_id : null,
     creatorId: String(row.creator_id), game: row.game as LfgGameKey, maxPlayers: Number(row.max_players),
     participants: Array.isArray(row.participants) ? row.participants.filter((id): id is string => typeof id === "string") : [],
-    note: typeof row.note === "string" ? row.note : "", autoVoiceEnabled: row.auto_voice_enabled === true,
-    voiceChannelId: typeof row.voice_channel_id === "string" ? row.voice_channel_id : null,
-    temporaryRoleId: typeof row.temporary_role_id === "string" ? row.temporary_role_id : null,
+    note: typeof row.note === "string" ? row.note : "",
     status: row.status as LfgStatus, createdAt: String(row.created_at), updatedAt: String(row.updated_at),
-    expiresAt: String(row.expires_at), deleteVoiceWhenEmpty: row.delete_voice_when_empty === true,
+    expiresAt: String(row.expires_at),
   };
 }
 
@@ -38,9 +36,8 @@ function toRemote(session: LfgSession) {
     id: session.id, guild_id: session.guildId, channel_id: session.channelId, message_id: session.messageId,
     role_mention_message_id: session.roleMentionMessageId, creator_id: session.creatorId, game: session.game,
     max_players: session.maxPlayers, participants: session.participants, note: session.note,
-    auto_voice_enabled: session.autoVoiceEnabled, voice_channel_id: session.voiceChannelId,
-    temporary_role_id: session.temporaryRoleId, status: session.status, created_at: session.createdAt,
-    updated_at: session.updatedAt, expires_at: session.expiresAt, delete_voice_when_empty: session.deleteVoiceWhenEmpty,
+    status: session.status, created_at: session.createdAt,
+    updated_at: session.updatedAt, expires_at: session.expiresAt,
   };
 }
 

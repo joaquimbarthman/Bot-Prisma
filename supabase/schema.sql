@@ -616,11 +616,7 @@ create table if not exists public.lfg_sessions (
   max_players smallint not null check (max_players between 2 and 12),
   participants jsonb not null default '[]'::jsonb check (jsonb_typeof(participants) = 'array'),
   note text not null default '' check (char_length(note) <= 500),
-  auto_voice_enabled boolean not null default false,
-  voice_channel_id text,
-  temporary_role_id text,
   status text not null default 'open' check (status in ('open', 'completed', 'closed', 'expired', 'deleted')),
-  delete_voice_when_empty boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   expires_at timestamptz not null
@@ -628,6 +624,34 @@ create table if not exists public.lfg_sessions (
 create index if not exists lfg_sessions_guild_status_idx on public.lfg_sessions (guild_id, status);
 create index if not exists lfg_sessions_creator_status_idx on public.lfg_sessions (creator_id, status);
 create index if not exists lfg_sessions_expires_idx on public.lfg_sessions (expires_at);
+
+create table if not exists public.custom_calls (
+  id uuid primary key,
+  guild_id text not null,
+  owner_id text not null,
+  voice_channel_id text not null,
+  role_id text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (guild_id, owner_id)
+);
+create table if not exists public.custom_call_members (
+  id uuid primary key,
+  custom_call_id uuid not null references public.custom_calls(id) on delete cascade,
+  user_id text not null,
+  added_at timestamptz not null default now(),
+  unique (custom_call_id, user_id)
+);
+create table if not exists public.custom_call_access (
+  guild_id text not null,
+  user_id text not null,
+  booster_access boolean not null default false,
+  manual_access boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (guild_id, user_id)
+);
+create index if not exists custom_call_members_call_idx on public.custom_call_members (custom_call_id);
 
 -- Migração compatível para instalações que usavam os nomes e a escala antigos.
 update public.user_settings set personality = case personality
@@ -663,6 +687,9 @@ alter table public.lfg_sessions enable row level security;
 alter table public.paired_role_grants enable row level security;
 alter table public.punishment_role_snapshots enable row level security;
 alter table public.booster_access_grants enable row level security;
+alter table public.custom_calls enable row level security;
+alter table public.custom_call_members enable row level security;
+alter table public.custom_call_access enable row level security;
 
 -- O bot usa exclusivamente a chave service_role no backend. Não há políticas
 -- para clientes públicos, e estas revogações deixam essa intenção explícita.
@@ -672,14 +699,16 @@ revoke all on table public.user_settings, public.prisma_operator_rules,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
   public.prisma_daily_summaries, public.prisma_daily_summary_jobs, public.prisma_period_summaries, public.prisma_emotional_states,
   public.gallery_posts, public.lfg_sessions, public.paired_role_grants,
-  public.punishment_role_snapshots, public.booster_access_grants from anon, authenticated;
+  public.punishment_role_snapshots, public.booster_access_grants,
+  public.custom_calls, public.custom_call_members, public.custom_call_access from anon, authenticated;
 grant all on table public.user_settings, public.prisma_operator_rules,
   public.prisma_relationships, public.prisma_temperament, public.prisma_self_learnings, public.prisma_self_learning_evidence,
   public.ai_usage, public.ai_events,
   public.prisma_user_profiles, public.prisma_memories, public.prisma_messages,
   public.prisma_daily_summaries, public.prisma_daily_summary_jobs, public.prisma_period_summaries, public.prisma_emotional_states,
   public.gallery_posts, public.lfg_sessions, public.paired_role_grants,
-  public.punishment_role_snapshots, public.booster_access_grants to service_role;
+  public.punishment_role_snapshots, public.booster_access_grants,
+  public.custom_calls, public.custom_call_members, public.custom_call_access to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
 drop function if exists public.apply_prisma_state(text, smallint, smallint, smallint, smallint, smallint, text, text, integer, timestamptz, timestamptz, timestamptz, text, smallint, smallint, smallint, timestamptz, timestamptz);

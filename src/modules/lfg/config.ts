@@ -1,7 +1,3 @@
-import { config } from "../../config.js";
-
-export const LFG_VOICE_CATEGORY_ID = config.lfg.voiceCategoryId;
-
 export const LFG_GAMES = {
   fortnite: { name: "Fortnite", roleId: "1538650428189712414", img: "https://i.pinimg.com/474x/4b/ab/34/4bab34086b84ee2a0e1b66b1e82ed0be.jpg" },
   genshin_impact: { name: "Genshin Impact", roleId: "1542852349310144562", img: "https://upload-os-bbs.hoyolab.com/upload/2022/08/17/241468695/0f75d7bd2c7b9eba8063b5e2d618211d_4169469279575604257.jpg" },

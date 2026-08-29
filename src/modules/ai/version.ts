@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v8.13";
+export const PRISMA_AI_VERSION = "v8.15";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O autoaprendizado agora também recupera automaticamente conflitos de unicidade reportados pelo Supabase durante gravações simultâneas, reutilizando o registro que já venceu a disputa.",
+  "O autoaprendizado agora consolida chaves repetidas de forma segura mesmo quando chegam por categorias diferentes ou ao mesmo tempo, sem interromper o fechamento diário por duplicidade.",
   "Falhas ao responder ou executar ações da Prisma agora também avisam a equipe no canal de erros, com o contexto da pessoa, canal e evento sem expor credenciais.",
   "Pesquisas solicitadas agora exigem o uso da ferramenta web, e pedidos diretos por fontes, links ou referências também ativam a consulta antes da resposta.",
   "Cada pessoa agora pode ter até 99 memórias ativas, exibidas no painel com numeração fixa de 01 a 99.",

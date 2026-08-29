@@ -10,6 +10,7 @@ import { grantAccessRoleToBooster, grantVerifiedRoleToBooster, startedBoosting, 
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, handleLfgMessageDelete, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
+import { handleCustomCallInteraction, startCustomCallsModule, syncCustomCallAccess, syncCustomCallAccessRoles } from "./modules/custom-calls/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
@@ -40,6 +41,7 @@ client.once(Events.ClientReady, async (ready) => {
     : Routes.applicationCommands(config.clientId);
   await rest.put(route, { body: commands });
   await setupCustomEmojis(ready);
+  await startCustomCallsModule(ready).catch((error) => console.error("[CUSTOM-CALL] Falha ao publicar o painel:", error));
   await refreshGalleryButtons(ready);
   await startVerificationModule(ready);
   await startReportModule(ready);
@@ -59,6 +61,7 @@ client.once(Events.ClientReady, async (ready) => {
       });
       console.log(`[CARGO-DUPLO] ${pairedRoleCount} membro(s) processado(s) nesta inicialização.`);
       await syncBoosterAccessRoles(guild, members).catch((error) => console.error("[PRISMA-IA] Falha ao sincronizar Boosters:", error));
+      await syncCustomCallAccessRoles(guild, members).catch((error) => console.error("[CUSTOM-CALL] Falha ao sincronizar acessos:", error));
       await syncLevelingRoles(guild, members).catch((error) => console.error("[LEVELING] Falha ao sincronizar cargos:", error));
     } else {
       console.error("[CARGO-DUPLO] Sincronização inicial ignorada porque os membros não foram carregados.");
@@ -118,6 +121,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   if (config.guildId && newMember.guild.id !== config.guildId) return;
   await grantPairedRoleOnce(newMember).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar ${newMember.id}:`, error));
   await grantAccessRoleToBooster(newMember).catch((error) => console.error(`[PRISMA-IA] Falha ao conceder cargo ao Booster ${newMember.id}:`, error));
+  await syncCustomCallAccess(newMember).catch((error) => console.error(`[CUSTOM-CALL] Falha ao sincronizar acesso de ${newMember.id}:`, error));
   if (startedBoosting(oldMember, newMember)) {
     await grantVerifiedRoleToBooster(newMember).catch((error) => console.error(`[BOOSTER] Falha ao conceder cargo de verificado ao Booster ${newMember.id}:`, error));
   }
@@ -127,6 +131,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
   if (config.guildId && member.guild.id !== config.guildId) return;
   await grantPairedRoleOnce(member).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar novo membro ${member.id}:`, error));
   await grantAccessRoleToBooster(member).catch((error) => console.error(`[PRISMA-IA] Falha ao verificar cargo do novo membro ${member.id}:`, error));
+  await syncCustomCallAccess(member).catch((error) => console.error(`[CUSTOM-CALL] Falha ao verificar acesso do novo membro ${member.id}:`, error));
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
@@ -164,6 +169,7 @@ client.on(Events.MessageDelete, async (message) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   let activeFeature: PublicFeature = "system";
   try {
+    activeFeature = "custom-calls"; if (await handleCustomCallInteraction(interaction)) return;
     activeFeature = "lfg"; if (await handleLfgInteraction(interaction)) return;
     activeFeature = "reports"; if (await handleReportInteraction(interaction)) return;
     activeFeature = "verification"; if (await handleVerificationInteraction(interaction)) return;
