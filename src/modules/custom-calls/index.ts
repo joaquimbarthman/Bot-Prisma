@@ -32,7 +32,7 @@ async function clearPrivateMessages(guildId: string, userId: string): Promise<vo
   privateMessageCleanups.delete(key);
   await Promise.allSettled(entries.map((cleanup) => cleanup()));
 }
-export function buildCustomCallName(username: string): string { const clean = username.replace(/[\r\n]/g, " ").trim().slice(0, 84) || "usuario"; return `💦・Call ${clean}`; }
+export function buildCustomCallName(username: string): string { const clean = username.replace(/[\r\n]/g, " ").trim().slice(0, 84) || "usuario"; return `💦・call ${clean}`; }
 function hasAccess(member: GuildMember): boolean { return member.roles.cache.has(config.customCalls.accessRoleId); }
 function container(content: string, rows: APIComponentInContainer[] = [], accent = color): APIContainerComponent[] { return [{ type: ComponentType.Container, accent_color: accent, components: [{ type: ComponentType.TextDisplay, content }, ...(rows.length ? [{ type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small } as const, ...rows] : [])] }]; }
 function withNotification(panel: APIContainerComponent[], _notification?: string): APIMessageTopLevelComponent[] { return panel; }
