@@ -46,7 +46,7 @@ function publicPanel(): APIContainerComponent[] {
       .setCustomId(`${PREFIX}open`)
       .setLabel("Abrir Painel")
       .setEmoji(lfgSoundEmoji() || "🔊")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Success)
   );
 
   return [{
@@ -88,7 +88,7 @@ function publicPanel(): APIContainerComponent[] {
 function createPanel(username: string, feedback?: string): APIMessageTopLevelComponent[] {
   const name = buildCustomCallName(username);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
   );
 const content = [
   "## Criar Call Personalizada",
