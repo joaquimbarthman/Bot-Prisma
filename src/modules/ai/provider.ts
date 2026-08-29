@@ -867,6 +867,7 @@ export async function generateReply(
     reasoning: { effort: reasoning.effort },
     text: { format: { type: "json_schema", name: "prisma_reply_state", strict: true, schema: prismaReplySchema }, verbosity: "low" },
     tools: useWebSearch ? [{ type: "web_search" as const, search_context_size: "low" as const }] : undefined,
+    tool_choice: useWebSearch ? "required" : undefined,
     store: false,
   });
   const inputTokens = response.usage?.input_tokens ?? 0;

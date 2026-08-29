@@ -12,7 +12,8 @@ const webIntent = /\b(?:pesquis(?:a|e|ar)|procura(?:r)?|busca(?:r)?|pesquise|pro
 const sourceIntent = /\b(?:fonte(?:s)?|link(?:s)?|refer[eê]ncia(?:s)?|de\s+onde\s+(?:tirou|vem|veio)|onde\s+viu|cita(?:r|ção|coes|ções))\b/i;
 
 export function shouldUseWebSearch(content: string): boolean {
-  return webIntent.test(content.replace(/<@!?\d+>/g, " "));
+  const normalized = content.replace(/<@!?\d+>/g, " ");
+  return webIntent.test(normalized) || sourceIntent.test(normalized);
 }
 
 export function wantsWebSources(content: string): boolean {

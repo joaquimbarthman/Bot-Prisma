@@ -135,7 +135,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
-  let activeFeature: PublicFeature | "ai" = "system";
+  let activeFeature: PublicFeature = "system";
   try {
     void handleBumpMessage(client, message);
     if (message.author.bot) return;
@@ -148,10 +148,10 @@ client.on(Events.MessageCreate, async (message) => {
     await handleAiMessage(client, message);
   } catch (error) {
     console.error(`[MENSAGEM] Falha ao processar mensagem ${message.id} no canal ${message.channelId}:`, error);
-    if (message.inGuild() && activeFeature !== "ai") {
+    if (message.inGuild()) {
       await Promise.all([
         reportPublicError(client, messageErrorContext(message, activeFeature), error),
-        message.reply({ content: "Não consegui concluir essa ação. A equipe foi avisada sobre o erro.", allowedMentions: { repliedUser: false } }).catch(() => undefined),
+        message.reply({ content: activeFeature === "ai" ? "Não consegui responder agora. A equipe foi avisada sobre o erro." : "Não consegui concluir essa ação. A equipe foi avisada sobre o erro.", allowedMentions: { repliedUser: false } }).catch(() => undefined),
       ]);
     }
   }
@@ -162,7 +162,7 @@ client.on(Events.MessageDelete, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  let activeFeature: PublicFeature | "ai" = "system";
+  let activeFeature: PublicFeature = "system";
   try {
     activeFeature = "lfg"; if (await handleLfgInteraction(interaction)) return;
     activeFeature = "reports"; if (await handleReportInteraction(interaction)) return;
@@ -178,11 +178,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error(`[INTERACAO] Falha ao processar ${interaction.id}:`, error);
     const action = publicInteractionAction(interaction);
     if (interaction.isRepliable()) {
-      const errorMessage = { content: activeFeature === "ai" ? "Não consegui concluir esta ação agora. Tente novamente mais tarde." : `Não consegui ${action}. A equipe foi avisada sobre o erro.`, flags: ["Ephemeral"] } as const;
+      const errorMessage = { content: activeFeature === "ai" ? "Não consegui concluir esta ação agora. A equipe foi avisada sobre o erro." : `Não consegui ${action}. A equipe foi avisada sobre o erro.`, flags: ["Ephemeral"] } as const;
       if (interaction.replied || interaction.deferred) await interaction.followUp(errorMessage).catch(() => undefined);
       else await interaction.reply(errorMessage).catch(() => undefined);
     }
-    if (interaction.inGuild() && activeFeature !== "ai") await reportPublicError(client, interactionErrorContext(interaction, activeFeature), error);
+    if (interaction.inGuild()) await reportPublicError(client, interactionErrorContext(interaction, activeFeature), error);
   }
 });
 

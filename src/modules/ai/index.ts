@@ -492,7 +492,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     } catch (error) {
       console.error("[PRISMA-IA] Resposta enviada, mas a persistência falhou:", error);
     }
-  } catch (error) { console.error("[PRISMA-IA] Falha controlada:", error); if (direct) await message.reply({ content: "Não consegui responder agora. Tente novamente mais tarde.", allowedMentions: { repliedUser: false } }); }
+  } catch (error) {
+    console.error("[PRISMA-IA] Falha ao processar resposta:", error);
+    throw error;
+  }
   finally { if (spontaneousReserved) releaseSpontaneousSlot(message.author.id); }
   return true;
 }

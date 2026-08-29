@@ -1,7 +1,9 @@
-export const PRISMA_AI_VERSION = "v8.12";
+export const PRISMA_AI_VERSION = "v8.13";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Falhas ao responder ou executar ações da Prisma agora também avisam a equipe no canal de erros, com o contexto da pessoa, canal e evento sem expor credenciais.",
+  "Pesquisas solicitadas agora exigem o uso da ferramenta web, e pedidos diretos por fontes, links ou referências também ativam a consulta antes da resposta.",
   "Cada pessoa agora pode ter até 99 memórias ativas, exibidas no painel com numeração fixa de 01 a 99.",
   "O painel da Prisma agora é atualizado no formato Components V2 sem enviar campos legados incompatíveis, evitando falhas na publicação.",
   "A atividade musical do Discord agora só é usada quando a pessoa perguntar explicitamente sobre a música que está ouvindo, escutando ou tocando; perguntas genéricas continuam no assunto do chat ou da mensagem respondida.",
@@ -84,6 +86,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Avisar a equipe no canal de erros quando uma resposta ou ação da IA falhar, preservando o contexto necessário para diagnóstico sem expor credenciais.",
   "Manter o assunto exato de uma mensagem respondida, priorizar o contexto do chat em perguntas curtas e consultar a atividade musical somente quando a pessoa falar explicitamente sobre o que está ouvindo.",
   "Adaptar o comportamento por cargo em cada resposta, usando um modo relaxed mais livre e contextual quando autorizado, sem remover segurança crítica nem regras administrativas do banco.",
   "Responder socialmente na mesma moeda com intensidade proporcional, mantendo por pessoa uma atitude persistente entre -5 e +10 e separando esse vÃ­nculo da irritaÃ§Ã£o temporÃ¡ria.",

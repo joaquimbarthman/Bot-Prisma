@@ -1,7 +1,7 @@
 import { EmbedBuilder, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "./config.js";
 
-export type PublicFeature = "lfg" | "reports" | "verification" | "gallery" | "moderation" | "leveling" | "system";
+export type PublicFeature = "lfg" | "reports" | "verification" | "gallery" | "moderation" | "leveling" | "ai" | "system";
 
 const featureNames: Record<PublicFeature, string> = {
   lfg: "LFG",
@@ -10,6 +10,7 @@ const featureNames: Record<PublicFeature, string> = {
   gallery: "Galeria",
   moderation: "Moderação",
   leveling: "Leveling",
+  ai: "Prisma IA",
   system: "Sistema público",
 };
 
