@@ -9,7 +9,7 @@ import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCa
 const PREFIX = "custom-call:";
 const locks = new Set<string>();
 const privateMessageCleanups = new Map<string, Array<() => Promise<unknown>>>();
-const color = 0x4682B4;
+const color = 0x008000;
 
 function privateMessageKey(interaction: ButtonInteraction | UserSelectMenuInteraction): string | null {
   return interaction.guildId ? `${interaction.guildId}:${interaction.user.id}` : null;
@@ -70,7 +70,7 @@ function publicPanel(): APIContainerComponent[] {
         items: [
           {
             media: {
-              url: "https://i.imgur.com/r0pG15G.gif",
+              url: "https://imgur.com/VWRDZh0.gif",
             },
           },
         ],
@@ -88,7 +88,7 @@ function publicPanel(): APIContainerComponent[] {
 function createPanel(username: string, feedback?: string): APIMessageTopLevelComponent[] {
   const name = buildCustomCallName(username);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Success),
   );
 const content = [
   "## Criar Call Personalizada",
