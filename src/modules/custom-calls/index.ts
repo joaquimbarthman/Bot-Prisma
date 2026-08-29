@@ -88,7 +88,7 @@ function publicPanel(): APIContainerComponent[] {
 function createPanel(username: string, feedback?: string): APIMessageTopLevelComponent[] {
   const name = buildCustomCallName(username);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar minha Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
   );
   const content = [
     "## Sua Call Personalizada",
