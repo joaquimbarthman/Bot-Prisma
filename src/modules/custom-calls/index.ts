@@ -92,8 +92,8 @@ function createPanel(username: string, feedback?: string): APIMessageTopLevelCom
   );
   const content = [
     "## Sua Call Personalizada",
-    "-# Seu espaço de voz privado em Prismoria.\n",
-    "Crie seu próprio espaço de voz e gerencie o acesso de forma simples pelo painel.",
+    "-# Gerencie sua própria call\n",
+    "**Você ainda não possui uma call criada.**",
   ].join("\n");
   return withNotification(container(content, [row.toJSON()]), feedback);
 }
