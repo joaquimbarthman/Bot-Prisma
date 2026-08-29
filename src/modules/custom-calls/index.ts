@@ -90,11 +90,12 @@ function createPanel(username: string, feedback?: string): APIMessageTopLevelCom
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
   );
-  const content = [
-    "## Criar Call Personalizada",
-    "-# Gerencie sua própria call\n",
-    "**Você ainda não possui uma call criada.**",
-  ].join("\n");
+const content = [
+  "## Criar Call Personalizada",
+  "### Você ainda não possui uma call criada.",
+  "",
+  "Crie seu próprio espaço de voz e gerencie o acesso de forma simples pelo painel.",
+].join("\n");
   return withNotification(container(content, [row.toJSON()]), feedback);
 }
 async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: string): Promise<APIMessageTopLevelComponent[]> {
