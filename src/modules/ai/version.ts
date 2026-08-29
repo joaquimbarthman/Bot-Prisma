@@ -1,4 +1,4 @@
-export const PRISMA_AI_VERSION = "v8.15";
+export const PRISMA_AI_VERSION = "v2.50";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
