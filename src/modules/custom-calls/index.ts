@@ -91,7 +91,7 @@ function createPanel(username: string, feedback?: string): APIMessageTopLevelCom
     new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
   );
   const content = [
-    "## Sua Call Personalizada",
+    "## Criar Call Personalizada",
     "-# Gerencie sua própria call\n",
     "**Você ainda não possui uma call criada.**",
   ].join("\n");
