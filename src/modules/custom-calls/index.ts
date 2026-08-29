@@ -133,7 +133,7 @@ function deleteConfirmationPanel(): APIContainerComponent[] {
   );
 
   return container(
-    "## Excluir Call Personalizada\nEssa ação não pode ser desfeita. Todos os membros perderão acesso e o canal será removido.",
+    "## Excluir Call Personalizada\n### Essa ação não pode ser desfeita.\n\nTodos os membros perderão acesso e o canal será removido.",
     [row.toJSON()],
     0xed4245,
   );
