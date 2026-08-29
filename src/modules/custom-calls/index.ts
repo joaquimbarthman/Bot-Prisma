@@ -3,21 +3,100 @@ import {
   type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type Snowflake, type UserSelectMenuInteraction,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationCheckEmoji , lfgSoundEmoji,  customCallAddEmoji, customCallRemoveEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
+import { verificationCheckEmoji, lfgSoundEmoji, verificationCloseEmoji, customCallAddEmoji, customCallRemoveEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
 import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallMembers, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
 
 const PREFIX = "custom-call:";
 const locks = new Set<string>();
-const color = 0x9b59b6;
-export function buildCustomCallName(username: string): string { const clean = username.replace(/[\r\n]/g, " ").trim().slice(0, 84) || "usuario"; return `💦 • Call ${clean}`; }
+const privateMessageCleanups = new Map<string, Array<() => Promise<unknown>>>();
+const color = 0x4682B4;
+
+function privateMessageKey(interaction: ButtonInteraction | UserSelectMenuInteraction): string | null {
+  return interaction.guildId ? `${interaction.guildId}:${interaction.user.id}` : null;
+}
+
+function trackPrivateMessage(
+  interaction: ButtonInteraction | UserSelectMenuInteraction,
+  cleanup: () => Promise<unknown>,
+): void {
+  const key = privateMessageKey(interaction);
+  if (!key) return;
+  const entries = privateMessageCleanups.get(key) ?? [];
+  entries.push(cleanup);
+  privateMessageCleanups.set(key, entries);
+}
+
+async function clearPrivateMessages(guildId: string, userId: string): Promise<void> {
+  const key = `${guildId}:${userId}`;
+  const entries = privateMessageCleanups.get(key) ?? [];
+  privateMessageCleanups.delete(key);
+  await Promise.allSettled(entries.map((cleanup) => cleanup()));
+}
+export function buildCustomCallName(username: string): string { const clean = username.replace(/[\r\n]/g, " ").trim().slice(0, 84) || "usuario"; return `💦・Call ${clean}`; }
 function hasAccess(member: GuildMember): boolean { return member.roles.cache.has(config.customCalls.accessRoleId); }
 function container(content: string, rows: APIComponentInContainer[] = [], accent = color): APIContainerComponent[] { return [{ type: ComponentType.Container, accent_color: accent, components: [{ type: ComponentType.TextDisplay, content }, ...(rows.length ? [{ type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small } as const, ...rows] : [])] }]; }
 function withNotification(panel: APIContainerComponent[], _notification?: string): APIMessageTopLevelComponent[] { return panel; }
 async function sendNotification(interaction: ButtonInteraction | UserSelectMenuInteraction, content: string): Promise<void> {
-  await interaction.followUp({ content, flags: ["Ephemeral"], allowedMentions: { parse: [] } });
+  const message = await interaction.followUp({ content, flags: ["Ephemeral"], allowedMentions: { parse: [] } });
+  trackPrivateMessage(interaction, () => interaction.webhook.deleteMessage(message.id));
 }
-function publicPanel(): APIContainerComponent[] { const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}open`).setLabel("Abrir Painel").setEmoji(lfgSoundEmoji() || "🔊").setStyle(ButtonStyle.Primary)); return container("## PRISMA • Chamadas Personalizadas\nCrie e gerencie sua própria call personalizada. Você controla quem pode entrar.", [row.toJSON()]); }
-function createPanel(username: string, feedback?: string): APIMessageTopLevelComponent[] { const name = buildCustomCallName(username); const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary)); return withNotification(container(`## Sua Call Personalizada\nVocê ainda não possui uma call.\n\nAo criar, serão gerados automaticamente:\nCanal: ${name}\nCargo: ${name}`, [row.toJSON()]), feedback); }
+function publicPanel(): APIContainerComponent[] {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${PREFIX}open`)
+      .setLabel("Abrir Painel")
+      .setEmoji(lfgSoundEmoji() || "🔊")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return [{
+    type: ComponentType.Container,
+    accent_color: color,
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content:
+          "## PRISMA • Calls Personalizadas\n" +
+          "### Seu espaço, suas regras\n" +
+          "Crie e gerencie sua própria call personalizada. Você controla quem pode entrar.",
+      },
+      {
+        type: ComponentType.Separator,
+        divider: true,
+        spacing: SeparatorSpacingSize.Small,
+      },
+      {
+        type: ComponentType.MediaGallery,
+        items: [
+          {
+            media: {
+              url: "https://i.imgur.com/r0pG15G.gif",
+            },
+          },
+        ],
+      },
+      {
+        type: ComponentType.Separator,
+        divider: true,
+        spacing: SeparatorSpacingSize.Small,
+      },
+
+      row.toJSON(),
+    ],
+  }];
+}
+function createPanel(username: string, feedback?: string): APIMessageTopLevelComponent[] {
+  const name = buildCustomCallName(username);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel("Criar minha Call").setEmoji(verificationCheckEmoji() || "✅").setStyle(ButtonStyle.Primary),
+  );
+  const content = [
+    "## Sua Call Personalizada",
+    "-# Seu espaço de voz privado em Prismoria.\n",
+    "Crie seu próprio espaço de voz e gerencie o acesso de forma simples pelo painel.",
+  ].join("\n");
+  return withNotification(container(content, [row.toJSON()]), feedback);
+}
 async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: string): Promise<APIMessageTopLevelComponent[]> {
   const members = await getCustomCallMembers(call.id);
   const memberIds = [call.ownerId, ...members.map((item) => item.userId)];
@@ -32,7 +111,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     "Gerencie sua call em um só lugar, simples e rápida.",
   ].join("\n");
   const content = [
-    "### Canal de voz",
+    "### Canal de voz" ,
     `<#${call.voiceChannelId}>`,
     "",
     "### Cargo de acesso",
@@ -46,7 +125,19 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
   return withNotification([panel], feedback);
 }
 function selectPanel(kind: "add" | "remove"): APIContainerComponent[] { const select = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(new UserSelectMenuBuilder().setCustomId(`${PREFIX}${kind}-select`).setPlaceholder(kind === "add" ? "Selecione quem será adicionado" : "Selecione quem será removido").setMinValues(1).setMaxValues(1)); return container(`## ${kind === "add" ? "Adicionar pessoa" : "Remover pessoa"}\nSelecione uma pessoa do servidor.`, [select.toJSON()]); }
-async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\` • dono <@${call.ownerId}>${targetUserId ? ` • alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"} • Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
+function deleteConfirmationPanel(): APIContainerComponent[] {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete`).setLabel("Cancelar").setEmoji(verificationCloseEmoji() ?? "❌").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete`).setLabel("Excluir Call").setEmoji(customCallTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
+  );
+
+  return container(
+    "## Excluir Call Personalizada\nEssa ação não pode ser desfeita. Todos os membros perderão acesso e o canal será removido.",
+    [row.toJSON()],
+    0xed4245,
+  );
+}
+async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\`・dono <@${call.ownerId}>${targetUserId ? `・alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"}・Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
 async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expected = buildCustomCallName(member.user.username); if (!role) { role = await member.guild.roles.create({ name: expected, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true }); }
   if (channel.name !== expected) await channel.setName(expected, "Sincronização do username da call personalizada"); if (role.name !== expected) await role.setName(expected, "Sincronização do username da call personalizada"); return call; }
 async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
@@ -113,12 +204,23 @@ export async function startCustomCallsModule(client: Client): Promise<void> {
   console.log(`[CUSTOM-CALL] Painel publicado no canal ${channel.id}.`);
 }
 export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso.", [], 0xed4245); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
-  if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); return true; }
+  if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "⚠️ Sua call não foi encontrada."); return true; }
   if (action === "add" || action === "remove") { await interaction.update({ components: selectPanel(action) }); return true; }
-  if (action === "cancel-delete") { await interaction.update({ components: await mainPanel(call, member) }); return true; }
-  if (action === "delete") { const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete`).setLabel("Confirmar").setEmoji(customCallTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete`).setLabel("Cancelar").setStyle(ButtonStyle.Secondary)); await interaction.update({ components: container(`## Excluir Call\nIsso excluirá permanentemente:\n\nCanal: <#${call.voiceChannelId}>\nCargo: <@&${call.roleId}>\nAcessos concedidos aos membros`, [row.toJSON()], 0xed4245) }); return true; }
-  if (action === "confirm-delete") { const key = `${call.guildId}:${call.ownerId}`; if (locks.has(key)) return true; locks.add(key); try { const authorized = await getCustomCallMembers(call.id); const role = await member.guild.roles.fetch(call.roleId).catch(() => null); if (role) await Promise.all([member.id, ...authorized.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((target) => target.roles.remove(role, "Call personalizada excluída")).catch(() => undefined))); const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); await channel?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await role?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await deleteCustomCallRecord(call); await log(interaction.client, "CALL_DELETED", call); await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "Sua call foi excluída."); } finally { locks.delete(key); } return true; }
+  if (action === "cancel-delete") {
+    await interaction.deferUpdate();
+    await interaction.deleteReply().catch(() => undefined);
+    return true;
+  }
+  if (action === "delete") {
+    await interaction.reply({
+      components: deleteConfirmationPanel(),
+      flags: ["Ephemeral", "IsComponentsV2"],
+    });
+    trackPrivateMessage(interaction, () => interaction.deleteReply());
+    return true;
+  }
+  if (action === "confirm-delete") { const key = `${call.guildId}:${call.ownerId}`; if (locks.has(key)) return true; locks.add(key); try { const authorized = await getCustomCallMembers(call.id); const role = await member.guild.roles.fetch(call.roleId).catch(() => null); if (role) await Promise.all([member.id, ...authorized.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((target) => target.roles.remove(role, "Call personalizada excluída")).catch(() => undefined))); const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); await channel?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await role?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await deleteCustomCallRecord(call); await log(interaction.client, "CALL_DELETED", call); await interaction.deferUpdate(); await clearPrivateMessages(call.guildId, call.ownerId); await interaction.deleteReply().catch(() => undefined); } finally { locks.delete(key); } return true; }
   return true;
 }
