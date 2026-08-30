@@ -1,6 +1,6 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, PermissionFlagsBits, SeparatorSpacingSize, StringSelectMenuBuilder,
-  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type Snowflake, type StringSelectMenuInteraction,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, PermissionFlagsBits, SeparatorSpacingSize, UserSelectMenuBuilder,
+  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type Snowflake, type UserSelectMenuInteraction,
 } from "discord.js";
 import { config } from "../../config.js";
 import { verificationCheckEmoji, lfgSoundEmoji, verificationCloseEmoji, customCallAddEmoji, customCallRemoveEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
@@ -11,7 +11,7 @@ const locks = new Set<string>();
 const privateMessageCleanups = new Map<string, Array<() => Promise<unknown>>>();
 const color = 0x008000;
 
-type CustomCallComponentInteraction = ButtonInteraction | StringSelectMenuInteraction;
+type CustomCallComponentInteraction = ButtonInteraction | UserSelectMenuInteraction;
 
 function privateMessageKey(interaction: CustomCallComponentInteraction): string | null {
   return interaction.guildId ? `${interaction.guildId}:${interaction.user.id}` : null;
@@ -134,48 +134,15 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
   const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: color, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
   return withNotification([panel], feedback);
 }
-async function selectPanel(kind: "add" | "remove", call: CustomCall, member: GuildMember): Promise<APIContainerComponent[] | null> {
-  const role = await member.guild.roles.fetch(call.roleId).catch(() => null);
-  if (!role) throw new Error("Não foi possível encontrar o cargo da call.");
-  if (kind === "add") {
-    const addable = [...member.guild.members.cache.values()]
-      .filter((target) => target.id !== call.ownerId && !target.user.bot && !target.roles.cache.has(role.id))
-      .sort((left, right) => left.displayName.localeCompare(right.displayName, "pt-BR"))
-      .slice(0, 25);
-    if (!addable.length) return null;
-    const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`${PREFIX}add-select`)
-        .setPlaceholder("Selecione quem será adicionado")
-        .setMinValues(1)
-        .setMaxValues(1)
-        .addOptions(addable.map((target) => ({ label: target.displayName.slice(0, 100), value: target.id }))),
-    );
-    return container("## Adicionar pessoa\nSelecione uma pessoa que ainda não possui acesso à call.", [select.toJSON()]);
-  }
-
-  const savedMembers = await getCustomCallMembers(call.id);
-  const fetchedSavedMembers = await Promise.all(
-    savedMembers.map(({ userId }) => member.guild.members.fetch(userId).catch(() => null)),
-  );
-  const candidates = new Map(role.members.map((target) => [target.id, target]));
-  for (const target of fetchedSavedMembers) {
-    if (target?.roles.cache.has(role.id)) candidates.set(target.id, target);
-  }
-  const removable = [...candidates.values()]
-    .filter((target) => target.id !== call.ownerId && !target.user.bot)
-    .slice(0, 25);
-  if (!removable.length) return null;
-
-  const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId(`${PREFIX}remove-select`)
-      .setPlaceholder("Selecione quem será removido")
+async function selectPanel(kind: "add" | "remove"): Promise<APIContainerComponent[]> {
+  const select = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+    new UserSelectMenuBuilder()
+      .setCustomId(`${PREFIX}${kind}-select`)
+      .setPlaceholder(kind === "add" ? "Pesquise quem será adicionado" : "Pesquise quem será removido")
       .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(removable.map((target) => ({ label: target.displayName.slice(0, 100), value: target.id }))),
+      .setMaxValues(1),
   );
-  return container("## Remover pessoa\nSelecione uma pessoa que possui acesso à call.", [select.toJSON()]);
+  return container(`## ${kind === "add" ? "Adicionar" : "Remover"} pessoa\nPesquise e selecione uma pessoa do servidor.`, [select.toJSON()]);
 }
 function deleteConfirmationPanel(): APIContainerComponent[] {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -194,13 +161,52 @@ async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> 
   if (channel.name !== expected) await channel.setName(expected, "Sincronização do username da call personalizada"); if (role.name !== expected) await role.setName(expected, "Sincronização do username da call personalizada"); return call; }
 async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
 
-export async function syncCustomCallAccess(member: GuildMember): Promise<boolean> { if (member.user.bot) return false; const current = await getCustomCallAccess(member.guild.id, member.id); const boosterAccess = member.premiumSinceTimestamp !== null; const has = member.roles.cache.has(config.customCalls.accessRoleId); if (!current && !boosterAccess && !has) return false; const manualAccess = current?.manualAccess ?? (!boosterAccess && has); const access = current && current.boosterAccess === boosterAccess && current.manualAccess === manualAccess ? current : await setCustomCallAccess(member.guild.id, member.id, { boosterAccess, manualAccess }); const shouldHave = access.boosterAccess || access.manualAccess; if (shouldHave === has) return false; if (shouldHave) await member.roles.add(config.customCalls.accessRoleId, "Acesso às Calls Personalizadas"); else await member.roles.remove(config.customCalls.accessRoleId, "Acesso às Calls Personalizadas encerrado"); await log(member.client, shouldHave ? "CUSTOM_ACCESS_GRANTED" : "CUSTOM_ACCESS_REVOKED", { guildId: member.guild.id, ownerId: member.id }); return true; }
+export async function syncCustomCallAccess(member: GuildMember): Promise<boolean> {
+  if (member.user.bot) return false;
+  const current = await getCustomCallAccess(member.guild.id, member.id);
+  const boosterAccess = member.premiumSinceTimestamp !== null;
+  const has = member.roles.cache.has(config.customCalls.accessRoleId);
+  const sourceEligible = member.roles.cache.has(config.customCalls.automaticAccessSourceRoleId);
+  const firstSourceGrant = sourceEligible && !current?.sourceRoleGrantProcessed;
+  const manualAccess = current?.manualAccess ?? (!boosterAccess && has && !firstSourceGrant);
+
+  if (!current && !boosterAccess && !has && !sourceEligible) return false;
+  if (firstSourceGrant && !has) {
+    await member.roles.add(config.customCalls.accessRoleId, "Concessão única de acesso às Calls Personalizadas");
+  }
+
+  const sourceRoleAccess = firstSourceGrant
+    ? true
+    : current?.sourceRoleAccess && !has
+      ? false
+      : current?.sourceRoleAccess ?? false;
+  const accessChanged = !current
+    || current.boosterAccess !== boosterAccess
+    || current.manualAccess !== manualAccess
+    || current.sourceRoleGrantProcessed !== (current.sourceRoleGrantProcessed || firstSourceGrant)
+    || current.sourceRoleAccess !== sourceRoleAccess;
+  const access = accessChanged
+    ? await setCustomCallAccess(member.guild.id, member.id, {
+      boosterAccess,
+      manualAccess,
+      sourceRoleGrantProcessed: current?.sourceRoleGrantProcessed || firstSourceGrant,
+      sourceRoleAccess,
+    })
+    : current;
+  const shouldHave = access.boosterAccess || access.manualAccess || access.sourceRoleAccess;
+  const nowHas = member.roles.cache.has(config.customCalls.accessRoleId);
+  if (shouldHave === nowHas) return firstSourceGrant;
+  if (shouldHave) await member.roles.add(config.customCalls.accessRoleId, "Acesso às Calls Personalizadas");
+  else await member.roles.remove(config.customCalls.accessRoleId, "Acesso às Calls Personalizadas encerrado");
+  await log(member.client, shouldHave ? "CUSTOM_ACCESS_GRANTED" : "CUSTOM_ACCESS_REVOKED", { guildId: member.guild.id, ownerId: member.id });
+  return true;
+}
 export async function grantManualCustomCallAccess(member: GuildMember): Promise<void> { await setCustomCallAccess(member.guild.id, member.id, { manualAccess: true }); await syncCustomCallAccess(member); }
 export async function revokeManualCustomCallAccess(member: GuildMember): Promise<void> { await setCustomCallAccess(member.guild.id, member.id, { manualAccess: false }); await syncCustomCallAccess(member); }
 export async function syncCustomCallAccessRoles(guild: Guild, members?: Collection<Snowflake, GuildMember>): Promise<void> { members ??= await guild.members.fetch(); for (const member of members.values()) await syncCustomCallAccess(member); }
 
 async function createCall(interaction: ButtonInteraction, member: GuildMember): Promise<void> { const key = `${member.guild.id}:${member.id}`; if (locks.has(key)) { await interaction.update({ components: container("## Calls Personalizadas\nSua call já está sendo criada.", [], 0xfee75c) }); return; } locks.add(key); let roleId: string | null = null; try { const existing = await ensureOwnedCall(member); if (existing) { await interaction.update({ components: await mainPanel(existing, member) }); return; } const category = await member.guild.channels.fetch(config.customCalls.categoryId).catch(() => null); if (!category || category.type !== ChannelType.GuildCategory) throw new Error(`CUSTOM_CALL_CATEGORY_ID ${config.customCalls.categoryId} não aponta para uma categoria válida.`); const me = member.guild.members.me; if (!me?.permissions.has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers])) throw new Error("A Prisma precisa das permissões Gerenciar canais, Gerenciar cargos e Mover membros."); const name = buildCustomCallName(member.user.username); const role = await member.guild.roles.create({ name, reason: `Call personalizada de ${member.id}` }); roleId = role.id; const channel = await member.guild.channels.create({ name, type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: member.guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.Connect] }, { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] }, { id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers] }], reason: `Call personalizada de ${member.id}` }); const now = new Date().toISOString(); const call: CustomCall = { id: crypto.randomUUID(), guildId: member.guild.id, ownerId: member.id, voiceChannelId: channel.id, roleId: role.id, createdAt: now, updatedAt: now }; try { await member.roles.add(role, "Dono da call personalizada"); await saveCustomCall(call); } catch (error) { await channel.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); await role.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); throw error; } await log(interaction.client, "CALL_CREATED", call); await interaction.update({ components: await mainPanel(call, member) }); } finally { locks.delete(key); if (roleId && !(await getCustomCall(member.guild.id, member.id).catch(() => null))) await member.guild.roles.delete(roleId, "Limpeza de criação incompleta").catch(() => undefined); } }
-async function selection(interaction: StringSelectMenuInteraction, kind: "add" | "remove", member: GuildMember): Promise<void> {
+async function selection(interaction: UserSelectMenuInteraction, kind: "add" | "remove", member: GuildMember): Promise<void> {
   const call = await ensureOwnedCall(member);
   if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return; }
   const target = await member.guild.members.fetch(interaction.values[0]).catch(() => null);
@@ -255,17 +261,12 @@ export async function startCustomCallsModule(client: Client): Promise<void> {
   else await channel.send(payload);
   console.log(`[CUSTOM-CALL] Painel publicado no canal ${channel.id}.`);
 }
-export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isStringSelectMenu()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso.", [], 0xed4245); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso.", [], 0xed4245); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
-  if (interaction.isStringSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
+  if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return true; }
   if (action === "add" || action === "remove") {
-    const selectionPanel = await selectPanel(action, call, member);
-    if (!selectionPanel) {
-      await interaction.update({ components: await mainPanel(call, member) });
-      await sendNotification(interaction, action === "add" ? "Não há pessoas disponíveis para adicionar nesta call." : "Não há pessoas adicionadas nesta call para remover.");
-      return true;
-    }
+    const selectionPanel = await selectPanel(action);
     await interaction.update({ components: selectionPanel });
     return true;
   }

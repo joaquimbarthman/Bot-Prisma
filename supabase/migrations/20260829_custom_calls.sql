@@ -22,6 +22,8 @@ create table if not exists public.custom_call_access (
   user_id text not null,
   booster_access boolean not null default false,
   manual_access boolean not null default false,
+  source_role_grant_processed boolean not null default false,
+  source_role_access boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (guild_id, user_id)

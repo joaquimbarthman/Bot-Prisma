@@ -68,6 +68,7 @@ export const config = {
     panelChannelId: process.env.CUSTOM_CALL_PANEL_CHANNEL_ID?.trim() || "1543322103766327305",
     categoryId: process.env.CUSTOM_CALL_CATEGORY_ID?.trim() || "1538663337011707944",
     accessRoleId: process.env.CUSTOM_CALL_ACCESS_ROLE_ID?.trim() || "1543322771420086362",
+    automaticAccessSourceRoleId: process.env.CUSTOM_CALL_AUTOMATIC_ACCESS_SOURCE_ROLE_ID?.trim() || "1538253635392376862",
     logChannelId: process.env.CUSTOM_CALL_LOG_CHANNEL_ID?.trim(),
   },
   bumpReminder: {
