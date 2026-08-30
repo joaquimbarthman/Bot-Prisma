@@ -134,7 +134,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
   const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: color, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
   return withNotification([panel], feedback);
 }
-async function selectPanel(kind: "add" | "remove", call: CustomCall, member: GuildMember): Promise<APIContainerComponent[]> {
+async function selectPanel(kind: "add" | "remove", call: CustomCall, member: GuildMember): Promise<APIContainerComponent[] | null> {
   if (kind === "add") {
     const select = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
       new UserSelectMenuBuilder().setCustomId(`${PREFIX}add-select`).setPlaceholder("Selecione quem será adicionado").setMinValues(1).setMaxValues(1),
@@ -142,11 +142,20 @@ async function selectPanel(kind: "add" | "remove", call: CustomCall, member: Gui
     return container("## Adicionar pessoa\nSelecione uma pessoa do servidor.", [select.toJSON()]);
   }
 
-  await member.guild.members.fetch();
   const role = await member.guild.roles.fetch(call.roleId).catch(() => null);
   if (!role) throw new Error("Não foi possível encontrar o cargo da call.");
-  const removable = role.members.filter((target) => target.id !== call.ownerId && !target.user.bot).first(25);
-  if (!removable.length) return container("## Remover pessoa\nNão há pessoas adicionadas nesta call.");
+  const savedMembers = await getCustomCallMembers(call.id);
+  const fetchedSavedMembers = await Promise.all(
+    savedMembers.map(({ userId }) => member.guild.members.fetch(userId).catch(() => null)),
+  );
+  const candidates = new Map(role.members.map((target) => [target.id, target]));
+  for (const target of fetchedSavedMembers) {
+    if (target?.roles.cache.has(role.id)) candidates.set(target.id, target);
+  }
+  const removable = [...candidates.values()]
+    .filter((target) => target.id !== call.ownerId && !target.user.bot)
+    .slice(0, 25);
+  if (!removable.length) return null;
 
   const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
@@ -242,7 +251,16 @@ export async function handleCustomCallInteraction(interaction: Interaction): Pro
   if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if ((interaction.isUserSelectMenu() && action === "add-select") || (interaction.isStringSelectMenu() && action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return true; }
-  if (action === "add" || action === "remove") { await interaction.update({ components: await selectPanel(action, call, member) }); return true; }
+  if (action === "add" || action === "remove") {
+    const selectionPanel = await selectPanel(action, call, member);
+    if (!selectionPanel) {
+      await interaction.update({ components: await mainPanel(call, member) });
+      await sendNotification(interaction, "Não há pessoas adicionadas nesta call para remover.");
+      return true;
+    }
+    await interaction.update({ components: selectionPanel });
+    return true;
+  }
   if (action === "cancel-delete") {
     await interaction.deferUpdate();
     await interaction.deleteReply().catch(() => undefined);
