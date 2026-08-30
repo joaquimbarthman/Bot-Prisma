@@ -16,7 +16,7 @@ import {
   type APIContainerComponent,
 } from "discord.js";
 import { config } from "../../config.js";
-import { aiPanelEmojis } from "../../emoji-manager.js";
+import { aiPanelEmojis, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
@@ -162,25 +162,31 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
   }];
 }
 
-function memoriesViewComponents(memories: PrismaMemory[]): APIContainerComponent[] {
-  const lines = memories.slice(0, 99).map((memory, index) => `> **${String(index + 1).padStart(2, "0")}**　${memory.content}`);
-  const memoryBlocks: string[] = [];
-  for (const line of lines) {
-    const current = memoryBlocks.at(-1);
-    if (!current || current.length + line.length + 1 > 3_800) memoryBlocks.push(line);
-    else memoryBlocks[memoryBlocks.length - 1] = `${current}\n${line}`;
-  }
+function memoriesViewComponents(memories: PrismaMemory[], requestedPage = 0): APIContainerComponent[] {
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(memories.length / pageSize));
+  const page = Math.max(0, Math.min(requestedPage, pageCount - 1));
+  const lines = memories.slice(page * pageSize, (page + 1) * pageSize).map((memory, index) => `> **${String(page * pageSize + index + 1).padStart(2, "0")}**　${memory.content}`);
   const content = memories.length
-    ? [`### Memórias salvas　${String(memories.length).padStart(2, "0")}`, ...memoryBlocks]
+    ? [`### Memórias salvas　${String(memories.length).padStart(2, "0")}\n${lines.join("\n")}`]
     : ["### Ainda não há memórias salvas\n\nConverse com a Prisma sobre coisas de que você gosta, interesses ou preferências. Quando algo for útil para conversas futuras, poderá virar uma memória."];
+  const components: APIContainerComponent["components"] = [
+    { type: ComponentType.TextDisplay, content: "## Memórias da Prisma\nInformações que foram aprendidas nas suas conversas." },
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    ...content.map((text) => ({ type: ComponentType.TextDisplay as const, content: text })),
+  ];
+  if (pageCount > 1) components.push(
+    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`prisma-ai:memories-page:${page - 1}`).setEmoji(previousPageEmoji() ?? "◀️").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`prisma-ai:memories-page:${page}`).setLabel(`${page + 1}/${pageCount}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId(`prisma-ai:memories-page:${page + 1}`).setEmoji(nextPageEmoji() ?? "▶️").setStyle(ButtonStyle.Secondary).setDisabled(page >= pageCount - 1),
+    ).toJSON(),
+  );
   return [{
     type: ComponentType.Container,
     accent_color: 0x7c5cff,
-    components: [
-      { type: ComponentType.TextDisplay, content: "## Memórias da Prisma\nInformações que foram aprendidas nas suas conversas." },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      ...content.map((text) => ({ type: ComponentType.TextDisplay as const, content: text })),
-    ],
+    components,
   }];
 }
 
@@ -238,14 +244,14 @@ async function refreshUserPanel(interaction: Interaction): Promise<void> {
 export async function handlePanelInteraction(interaction: Interaction): Promise<boolean> {
   if (!(interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith("prisma-ai:")) return false;
   if (!interaction.inGuild()) return true;
-  const action = interaction.customId.split(":")[1];
+  const [, action, rawPage] = interaction.customId.split(":");
   const deletionActions = ["forget", "clear-history", "reset-relationship", "delete-all"];
   const confirmationActions = ["confirm-memories", "confirm-history", "confirm-relationship", "confirm-all"];
-  const selfServiceDeletion = [...deletionActions, ...confirmationActions, "cancel-deletion", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove", "view-memories", "forget-confirm", "delete-all-confirm"].includes(action);
+  const selfServiceDeletion = [...deletionActions, ...confirmationActions, "cancel-deletion", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove", "view-memories", "memories-page", "forget-confirm", "delete-all-confirm"].includes(action);
   const confirmsDeletion = interaction.isButton() && confirmationActions.includes(action);
   const opensDeletionConfirmation = interaction.isButton() && deletionActions.includes(action);
   const opensModal = interaction.isButton() && (action === "nickname" || action === "about-me");
-  const opensMemoriesView = interaction.isButton() && action === "view-memories";
+  const opensMemoriesView = interaction.isButton() && ["view-memories", "memories-page"].includes(action);
   const updatesPanel = (interaction.isButton() && ["nickname-remove", "memory", "spontaneous"].includes(action))
     || (interaction.isModalSubmit() && ["nickname-save", "about-me-save"].includes(action));
   if (confirmsDeletion) await interaction.deferUpdate();
@@ -339,6 +345,11 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   if (action === "view-memories") {
     const memories = await listPrismaMemories(interaction.user.id);
     await interaction.reply({ components: memoriesViewComponents(memories), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
+    return true;
+  }
+  if (action === "memories-page" && interaction.isButton()) {
+    const memories = await listPrismaMemories(interaction.user.id);
+    await interaction.update({ components: memoriesViewComponents(memories, Number(rawPage) || 0), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "cancel-deletion" && interaction.isButton()) {

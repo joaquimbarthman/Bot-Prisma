@@ -1,7 +1,12 @@
-export const PRISMA_AI_VERSION = "v2.56";
+export const PRISMA_AI_VERSION = "v2.60";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Os controles anterior e próximo da paginação agora exibem somente os ícones visuais, sem texto adicional nos botões.",
+  "Os botões de paginação dos Components V2 agora usam ícones visuais próprios para voltar e avançar.",
+  "O painel de memórias agora organiza os registros em páginas de 10 itens, com navegação pelos botões anterior e próxima.",
+  "As memórias agora passam obrigatoriamente por uma decisão de salvar, atualizar, unir ou descartar, rejeitando referências vagas, estados temporários, inferências e informações sem utilidade futura.",
+  "Uma rotina diária revisa memórias existentes para manter informações úteis, consolidar duplicatas semânticas, resolver contradições e remover registros vagos ou indevidos.",
   "As confirmações de exclusão de dados no painel agora exibem somente a descrição do resultado, sem um título adicional.",
   "O autoaprendizado agora também recupera automaticamente conflitos de unicidade reportados pelo Supabase durante gravações simultâneas, reutilizando o registro que já venceu a disputa.",
   "O autoaprendizado agora consolida chaves repetidas de forma segura mesmo quando chegam por categorias diferentes ou ao mesmo tempo, sem interromper o fechamento diário por duplicidade.",
@@ -98,7 +103,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Conversar com personalidade própria, adaptar naturalmente o tom de cada resposta ao contexto e ao vínculo com a pessoa e remover deterministicamente fechamentos de parêntese sem par que pareçam erros de digitação.",
   "Manter continuidade usando o histórico recente da conversa, sem misturar informações de pessoas diferentes.",
   "Aprender preferências, interesses, hobbies, jogos, mídias, projetos, objetivos, eventos, conquistas, rotinas, estilo de comunicação e outros fatos duráveis e não sensíveis compartilhados pela própria pessoa.",
-  "Criar e manter até 99 memórias duráveis por pessoa para retomar assuntos relevantes em conversas futuras quando a memória estiver ativada.",
+  "Criar e manter até 99 memórias duráveis, autossuficientes e validadas por pessoa, consolidando redundâncias e contradições antes da persistência para retomar assuntos relevantes quando a memória estiver ativada.",
   "Desenvolver uma relação individual com cada pessoa, com familiaridade, confiança, afinidade, humor e temperamento que evoluem com as interações.",
   "Perceber sinais emocionais da conversa e responder com mais cuidado, carinho, entusiasmo, paciência ou firmeza conforme o momento.",
   "Usar naturalmente o apelido escolhido pela pessoa como forma preferida de tratamento e aproveitar a apresentação opcional do painel para personalizar a conversa.",
@@ -110,7 +115,7 @@ export const PRISMA_AI_CAPABILITIES = [
   "Iniciar ocasionalmente uma conversa curta, retomar um assunto lembrado ou notar uma ausência, desde que as interações espontâneas estejam ativadas.",
   "Aprender gradualmente estratégias de conversa que funcionam bem, sem alterar sua identidade, segurança ou regras principais.",
   "Transformar padrões seguros em hábitos da Prisma somente após confirmação independente entre pessoas e dias diferentes.",
-  "Permitir que cada pessoa veja ou apague memórias, apague o histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
+  "Permitir que cada pessoa consulte suas memórias em páginas de 10 itens, apague memórias ou histórico, reinicie a relação e controle memória, apelido e interações espontâneas pelo painel.",
 ] as const;
 
 export const PRISMA_AI_CAPABILITIES_PROMPT = [

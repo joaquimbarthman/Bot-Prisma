@@ -20,6 +20,7 @@ import {
 } from "./state.js";
 import { applyEmotionalUpdate, clampEmotion, decayEmotionalState, defaultEmotionalState, type PrismaEmotionalState, type PrismaEmotionalUpdate } from "./emotional-state.js";
 import { localModeration, normalizeText } from "../moderation/filter.js";
+import { decideMemoryPersistence, planMemoryCleanup } from "./memory-policy.js";
 
 export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperament, PrismaUserState } from "./state.js";
 
@@ -303,6 +304,9 @@ export async function upsertPrismaProfile(profile: PrismaProfile & { guildId?: s
 export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
   const content = safeMemoryText(memory.content);
   if (!content) return;
+  const decision = decideMemoryPersistence({ ...memory, content }, await listPrismaMemories(memory.userId));
+  if (decision.action === "DISCARD" || !decision.candidate) return;
+  memory = decision.candidate;
   const validityNow = new Date();
   const requestedValidity = memory.validUntil ? Date.parse(memory.validUntil) : Number.NaN;
   const maximumValidity = validityNow.getTime() + 180 * 24 * 60 * 60_000;
@@ -392,6 +396,28 @@ export async function deletePrismaMemory(userId: string, memoryId: number): Prom
     if (index < 0) return false;
     memories.splice(index, 1); return true;
   }, true);
+}
+
+/** Reavalia memórias ativas sem remover informação útil apenas para reduzir volume. */
+export async function cleanupPrismaMemories(userId: string): Promise<{ kept: number; merged: number; updated: number; deleted: number }> {
+  const decisions = planMemoryCleanup(await listPrismaMemories(userId));
+  const result = { kept: 0, merged: 0, updated: 0, deleted: 0 };
+  for (const decision of decisions) {
+    if (decision.action === "KEEP") { result.kept += decision.memoryIds.length; continue; }
+    if (decision.action === "DELETE") {
+      for (const id of decision.memoryIds) if (await deletePrismaMemory(userId, id)) result.deleted += 1;
+      continue;
+    }
+    if (!decision.replacement) continue;
+    await upsertPrismaMemory(decision.replacement);
+    const keeperId = decision.replacement.id;
+    for (const id of decision.memoryIds) {
+      if (id !== keeperId && await deletePrismaMemory(userId, id)) result.deleted += 1;
+    }
+    if (decision.action === "MERGE") result.merged += 1;
+    else result.updated += 1;
+  }
+  return result;
 }
 
 export async function deletePrismaUserData(userId: string, scope: "history" | "memories" | "relationship" | "all"): Promise<void> {
@@ -1025,14 +1051,12 @@ export async function applyPrismaStateUpdate(id: string, baseState: PrismaUserSt
       const remote = await readRemotePrismaState(id, now);
       if (!remote || (baseState.revision ?? 0) !== (stateRevisions.get(id) ?? 0)) return false;
       const saved = await writeRemotePrismaState(applyValidatedStateUpdate(remote.state, update, now));
-      if (saved && update.preferredStyleCandidate) await upsertPrismaMemory({ userId: id, memoryType: "communication", memoryKey: "communication-style:inferred", content: `Prefere respostas ${update.preferredStyleCandidate}.`, importance: 62, confidence: 65 });
       return saved;
     }
     const current = await localPrismaState(id, now, true);
     if ((baseState.revision ?? 0) !== (stateRevisions.get(id) ?? 0)) return false;
     const next = applyValidatedStateUpdate(current, update, now);
     await withLocal((db) => { db.relationships[id] = next.relationship; db.temperaments[id] = next.temperament; }, true);
-    if (update.preferredStyleCandidate) await upsertPrismaMemory({ userId: id, memoryType: "communication", memoryKey: "communication-style:inferred", content: `Prefere respostas ${update.preferredStyleCandidate}.`, importance: 62, confidence: 65 });
     return true;
   });
 }

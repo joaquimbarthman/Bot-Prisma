@@ -1,8 +1,10 @@
-import { enforcePrismaMemoryLimit, getPrismaProfile, listPrismaMemories, upsertPrismaMemory, upsertPrismaProfile, updateEmotionalState, type PrismaMemory, type PrismaProfile } from "./store.js";
+import { cleanupPrismaMemories, enforcePrismaMemoryLimit, getPrismaProfile, listPrismaMemories, upsertPrismaMemory, upsertPrismaProfile, updateEmotionalState, type PrismaMemory, type PrismaProfile } from "./store.js";
 import type { PrismaEmotionalUpdate } from "./emotional-state.js";
 import type { AiMemoryCandidate } from "./provider.js";
 
 type LearnInput = { userId: string; guildId: string; displayName: string; content: string; reply: string; messageId?: string; previousAssistantMessage?: string; aiMemoryCandidates?: AiMemoryCandidate[]; aiEmotionalUpdate?: PrismaEmotionalUpdate };
+const lastMemoryCleanup = new Map<string, number>();
+const MEMORY_CLEANUP_INTERVAL_MS = 24 * 60 * 60_000;
 
 const sensitiveOrUnsafe = /https?:\/\/|<@!?\d+>|\b(?:senha|token|cpf|telefone|e-?mail|endere[cç]o|password|api[ _-]?key)\b/i;
 const transientSubject = /^(?:isso|disso|n?isso|aquilo|daquilo|aqui|agora|hoje|ontem|amanhã|dormir(?: agora)?|comer(?: agora)?|tomar banho(?: agora)?|quando\b|se\b|que\b|você\b|voce\b|vc\b)|\b(?:minha|meu)\s+(?:mãe|mae|pai|irmã|irma|irmão|irmao|amig[oa]|namorad[oa])(?:\s|$)/i;
@@ -162,8 +164,8 @@ export function memoryCandidates(userId: string, content: string, sourceMessageI
     const stopped = clause.match(/^(?:eu\s+)?(?:parei de|n[ãa]o jogo mais|n[ãa]o acompanho mais)\s+(.{3,80})$/i);
     if (stopped) { addSubjectMemory(candidates, userId, "interest", "preference", stopped[1], "Não gosta mais de ", 58, 78, sourceMessageId); continue; }
 
-    const currentInterest = clause.match(/^(?:agora\s+)?(?:eu\s+)?(?:jogo|estou jogando|t[ôo] jogando|estou assistindo|t[ôo] assistindo|estou lendo|t[ôo] lendo)\s+(.{3,80})$/i);
-    if (currentInterest) { addSubjectMemory(candidates, userId, "interest", "preference", currentInterest[1], "Acompanha ou joga ", 52, 68, sourceMessageId); continue; }
+    const recurringInterest = clause.match(/^(?:eu\s+)?(?:costumo\s+)?(?:jogo|assisto|leio|escuto|ouço)\s+(.{3,80}?)\s+(?:direto|sempre|com frequ[eê]ncia|frequentemente)$/i);
+    if (recurringInterest) { addSubjectMemory(candidates, userId, "routine", "routine", recurringInterest[1], "Costuma acompanhar ou jogar ", 62, 78, sourceMessageId); continue; }
 
     const project = clause.match(/^(?:eu\s+)?(?:estou|t[ôo])\s+(?:trabalhando|fazendo|desenvolvendo|criando)\s+(?:em\s+|no\s+|na\s+)?(.{3,100})$/i);
     if (project) { addSubjectMemory(candidates, userId, "project", "project", project[1], "Está trabalhando em ", 68, 76, sourceMessageId); continue; }
@@ -218,12 +220,18 @@ export function consolidatePrismaProfile(previous: PrismaProfile | null, memorie
 
 export async function learnFromInteraction(input: LearnInput): Promise<void> {
   try {
-    const aiMemories = validatedAiMemoryCandidates(input.userId, input.aiMemoryCandidates, input.messageId);
+    const transientWithoutDurableEvidence = /\b(?:agora|hoje|neste momento|estou|t[oô])\s+(?:ouvindo|jogando|assistindo|lendo|com sono|irritad[oa]|trist[ea])\b/i.test(input.content)
+      && !/\b(?:gosto|amo|adoro|curto|prefiro|favorit[oa]|odeio|detesto|n[aã]o gosto|direto|sempre|com frequ[eê]ncia|frequentemente|costumo)\b/i.test(input.content);
+    const aiMemories = transientWithoutDurableEvidence ? [] : validatedAiMemoryCandidates(input.userId, input.aiMemoryCandidates, input.messageId);
     // O modelo pode identificar apenas parte de uma fala. O fallback deve complementar,
     // não desaparecer assim que existir um único candidato proposto pela IA.
     const fallbackMemories = contextualMemoryCandidates(input.userId, input.content, input.previousAssistantMessage, input.messageId);
     const memories = [...new Map([...aiMemories, ...fallbackMemories].map((item) => [item.memoryKey ?? item.content, item])).values()].slice(0, 6);
     for (const candidate of memories) await upsertPrismaMemory(candidate);
+    if (Date.now() - (lastMemoryCleanup.get(input.userId) ?? 0) >= MEMORY_CLEANUP_INTERVAL_MS) {
+      await cleanupPrismaMemories(input.userId);
+      lastMemoryCleanup.set(input.userId, Date.now());
+    }
     await enforcePrismaMemoryLimit(input.userId);
     const previous = await getPrismaProfile(input.userId);
     if (previous || memories.length) {

@@ -316,6 +316,13 @@ alter table public.prisma_memories
 alter table public.prisma_memories drop constraint if exists prisma_memories_status_check;
 alter table public.prisma_memories
   add constraint prisma_memories_status_check check (status in ('active','superseded','forgotten'));
+alter table public.prisma_memories drop constraint if exists prisma_memories_user_id_not_blank;
+alter table public.prisma_memories drop constraint if exists prisma_memories_content_not_blank;
+alter table public.prisma_memories drop constraint if exists prisma_memories_active_minimum_quality;
+alter table public.prisma_memories
+  add constraint prisma_memories_user_id_not_blank check (char_length(btrim(user_id)) > 0),
+  add constraint prisma_memories_content_not_blank check (char_length(btrim(content)) between 3 and 300),
+  add constraint prisma_memories_active_minimum_quality check (status <> 'active' or (char_length(btrim(content)) >= 8 and confidence >= 65));
 create index if not exists prisma_memories_user_idx on public.prisma_memories (user_id, updated_at desc);
 create index if not exists prisma_memories_user_type_idx on public.prisma_memories (user_id, memory_type);
 drop index if exists public.prisma_memories_user_content_uidx;
@@ -325,6 +332,8 @@ create unique index if not exists prisma_memories_active_user_key_uidx on public
 create index if not exists prisma_memories_user_status_idx on public.prisma_memories (user_id, status, updated_at desc);
 create index if not exists prisma_memories_active_valid_until_idx on public.prisma_memories (valid_until) where status = 'active' and valid_until is not null;
 create index if not exists prisma_memories_historical_retention_idx on public.prisma_memories (status, updated_at) where status in ('superseded','forgotten');
+create index if not exists prisma_memories_validation_lookup_idx on public.prisma_memories (user_id, status, memory_type, updated_at desc);
+comment on table public.prisma_memories is 'Memórias pessoais validadas antes da persistência pelo pipeline SAVE/UPDATE/MERGE/DISCARD; registros históricos usam os estados superseded e forgotten.';
 
 create or replace function public.set_prisma_memory_valid_until()
 returns trigger
