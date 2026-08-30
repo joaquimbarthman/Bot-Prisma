@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.55";
+export const PRISMA_AI_VERSION = "v2.56";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "As confirmações de exclusão de dados no painel agora exibem somente a descrição do resultado, sem um título adicional.",
   "O autoaprendizado agora também recupera automaticamente conflitos de unicidade reportados pelo Supabase durante gravações simultâneas, reutilizando o registro que já venceu a disputa.",
   "O autoaprendizado agora consolida chaves repetidas de forma segura mesmo quando chegam por categorias diferentes ou ao mesmo tempo, sem interromper o fechamento diário por duplicidade.",
   "Falhas ao responder ou executar ações da Prisma agora também avisam a equipe no canal de erros, com o contexto da pessoa, canal e evento sem expor credenciais.",

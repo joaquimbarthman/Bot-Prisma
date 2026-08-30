@@ -22,10 +22,10 @@ async function blockedGalleryComment(content: string): Promise<boolean> {
 
 function deleteConfirmationComponents(messageId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {
   const content = result === "confirmed"
-    ? "## Publicação apagada\nA foto foi removida da galeria."
+    ? "A foto foi removida da galeria."
     : result === "cancelled"
-      ? "## Exclusão cancelada\nA publicação continua na galeria."
-      : "## Apagar publicação\nTem certeza de que deseja apagar esta foto? Essa ação não pode ser desfeita.";
+      ? "A publicação continua na galeria."
+      : "## Apagar publicação\nTem certeza de que deseja apagar esta foto? **Essa ação não pode ser desfeita.**";
   const components: APIContainerComponent["components"] = [{ type: ComponentType.TextDisplay, content }];
   if (!result) components.push(
     { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },

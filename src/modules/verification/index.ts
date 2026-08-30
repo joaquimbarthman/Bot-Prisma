@@ -310,7 +310,13 @@ async function removeCollectionPrompt(channel: TextChannel, state: State): Promi
 }
 
 async function sendCollectionPrompt(channel: TextChannel, userId: string, step: "awaiting_name" | "awaiting_birth", content: string): Promise<void> {
-  const prompt = await channel.send({ content: `<@${userId}>, ${content}`, allowedMentions: { users: [userId] } });
+  // As solicitações de dados devem ficar fora do painel, como mensagens de texto comuns.
+  const prompt = await channel.send({
+    content: `<@${userId}>, ${content}`,
+    embeds: [],
+    components: [],
+    allowedMentions: { users: [userId] },
+  });
   await setChannelState(channel, { step, promptId: prompt.id });
 }
 

@@ -71,7 +71,7 @@ function deletionConfirmationComponents(target: DeletionTarget): APIContainerCom
     type: ComponentType.Container,
     accent_color: 0xed4245,
     components: [
-      { type: ComponentType.TextDisplay, content: `## ${item.title}\n${item.description}\n\n-# Esta ação não pode ser desfeita.` },
+      { type: ComponentType.TextDisplay, content: `## ${item.title}\n${item.description}` },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`prisma-ai:confirm-${target}`).setLabel("Apagar").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
@@ -81,11 +81,11 @@ function deletionConfirmationComponents(target: DeletionTarget): APIContainerCom
   }];
 }
 
-function deletionResultComponents(title: string, description: string, color: number): APIContainerComponent[] {
+function deletionResultComponents(description: string, color: number): APIContainerComponent[] {
   return [{
     type: ComponentType.Container,
     accent_color: color,
-    components: [{ type: ComponentType.TextDisplay, content: `## ${title}\n${description}` }],
+    components: [{ type: ComponentType.TextDisplay, content: description }],
   }];
 }
 
@@ -342,7 +342,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     return true;
   }
   if (action === "cancel-deletion" && interaction.isButton()) {
-    await interaction.update({ components: deletionResultComponents("Exclusão cancelada", "Nenhuma informação foi alterada.", 0x99aab5) });
+    await interaction.update({ components: deletionResultComponents("Nenhuma informação foi alterada.", 0x99aab5) });
     return true;
   }
   if (confirmsDeletion) {
@@ -356,7 +356,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     if (action === "confirm-history") { await clearUserHistory(interaction.user.id); await deletePrismaUserData(interaction.user.id, "history"); }
     if (action === "confirm-relationship") { await resetPrismaState(interaction.user.id, false); await deletePrismaUserData(interaction.user.id, "relationship"); }
     if (action === "confirm-all") await deletePrismaUserData(interaction.user.id, "all");
-    await interaction.editReply({ components: deletionResultComponents("Exclusão concluída", descriptions[action] ?? "Os dados foram apagados.", 0x57f287) });
+    await interaction.editReply({ components: deletionResultComponents(descriptions[action] ?? "Os dados foram apagados.", 0x57f287) });
     return true;
   }
   if (action === "reset-cancel") {
