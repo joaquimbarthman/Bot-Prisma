@@ -260,9 +260,12 @@ async function selection(interaction: UserSelectMenuInteraction, kind: "add" | "
 }
 
 async function changeEmoji(interaction: ModalSubmitInteraction, member: GuildMember): Promise<void> {
-  if (!interaction.isFromMessage()) return;
+  if (!interaction.isFromMessage()) {
+    await interaction.reply({ content: "Não consegui identificar o painel desta call. Abra o painel novamente e tente de novo.", flags: ["Ephemeral"] });
+    return;
+  }
   await interaction.deferUpdate();
-  const call = await ensureOwnedCall(member);
+  const call = await getCustomCall(member.guild.id, member.id);
   if (!call || call.ownerId !== interaction.user.id) { await interaction.editReply({ components: createPanel(member.user.username) }); return; }
   const emoji = parseCustomCallEmoji(interaction.fields.getTextInputValue("emoji"));
   if (!emoji) {
