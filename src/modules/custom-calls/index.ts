@@ -185,7 +185,7 @@ function deleteConfirmationPanel(): APIContainerComponent[] {
 async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\`・dono <@${call.ownerId}>${targetUserId ? `・alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"}・Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
 async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; call = { ...call, emoji: parseCustomCallEmoji(call.emoji ?? "") ?? DEFAULT_CALL_EMOJI }; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expected = buildCustomCallName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); if (!role) { role = await member.guild.roles.create({ name: expected, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true }); }
   if (channel.name !== expected) await channel.setName(expected, "Sincronização do username da call personalizada"); if (role.name !== expected) await role.setName(expected, "Sincronização do username da call personalizada"); return call; }
-async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
+async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = interaction.guild.members.cache.get(interaction.user.id) ?? await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
 
 export async function syncCustomCallAccess(member: GuildMember): Promise<boolean> {
   if (member.user.bot) return false;
@@ -261,11 +261,12 @@ async function selection(interaction: UserSelectMenuInteraction, kind: "add" | "
 
 async function changeEmoji(interaction: ModalSubmitInteraction, member: GuildMember): Promise<void> {
   if (!interaction.isFromMessage()) return;
+  await interaction.deferUpdate();
   const call = await ensureOwnedCall(member);
-  if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); return; }
+  if (!call || call.ownerId !== interaction.user.id) { await interaction.editReply({ components: createPanel(member.user.username) }); return; }
   const emoji = parseCustomCallEmoji(interaction.fields.getTextInputValue("emoji"));
   if (!emoji) {
-    await interaction.update({ components: await mainPanel(call, member) });
+    await interaction.editReply({ components: await mainPanel(call, member) });
     await sendNotification(interaction, "Use apenas **um emoji comum (Unicode)**, como 🌸. Emojis personalizados do servidor não podem ser usados em nomes de canal ou cargo.");
     return;
   }
@@ -278,7 +279,7 @@ async function changeEmoji(interaction: ModalSubmitInteraction, member: GuildMem
   const updated = { ...call, emoji, updatedAt: new Date().toISOString() };
   await saveCustomCall(updated);
   await log(interaction.client, "CALL_EMOJI_CHANGED", updated);
-  await interaction.update({ components: await mainPanel(updated, member) });
+  await interaction.editReply({ components: await mainPanel(updated, member) });
   await sendNotification(interaction, `Emoji alterado para ${emoji} no canal e no cargo da sua call.`);
 }
 
@@ -314,8 +315,8 @@ export async function handleCustomCallInteraction(interaction: Interaction): Pro
   if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (interaction.isModalSubmit() && action === "emoji-submit") { await changeEmoji(interaction, member); return true; }
+  if (interaction.isButton() && action === "emoji") { await interaction.showModal(emojiModal(DEFAULT_CALL_EMOJI)); return true; }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return true; }
-  if (action === "emoji") { await interaction.showModal(emojiModal(call.emoji ?? DEFAULT_CALL_EMOJI)); return true; }
   if (action === "add" || action === "remove") {
     const selectionPanel = await selectPanel(action);
     await interaction.update({ components: selectionPanel });
