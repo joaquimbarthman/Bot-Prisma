@@ -120,17 +120,17 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
   const first = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`${PREFIX}add`).setLabel("Adicionar").setEmoji(customCallAddEmoji() ?? "➕").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`${PREFIX}remove`).setLabel("Remover").setEmoji(customCallRemoveEmoji() ?? "➖").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${PREFIX}emoji`).setLabel("Escolher emoji").setEmoji(customCallEmojiPickerEmoji() ?? "🙂").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${PREFIX}delete`).setLabel("Excluir Call").setEmoji(customCallTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
   );
-  const emojiButton = new ButtonBuilder().setCustomId(`${PREFIX}emoji`).setLabel("Escolher emoji").setEmoji(customCallEmojiPickerEmoji() ?? "🙂").setStyle(ButtonStyle.Secondary);
   const header = [
     "## Sua Call Personalizada",
     `-# Painel de <@${call.ownerId}>\n`,
     "Gerencie sua call em um só lugar, simples e rápida.",
   ].join("\n");
   const content = [
-    "### Canal de voz" ,
-    `<#${call.voiceChannelId}>`,
+    "### Emoji escolhido　　Canal de voz",
+    `${chosenEmoji}　　　　　　　　　<#${call.voiceChannelId}>`,
     "",
     "### Cargo de acesso",
     `<@&${call.roleId}>`,
@@ -146,8 +146,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     ).join("\n"),
   ].join("\n");
   const headerComponent: APIComponentInContainer = { type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: header }], accessory: { type: ComponentType.Thumbnail, media: { url: panelOwner.displayAvatarURL({ extension: "png", size: 256 }) }, description: `Avatar de ${panelOwner.user.username}` } };
-  const emojiComponent: APIComponentInContainer = { type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: `### Emoji escolhido\n${chosenEmoji}` }], accessory: emojiButton.toJSON() };
-  const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, emojiComponent, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
+  const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
   return withNotification([panel], feedback);
 }
 function emojiModal(currentEmoji: string): ModalBuilder {
