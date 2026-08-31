@@ -640,6 +640,7 @@ create table if not exists public.custom_calls (
   owner_id text not null,
   voice_channel_id text not null,
   role_id text not null,
+  emoji text not null default '💦',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (guild_id, owner_id)

@@ -6,7 +6,7 @@ const galleryEmojis: { empty?: string; full?: string; details?: string; trash?: 
 const moderationEmojis: { block?: string; check?: string } = {};
 const verificationEmojis: { start?: string } = {};
 const lfgEmojis: { check?: string; close?: string; sound?: string; trash?: string; warning?: string; gamepad?: string } = {};
-const customCallEmojis: { add?: string; remove?: string; members?: string; trash?: string } = {};
+const customCallEmojis: { add?: string; remove?: string; members?: string; emoji?: string; trash?: string } = {};
 const paginationEmojis: { previous?: string; next?: string } = {};
 export const aiPanelEmojis: { user?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string; reset?: string; close?: string } = {};
 
@@ -73,6 +73,7 @@ export function lfgGamepadEmoji(): string | undefined {
 export function customCallAddEmoji(): string | undefined { return customCallEmojis.add; }
 export function customCallRemoveEmoji(): string | undefined { return customCallEmojis.remove; }
 export function customCallMembersEmoji(): string | undefined { return customCallEmojis.members; }
+export function customCallEmojiPickerEmoji(): string | undefined { return customCallEmojis.emoji; }
 export function customCallTrashEmoji(): string | undefined { return customCallEmojis.trash; }
 export function previousPageEmoji(): string | undefined { return paginationEmojis.previous; }
 export function nextPageEmoji(): string | undefined { return paginationEmojis.next; }
@@ -118,7 +119,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
     Object.assign(moderationEmojis, { block: block.id, check: check.id });
     Object.assign(verificationEmojis, { start: verificationStart.id });
     Object.assign(lfgEmojis, { check: check.id, close: aiClose.id, sound: lfgSound.id, trash: trash.id, warning: warning.id, gamepad: lfgGamepad.id });
-    Object.assign(customCallEmojis, { add: customCallAdd.id, remove: customCallRemove.id, members: aiUser.id, trash: trash.id });
+    Object.assign(customCallEmojis, { add: customCallAdd.id, remove: customCallRemove.id, members: aiUser.id, emoji: aiHumor.id, trash: trash.id });
     Object.assign(paginationEmojis, { previous: paginationPrevious.id, next: paginationNext.id });
     Object.assign(aiPanelEmojis, { user: aiUser.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id, reset: aiReset.id, close: aiClose.id });
     console.log("[EMOJIS] Ícones personalizados carregados.");

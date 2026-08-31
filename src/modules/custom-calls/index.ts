@@ -1,9 +1,9 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, PermissionFlagsBits, SeparatorSpacingSize, UserSelectMenuBuilder,
-  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type Snowflake, type UserSelectMenuInteraction,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, ModalBuilder, PermissionFlagsBits, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
+  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type ModalSubmitInteraction, type Snowflake, type UserSelectMenuInteraction,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationCheckEmoji, lfgSoundEmoji, verificationCloseEmoji, customCallAddEmoji, customCallRemoveEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
+import { verificationCheckEmoji, lfgSoundEmoji, verificationCloseEmoji, customCallAddEmoji, customCallRemoveEmoji, customCallEmojiPickerEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
 import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallMembers, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
 
 const PREFIX = "custom-call:";
@@ -12,7 +12,7 @@ const privateMessageCleanups = new Map<string, Array<() => Promise<unknown>>>();
 const PUBLIC_PANEL_COLOR = 0x008000;
 const PRIVATE_PANEL_COLOR = 0x5865f2;
 
-type CustomCallComponentInteraction = ButtonInteraction | UserSelectMenuInteraction;
+type CustomCallComponentInteraction = ButtonInteraction | UserSelectMenuInteraction | ModalSubmitInteraction;
 
 function privateMessageKey(interaction: CustomCallComponentInteraction): string | null {
   return interaction.guildId ? `${interaction.guildId}:${interaction.user.id}` : null;
@@ -35,7 +35,16 @@ async function clearPrivateMessages(guildId: string, userId: string): Promise<vo
   privateMessageCleanups.delete(key);
   await Promise.allSettled(entries.map((cleanup) => cleanup()));
 }
-export function buildCustomCallName(username: string): string { const clean = username.replace(/[\r\n]/g, " ").trim().slice(0, 84) || "usuario"; return `💦・call ${clean}`; }
+const DEFAULT_CALL_EMOJI = "💦";
+const graphemeSegmenter = new Intl.Segmenter("pt-BR", { granularity: "grapheme" });
+
+export function parseCustomCallEmoji(value: string): string | null {
+  const emoji = value.trim();
+  if (!emoji || /^<a?:\w+:\d+>$/.test(emoji)) return null;
+  const graphemes = Array.from(graphemeSegmenter.segment(emoji), ({ segment }) => segment);
+  return graphemes.length === 1 && /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(emoji) ? emoji : null;
+}
+export function buildCustomCallName(username: string, emoji = DEFAULT_CALL_EMOJI): string { const prefix = parseCustomCallEmoji(emoji) ?? DEFAULT_CALL_EMOJI; const clean = username.replace(/[\r\n]/g, " ").trim() || "usuario"; return `${prefix} • Call ${clean}`.slice(0, 100); }
 function hasAccess(member: GuildMember): boolean { return member.roles.cache.has(config.customCalls.accessRoleId); }
 function container(content: string, rows: APIComponentInContainer[] = []): APIContainerComponent[] { return [{ type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [{ type: ComponentType.TextDisplay, content }, ...(rows.length ? [{ type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small } as const, ...rows] : [])] }]; }
 function withNotification(panel: APIContainerComponent[], _notification?: string): APIMessageTopLevelComponent[] { return panel; }
@@ -105,6 +114,7 @@ const content = [
   return withNotification(container(content, [row.toJSON()]), feedback);
 }
 async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: string): Promise<APIMessageTopLevelComponent[]> {
+  const chosenEmoji = parseCustomCallEmoji(call.emoji ?? "") ?? DEFAULT_CALL_EMOJI;
   const members = await getCustomCallMembers(call.id);
   const memberIds = [call.ownerId, ...members.map((item) => item.userId)];
   const first = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -112,6 +122,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     new ButtonBuilder().setCustomId(`${PREFIX}remove`).setLabel("Remover").setEmoji(customCallRemoveEmoji() ?? "➖").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${PREFIX}delete`).setLabel("Excluir Call").setEmoji(customCallTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
   );
+  const emojiButton = new ButtonBuilder().setCustomId(`${PREFIX}emoji`).setLabel("Escolher emoji").setEmoji(customCallEmojiPickerEmoji() ?? "🙂").setStyle(ButtonStyle.Secondary);
   const header = [
     "## Sua Call Personalizada",
     `-# Painel de <@${call.ownerId}>\n`,
@@ -135,8 +146,21 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     ).join("\n"),
   ].join("\n");
   const headerComponent: APIComponentInContainer = { type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: header }], accessory: { type: ComponentType.Thumbnail, media: { url: panelOwner.displayAvatarURL({ extension: "png", size: 256 }) }, description: `Avatar de ${panelOwner.user.username}` } };
-  const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
+  const emojiComponent: APIComponentInContainer = { type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: `### Emoji escolhido\n${chosenEmoji}` }], accessory: emojiButton.toJSON() };
+  const panel: APIContainerComponent = { type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [headerComponent, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, emojiComponent, { type: ComponentType.TextDisplay, content }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, first.toJSON()] };
   return withNotification([panel], feedback);
+}
+function emojiModal(currentEmoji: string): ModalBuilder {
+  const input = new TextInputBuilder()
+    .setCustomId("emoji")
+    .setLabel("Emoji da call e do cargo")
+    .setPlaceholder("Exemplo: 🌸")
+    .setValue(currentEmoji)
+    .setMinLength(1)
+    .setMaxLength(16)
+    .setRequired(true)
+    .setStyle(TextInputStyle.Short);
+  return new ModalBuilder().setCustomId(`${PREFIX}emoji-submit`).setTitle("Escolher emoji").addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
 }
 async function selectPanel(kind: "add" | "remove"): Promise<APIContainerComponent[]> {
   const select = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
@@ -160,7 +184,7 @@ function deleteConfirmationPanel(): APIContainerComponent[] {
   );
 }
 async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\`・dono <@${call.ownerId}>${targetUserId ? `・alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"}・Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
-async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expected = buildCustomCallName(member.user.username); if (!role) { role = await member.guild.roles.create({ name: expected, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true }); }
+async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; call = { ...call, emoji: parseCustomCallEmoji(call.emoji ?? "") ?? DEFAULT_CALL_EMOJI }; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expected = buildCustomCallName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); if (!role) { role = await member.guild.roles.create({ name: expected, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true }); }
   if (channel.name !== expected) await channel.setName(expected, "Sincronização do username da call personalizada"); if (role.name !== expected) await role.setName(expected, "Sincronização do username da call personalizada"); return call; }
 async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
 
@@ -236,6 +260,29 @@ async function selection(interaction: UserSelectMenuInteraction, kind: "add" | "
   await sendNotification(interaction, `<@${target.id}> foi removido da sua call.`);
 }
 
+async function changeEmoji(interaction: ModalSubmitInteraction, member: GuildMember): Promise<void> {
+  if (!interaction.isFromMessage()) return;
+  const call = await ensureOwnedCall(member);
+  if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); return; }
+  const emoji = parseCustomCallEmoji(interaction.fields.getTextInputValue("emoji"));
+  if (!emoji) {
+    await interaction.update({ components: await mainPanel(call, member) });
+    await sendNotification(interaction, "Use apenas **um emoji comum (Unicode)**, como 🌸. Emojis personalizados do servidor não podem ser usados em nomes de canal ou cargo.");
+    return;
+  }
+  const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null);
+  const role = await member.guild.roles.fetch(call.roleId).catch(() => null);
+  if (!channel?.isVoiceBased() || !role) throw new Error("Não foi possível encontrar o canal ou o cargo da call.");
+  const name = buildCustomCallName(member.user.username, emoji);
+  await channel.setName(name, `Emoji da call personalizada alterado por ${member.id}`);
+  await role.setName(name, `Emoji da call personalizada alterado por ${member.id}`);
+  const updated = { ...call, emoji, updatedAt: new Date().toISOString() };
+  await saveCustomCall(updated);
+  await log(interaction.client, "CALL_EMOJI_CHANGED", updated);
+  await interaction.update({ components: await mainPanel(updated, member) });
+  await sendNotification(interaction, `Emoji alterado para ${emoji} no canal e no cargo da sua call.`);
+}
+
 export async function startCustomCallsModule(client: Client): Promise<void> {
   const channel = await client.channels.fetch(config.customCalls.panelChannelId).catch((error) => {
     console.error(`[CUSTOM-CALL] Falha ao buscar o canal do painel ${config.customCalls.panelChannelId}:`, error);
@@ -264,10 +311,12 @@ export async function startCustomCallsModule(client: Client): Promise<void> {
   else await channel.send(payload);
   console.log(`[CUSTOM-CALL] Painel publicado no canal ${channel.id}.`);
 }
-export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso."); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso."); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
+  if (interaction.isModalSubmit() && action === "emoji-submit") { await changeEmoji(interaction, member); return true; }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return true; }
+  if (action === "emoji") { await interaction.showModal(emojiModal(call.emoji ?? DEFAULT_CALL_EMOJI)); return true; }
   if (action === "add" || action === "remove") {
     const selectionPanel = await selectPanel(action);
     await interaction.update({ components: selectionPanel });
