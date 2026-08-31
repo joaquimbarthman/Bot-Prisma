@@ -301,6 +301,26 @@ function normalizeBirthDate(value: string): string | null {
   return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
 }
 
+const nameConnectors = new Set(["da", "das", "de", "do", "dos", "e"]);
+const conversationalNameWords = new Set([
+  "agora", "aqui", "beleza", "bem", "boa", "bom", "como", "conversa", "dia", "diz", "envia", "estou", "esta", "está",
+  "eu", "fala", "falar", "falou", "favor", "gente", "hoje", "mano", "meu", "minha", "nome", "noite", "obrigada",
+  "obrigado", "oi", "ola", "olá", "onde", "porque", "preciso", "qual", "quando", "que", "quero", "queria", "sim",
+  "sou", "tarde", "tudo", "vc", "vcs", "voce", "você", "vou", "nao", "não",
+]);
+
+export function isValidFullName(value: string): boolean {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (name.length < 5 || name.length > 80 || normalizeBirthDate(name)) return false;
+  if (!/^[\p{L}]+(?:['-][\p{L}]+)*(?: [\p{L}]+(?:['-][\p{L}]+)*)+$/u.test(name)) return false;
+
+  const words = name.toLocaleLowerCase("pt-BR").split(" ");
+  if (words.length > 7) return false;
+  const significantWords = words.filter((word) => !nameConnectors.has(word));
+  if (significantWords.length < 2 || significantWords.some((word) => word.length < 2)) return false;
+  return !words.some((word) => conversationalNameWords.has(word));
+}
+
 async function setChannelState(channel: TextChannel, patch: Partial<State>): Promise<State | null> {
   const current = await readChannelState(channel); return current ? { ...current, ...patch } : null;
 }
@@ -480,7 +500,7 @@ export async function handleVerificationMessage(message: Message): Promise<boole
 
   if (state.step === "awaiting_name") {
     const name = message.content.trim();
-    if (name.length < 3 || normalizeBirthDate(name)) { await sendCollectionPrompt(channel, state.userId, "awaiting_name", "envie seu **nome completo**, não a data de nascimento."); return true; }
+    if (!isValidFullName(name)) { await sendCollectionPrompt(channel, state.userId, "awaiting_name", "envie somente seu **nome completo** (nome e sobrenome), sem frases ou mensagens de conversa."); return true; }
     await panel.edit({ components: staffPanelComponents({ ...state, name: safePrivateValue(name), step: "awaiting_birth" }) });
     await sendCollectionPrompt(channel, state.userId, "awaiting_birth", "agora envie sua **data de nascimento** no formato `DD/MM/AAAA` ou `DDMMAAAA`.");
     return true;
