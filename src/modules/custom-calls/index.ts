@@ -129,8 +129,8 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     "Gerencie sua call em um só lugar, simples e rápida.",
   ].join("\n");
   const content = [
-    "### Emoji escolhido　　Canal de voz",
-    `${chosenEmoji}　　　　　　　　　<#${call.voiceChannelId}>`,
+    "### Emoji escolhido ・ Canal de voz",
+    `${chosenEmoji} ・ <#${call.voiceChannelId}>`,
     "",
     "### Cargo de acesso",
     `<@&${call.roleId}>`,
