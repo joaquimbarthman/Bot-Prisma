@@ -318,7 +318,12 @@ export async function handleCustomCallInteraction(interaction: Interaction): Pro
   if (action === "open") { await interaction.deferReply({ flags: ["Ephemeral"] }); const call = await ensureOwnedCall(member); await interaction.editReply({ components: call ? await mainPanel(call, member) : createPanel(member.user.username), flags: ["IsComponentsV2"] }); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (interaction.isModalSubmit() && action === "emoji-submit") { await changeEmoji(interaction, member); return true; }
-  if (interaction.isButton() && action === "emoji") { await interaction.showModal(emojiModal(DEFAULT_CALL_EMOJI)); return true; }
+  if (interaction.isButton() && action === "emoji") {
+    const call = await getCustomCall(member.guild.id, member.id);
+    const currentEmoji = parseCustomCallEmoji(call?.emoji ?? "") ?? DEFAULT_CALL_EMOJI;
+    await interaction.showModal(emojiModal(currentEmoji));
+    return true;
+  }
   if (!interaction.isButton()) return true; if (action === "create") { await createCall(interaction, member); return true; } const call = await ensureOwnedCall(member); if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return true; }
   if (action === "add" || action === "remove") {
     const selectionPanel = await selectPanel(action);
