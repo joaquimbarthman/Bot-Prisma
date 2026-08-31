@@ -44,7 +44,7 @@ export function parseCustomCallEmoji(value: string): string | null {
   const graphemes = Array.from(graphemeSegmenter.segment(emoji), ({ segment }) => segment);
   return graphemes.length === 1 && /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(emoji) ? emoji : null;
 }
-export function buildCustomCallName(username: string, emoji = DEFAULT_CALL_EMOJI): string { const prefix = parseCustomCallEmoji(emoji) ?? DEFAULT_CALL_EMOJI; const clean = username.replace(/[\r\n]/g, " ").trim() || "usuario"; return `${prefix} • Call ${clean}`.slice(0, 100); }
+export function buildCustomCallName(username: string, emoji = DEFAULT_CALL_EMOJI): string { const prefix = parseCustomCallEmoji(emoji) ?? DEFAULT_CALL_EMOJI; const clean = username.replace(/[\r\n]/g, " ").trim() || "usuario"; return `${prefix}・Call ${clean}`.slice(0, 100); }
 function hasAccess(member: GuildMember): boolean { return member.roles.cache.has(config.customCalls.accessRoleId); }
 function container(content: string, rows: APIComponentInContainer[] = []): APIContainerComponent[] { return [{ type: ComponentType.Container, accent_color: PRIVATE_PANEL_COLOR, components: [{ type: ComponentType.TextDisplay, content }, ...(rows.length ? [{ type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small } as const, ...rows] : [])] }]; }
 function withNotification(panel: APIContainerComponent[], _notification?: string): APIMessageTopLevelComponent[] { return panel; }
@@ -129,8 +129,8 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
     "Gerencie sua call em um só lugar, simples e rápida.",
   ].join("\n");
   const content = [
-    "### Emoji escolhido ・ Canal de voz",
-    `${chosenEmoji} ・ <#${call.voiceChannelId}>`,
+    "### Emoji escolhido　　Canal de voz",
+    `${chosenEmoji}　　　　　　　　　<#${call.voiceChannelId}>`,
     "",
     "### Cargo de acesso",
     `<@&${call.roleId}>`,
