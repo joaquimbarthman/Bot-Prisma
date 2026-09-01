@@ -321,18 +321,6 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
       : await lookup.ilike("content", candidate.content).maybeSingle();
     if (readError) { remoteFailure("procurar memória existente", readError.message); return; }
     const now = new Date().toISOString();
-    if (existing && existing.content.toLocaleLowerCase("pt-BR") !== candidate.content.toLocaleLowerCase("pt-BR")) {
-      const { error: archiveError } = await supabase.from("prisma_memories").update({ status: "superseded", valid_until: now, updated_at: now }).eq("id", existing.id).eq("user_id", candidate.userId).eq("status", "active");
-      if (archiveError) { remoteFailure("arquivar memória substituída", archiveError.message); return; }
-      const { data: inserted, error: insertError } = await supabase.from("prisma_memories").insert({ user_id: candidate.userId, memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: candidate.importance, confidence: candidate.confidence, occurrence_count: 1, last_seen_at: now, last_confirmed_at: now, valid_until: candidate.validUntil ?? null, status: "active", source_message_id: candidate.sourceMessageId ?? null, updated_at: now }).select("id").single();
-      if (insertError) {
-        await supabase.from("prisma_memories").update({ status: "active", valid_until: null, updated_at: now }).eq("id", existing.id).eq("user_id", candidate.userId);
-        remoteFailure("salvar nova versão da memória", insertError.message); return;
-      }
-      const { error: linkError } = await supabase.from("prisma_memories").update({ superseded_by: inserted.id }).eq("id", existing.id).eq("user_id", candidate.userId);
-      if (linkError) remoteFailure("vincular histórico da memória", linkError.message);
-      return;
-    }
     const repeatedEvidence = Boolean(existing) && (!candidate.sourceMessageId || existing?.source_message_id !== candidate.sourceMessageId);
     const row = { memory_type: candidate.memoryType, memory_key: candidate.memoryKey ?? null, content: candidate.content, importance: Math.max(candidate.importance, score(existing?.importance, 0)), confidence: Math.min(100, Math.max(candidate.confidence, score(existing?.confidence, 0)) + (repeatedEvidence ? 5 : 0)), occurrence_count: (Number(existing?.occurrence_count) || 0) + (repeatedEvidence || !existing ? 1 : 0), last_seen_at: now, last_confirmed_at: repeatedEvidence || !existing ? now : undefined, valid_until: candidate.validUntil ?? existing?.valid_until ?? null, status: "active", source_message_id: candidate.sourceMessageId ?? existing?.source_message_id ?? null, updated_at: now };
     const { error } = existing
@@ -345,13 +333,6 @@ export async function upsertPrismaMemory(memory: PrismaMemory): Promise<void> {
     const memories = db.memories ??= [];
     const current = memories.find(item => item.userId === candidate.userId && (item.status ?? "active") === "active" && (candidate.memoryKey ? item.memoryKey === candidate.memoryKey : item.content.toLocaleLowerCase("pt-BR") === candidate.content.toLocaleLowerCase("pt-BR")));
     if (current) {
-      if (current.content.toLocaleLowerCase("pt-BR") !== candidate.content.toLocaleLowerCase("pt-BR")) {
-        const now = new Date().toISOString();
-        const nextId = Math.max(0, ...memories.map(item => item.id ?? 0)) + 1;
-        Object.assign(current, { status: "superseded", validUntil: now, supersededBy: nextId, lastSeenAt: now });
-        memories.push({ ...candidate, id: nextId, status: "active", occurrenceCount: 1, lastSeenAt: now, lastConfirmedAt: now });
-        return;
-      }
       const repeatedEvidence = !candidate.sourceMessageId || current.sourceMessageId !== candidate.sourceMessageId;
       Object.assign(current, candidate, { status: "active", importance: Math.max(current.importance, candidate.importance), confidence: Math.min(100, Math.max(current.confidence, candidate.confidence) + (repeatedEvidence ? 5 : 0)), occurrenceCount: (current.occurrenceCount ?? 1) + (repeatedEvidence ? 1 : 0), lastSeenAt: new Date().toISOString(), lastConfirmedAt: repeatedEvidence ? new Date().toISOString() : current.lastConfirmedAt });
     }
