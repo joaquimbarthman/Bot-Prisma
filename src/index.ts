@@ -6,7 +6,7 @@ import { handleGalleryInteraction, handleGalleryMessage, refreshGalleryButtons }
 import { startHealthServer } from "./health-server.js";
 import { handleModerationButton, handleModerationCommand, handleModerationMessage } from "./modules/moderation/moderation-feature.js";
 import { handleAiInteraction, handleAiMessage, handleAiPresenceUpdate, startAiCleanup } from "./modules/ai/index.js";
-import { grantAccessRoleToBooster, grantVerifiedRoleToBooster, startedBoosting, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
+import { grantAccessRoleToBooster, syncBoosterAccessRoles } from "./modules/ai/permissions.js";
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, handleLfgMessageDelete, handleLfgVoiceState, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
@@ -123,9 +123,6 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   await grantPairedRoleOnce(newMember).catch((error) => console.error(`[CARGO-DUPLO] Falha ao processar ${newMember.id}:`, error));
   await grantAccessRoleToBooster(newMember).catch((error) => console.error(`[PRISMA-IA] Falha ao conceder cargo ao Booster ${newMember.id}:`, error));
   await syncCustomCallAccess(newMember).catch((error) => console.error(`[CUSTOM-CALL] Falha ao sincronizar acesso de ${newMember.id}:`, error));
-  if (startedBoosting(oldMember, newMember)) {
-    await grantVerifiedRoleToBooster(newMember).catch((error) => console.error(`[BOOSTER] Falha ao conceder cargo de verificado ao Booster ${newMember.id}:`, error));
-  }
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {

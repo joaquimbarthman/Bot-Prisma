@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.61";
+export const PRISMA_AI_VERSION = "v2.62";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Iniciar um Boost não concede mais automaticamente o cargo de verificado; esse cargo agora continua exclusivo do fluxo normal de verificação e aprovação da equipe.",
   "Quando uma nova informação corrige uma memória da mesma entidade, a Prisma agora reescreve o registro existente no momento do salvamento, sem alterar as demais validações de memória.",
   "Os controles anterior e próximo da paginação agora exibem somente os ícones visuais, sem texto adicional nos botões.",
   "Os botões de paginação dos Components V2 agora usam ícones visuais próprios para voltar e avançar.",

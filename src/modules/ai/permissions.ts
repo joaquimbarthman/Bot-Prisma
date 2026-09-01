@@ -73,27 +73,6 @@ export async function grantAccessRoleToBooster(member: GuildMember): Promise<boo
   }
 }
 
-export async function grantVerifiedRoleToBooster(member: GuildMember): Promise<boolean> {
-  const roleId = config.verification.verifiedRoleId;
-  if (member.premiumSinceTimestamp === null || !roleId || member.roles.cache.has(roleId)) return false;
-  const role = member.guild.roles.cache.get(roleId)
-    ?? await member.guild.roles.fetch(roleId).catch(() => null);
-  if (!role) {
-    console.error(`[BOOSTER] Cargo de verificado ${roleId} não encontrado.`);
-    return false;
-  }
-  await member.roles.add(role, "Cargo de verificado concedido automaticamente por Booster");
-  console.log(`[BOOSTER] Cargo de verificado concedido ao Booster ${member.user.tag} (${member.id}).`);
-  return true;
-}
-
-export function startedBoosting(
-  oldMember: Pick<GuildMember, "premiumSinceTimestamp">,
-  newMember: Pick<GuildMember, "premiumSinceTimestamp">,
-): boolean {
-  return oldMember.premiumSinceTimestamp === null && newMember.premiumSinceTimestamp !== null;
-}
-
 export async function syncBoosterAccessRoles(
   guild: Guild,
   members?: Collection<Snowflake, GuildMember>,
