@@ -18,7 +18,10 @@ const drafts = new Map<string, Draft>();
 export function isLfgGameKey(value: string | undefined): value is LfgGameKey {
   return value !== undefined && Object.prototype.hasOwnProperty.call(LFG_GAMES, value);
 }
-export function lfgGameRoleMention(game: LfgGameKey): string { return `<@&${LFG_GAMES[game].roleId}>`; }
+export function lfgGameRoleMention(game: LfgGameKey): string {
+  const roleId = LFG_GAMES[game].roleId;
+  return roleId ? `<@&${roleId}>` : "";
+}
 function draftKey(interaction: Interaction): string { return `${interaction.guildId ?? "dm"}:${interaction.user.id}`; }
 function canManage(session: LfgSession, interaction: ButtonInteraction): boolean { return session.creatorId === interaction.user.id; }
 function lfgExpiresAt(session: LfgSession): number { return Date.parse(session.createdAt) + LFG_LIFETIME_MS; }
@@ -34,6 +37,7 @@ function currentCall(client: Client, session: LfgSession): string {
 }
 function publicationComponents(client: Client, session: LfgSession): APIContainerComponent[] {
   const game = LFG_GAMES[session.game]; const status = sessionStatus(session);
+  const roleMention = lfgGameRoleMention(session.game);
   const participants = session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum";
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -51,7 +55,7 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
         type: ComponentType.Section,
         components: [{
           type: ComponentType.TextDisplay,
-          content: `### PRISMA • LFG\n## ${game.name}\n-# Criado por <@${session.creatorId}>　•　${lfgGameRoleMention(session.game)}\n\n${session.note || "Monte seu grupo e combine a partida com os participantes."}`,
+          content: `### PRISMA • LFG\n## ${game.name}\n-# Criado por <@${session.creatorId}>${roleMention ? `　•　${roleMention}` : ""}\n\n${session.note || "Monte seu grupo e combine a partida com os participantes."}`,
         }],
         accessory: { type: ComponentType.Thumbnail, media: { url: game.img }, description: game.name },
       },
@@ -142,15 +146,15 @@ async function submitCreate(interaction: ButtonInteraction, draft: Draft): Promi
   const channel = interaction.channel;
   if (!channel?.isTextBased()) { await interaction.editReply({ components: creationResultComponents("Não encontrei um canal de texto para publicar este LFG.") }); return; }
   const gameRoleId = LFG_GAMES[game].roleId;
-  const gameRole = await interaction.guild!.roles.fetch(gameRoleId).catch(() => null);
+  const gameRole = gameRoleId ? await interaction.guild!.roles.fetch(gameRoleId).catch(() => null) : null;
   const botCanMentionAnyRole = channel.permissionsFor(interaction.client.user!)?.has(PermissionFlagsBits.MentionEveryone) ?? false;
-  if (!gameRole) { await interaction.editReply({ components: creationResultComponents(`O cargo configurado para ${LFG_GAMES[game].name} não existe mais. Avise a equipe para atualizar o painel.`) }); return; }
-  if (!gameRole.mentionable && !botCanMentionAnyRole) { await interaction.editReply({ components: creationResultComponents(`Não consigo mencionar o cargo ${gameRole}. Deixe o cargo mencionável ou conceda ao bot a permissão de mencionar cargos.`) }); return; }
+  if (gameRoleId && !gameRole) { await interaction.editReply({ components: creationResultComponents(`O cargo configurado para ${LFG_GAMES[game].name} não existe mais. Avise a equipe para atualizar o painel.`) }); return; }
+  if (gameRole && !gameRole.mentionable && !botCanMentionAnyRole) { await interaction.editReply({ components: creationResultComponents(`Não consigo mencionar o cargo ${gameRole}. Deixe o cargo mencionável ou conceda ao bot a permissão de mencionar cargos.`) }); return; }
   const now = new Date(); const id = crypto.randomUUID(); const expiresAt = new Date(now.getTime() + LFG_LIFETIME_MS).toISOString();
   const session: LfgSession = { id, guildId: interaction.guildId!, channelId: interaction.channelId, messageId: null, roleMentionMessageId: null, creatorId: interaction.user.id, game, maxPlayers, participants: [interaction.user.id], note: draft.note, status: "open", createdAt: now.toISOString(), updatedAt: now.toISOString(), expiresAt };
   const openCount = (await sessions()).filter((value) => value.guildId === session.guildId && value.creatorId === session.creatorId && (value.status === "open" || value.status === "completed")).length; if (openCount >= config.lfg.maxOpenPerUser) { await interaction.editReply({ components: creationResultComponents(`Você já atingiu o limite de ${config.lfg.maxOpenPerUser} LFGs ativos.`) }); return; }
   await mutate((db) => { db.sessions.push(session); });
-  const message = await channel.send({ components: publicationComponents(interaction.client, session), flags: ["IsComponentsV2"], allowedMentions: { parse: [], roles: [gameRoleId] } });
+  const message = await channel.send({ components: publicationComponents(interaction.client, session), flags: ["IsComponentsV2"], allowedMentions: { parse: [], roles: gameRoleId ? [gameRoleId] : [] } });
   await mutate((db) => { const current = db.sessions.find((value) => value.id === id)!; current.messageId = message.id; current.updatedAt = new Date().toISOString(); });
   createdCooldowns.set(interaction.user.id, Date.now()); drafts.delete(draftKey(interaction)); await interaction.editReply({ components: creationResultComponents("LFG criado e publicado.", true) });
 }

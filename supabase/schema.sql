@@ -621,7 +621,7 @@ create table if not exists public.lfg_sessions (
   message_id text,
   role_mention_message_id text,
   creator_id text not null,
-  game text not null check (game in ('fortnite', 'genshin_impact', 'valorant', 'roblox', 'overwatch', 'league_of_legends', 'minecraft', 'marvel_rivals', 'dead_by_daylight')),
+  game text not null check (game in ('fortnite', 'genshin_impact', 'valorant', 'roblox', 'overwatch', 'league_of_legends', 'minecraft', 'marvel_rivals', 'dead_by_daylight', 'repo')),
   max_players smallint not null check (max_players between 2 and 12),
   participants jsonb not null default '[]'::jsonb check (jsonb_typeof(participants) = 'array'),
   note text not null default '' check (char_length(note) <= 500),
