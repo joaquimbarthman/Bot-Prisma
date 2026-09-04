@@ -1,7 +1,7 @@
 import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
-import { addBlacklist, awardXp, getAllMemberLevels, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
+import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
 const voiceEligibleSince = new Map<string, number>();
@@ -78,13 +78,6 @@ async function announce(member: GuildMember, reward: LevelReward, channelId: str
   await channel.send({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
 }
 
-export function levelRewardNickname(currentName: string, rewards: LevelReward[], emoji: string): string {
-  const withoutReward = removeLevelRewardEmoji(currentName, rewards);
-  const suffix = ` ・${emoji.trim()}`;
-  const available = Math.max(0, 32 - [...suffix].length);
-  return `${[...withoutReward].slice(0, available).join("").trimEnd()}${suffix}`;
-}
-
 export function removeLevelRewardEmoji(currentName: string, rewards: LevelReward[]): string {
   const suffixes = rewards
     .map((reward) => reward.emoji.trim())
@@ -96,13 +89,12 @@ export function removeLevelRewardEmoji(currentName: string, rewards: LevelReward
     : currentName.trimEnd();
 }
 
-async function awardNicknameEmoji(member: GuildMember, rewards: LevelReward[], reward: LevelReward): Promise<boolean> {
-  const emoji = reward.emoji.trim();
-  if (!emoji || !member.manageable) return false;
-  const nickname = levelRewardNickname(member.displayName, rewards, emoji);
-  if (nickname === member.displayName) return false;
-  return member.setNickname(nickname, `Emoji do marco de evolucao nivel ${reward.level}`).then(() => true).catch((error) => {
-    console.error(`[LEVELING] Falha ao colocar o emoji do nivel ${reward.level} no apelido de ${member.id}:`, error);
+async function removeExistingLevelEmoji(member: GuildMember, rewards: LevelReward[]): Promise<boolean> {
+  if (!member.nickname || !member.manageable) return false;
+  const nickname = removeLevelRewardEmoji(member.nickname, rewards);
+  if (!nickname || nickname === member.nickname) return false;
+  return member.setNickname(nickname, "Remocao definitiva do emoji de level do apelido").then(() => true).catch((error) => {
+    console.error(`[LEVELING] Falha ao remover o emoji de level do apelido de ${member.id}:`, error);
     return false;
   });
 }
@@ -112,10 +104,7 @@ async function processLevelChange(member: GuildMember, oldLevel: number, newLeve
   const rewards = await getRewards(member.guild.id);
   const unlocked = rewards.filter((item) => item.level > oldLevel && item.level <= newLevel).sort((a, b) => b.level - a.level)[0];
   await syncReward(member, rewards, newLevel);
-  if (unlocked) {
-    await awardNicknameEmoji(member, rewards, unlocked);
-    await announce(member, unlocked, announcementChannelId);
-  }
+  if (unlocked) await announce(member, unlocked, announcementChannelId);
 }
 
 export async function handleLevelingMessage(message: Message): Promise<boolean> {
@@ -193,30 +182,8 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top", "!remoji", "!semoji"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
-  if (command === "!remoji") {
-    const currentNickname = message.member.nickname;
-    const rewards = await getRewards(message.guild.id);
-    const nickname = currentNickname ? removeLevelRewardEmoji(currentNickname, rewards) : null;
-    let responseText: string;
-    if (!currentNickname || !nickname || nickname === currentNickname) {
-      responseText = "Você não possui um emoji de level no apelido.";
-    } else if (!message.member.manageable) {
-      responseText = "Não consegui remover o emoji porque meu cargo não pode alterar seu apelido.";
-    } else {
-      const removed = await message.member.setNickname(nickname, "Emoji de level removido pelo membro").then(() => true).catch((error) => {
-        console.error(`[LEVELING] Falha ao remover o emoji de level do apelido de ${message.member?.id}:`, error);
-        return false;
-      });
-      responseText = removed ? "Emoji removido do seu apelido." : "Não consegui remover o emoji do seu apelido.";
-    }
-    const response = await message.reply({ content: responseText, allowedMentions: { repliedUser: false } });
-    setTimeout(() => {
-      void Promise.all([response.delete().catch(() => undefined), message.delete().catch(() => undefined)]);
-    }, 5_000).unref();
-    return true;
-  }
   const publicCommand = command === "!rank" || command === "!top";
   if (publicCommand && message.channelId !== config.leveling.publicCommandChannelId) {
     const notice = await message.reply(`Use este comando de evolucao somente em <#${config.leveling.publicCommandChannelId}>.`);
@@ -249,25 +216,6 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
-  if (command === "!semoji") {
-    const status = await message.reply("Aplicando os emojis de level nos membros atuais...");
-    const [rewards, rows, members] = await Promise.all([
-      getRewards(message.guild.id),
-      getAllMemberLevels(message.guild.id),
-      message.guild.members.fetch(),
-    ]);
-    let updated = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      const member = members.get(row.userId);
-      const reward = [...rewards].reverse().find((item) => item.level <= row.level);
-      if (!member || member.user.bot || !reward) { skipped += 1; continue; }
-      if (await awardNicknameEmoji(member, rewards, reward)) updated += 1;
-      else skipped += 1;
-    }
-    await status.edit(`Emojis sincronizados: ${updated} apelido(s) atualizado(s) e ${skipped} ignorado(s).`);
-    return true;
-  }
   if (command === "!testep" || command === "!testp") {
     const level = Number(input.match(/^!teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
     if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `!testep <nivel> [@membro]`."); return true; }
@@ -378,6 +326,7 @@ export async function syncLevelingRoles(
   members ??= await guild.members.fetch();
   for (const member of members.values()) {
     if (member.user.bot) continue;
+    await removeExistingLevelEmoji(member, rewards);
     const level = await getMemberLevel(guild.id, member.id);
     if (level) await syncReward(member, rewards, level.level);
   }
