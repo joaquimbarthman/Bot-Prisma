@@ -8,7 +8,6 @@ export const LFG_GAMES = {
   minecraft: { name: "Minecraft", roleId: "1538651346385764454", img: "https://i.pinimg.com/236x/2b/9f/b9/2b9fb9043dc5fa89a89ccc23b88427b2.jpg" },
   marvel_rivals: { name: "Marvel Rivals", roleId: "1538651862985867414", img: "https://cdn2.steamgriddb.com/icon_thumb/5151b8757a4afb16e18c0bd6f3e69e32.png" },
   dead_by_daylight: { name: "Dead by Daylight", roleId: "1538652466894213182", img: "https://cdn2.steamgriddb.com/icon/29ec8066dea8748449b852688c46ee5a/32/256x256.png" },
-  repo: { name: "R.E.P.O.", roleId: "1545205660386328646", img: "https://cdn2.steamgriddb.com/icon/ce112ed205bda9ff3dbf7a21ec2b8862/32/512x512.png" },
 } as const;
 
 export type LfgGameKey = keyof typeof LFG_GAMES;
