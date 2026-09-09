@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.62";
+export const PRISMA_AI_VERSION = "v2.63";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Aos sábados e domingos, todas as pessoas podem conversar com a Prisma; durante a semana, o acesso continua exclusivo do cargo Prisma AI, assim como o painel pessoal.",
   "Iniciar um Boost não concede mais automaticamente o cargo de verificado; esse cargo agora continua exclusivo do fluxo normal de verificação e aprovação da equipe.",
   "Quando uma nova informação corrige uma memória da mesma entidade, a Prisma agora reescreve o registro existente no momento do salvamento, sem alterar as demais validações de memória.",
   "Os controles anterior e próximo da paginação agora exibem somente os ícones visuais, sem texto adicional nos botões.",
@@ -96,6 +97,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Liberar a conversa com todas as pessoas aos sábados e domingos no fuso horário configurado, mantendo o painel pessoal e o acesso nos demais dias exclusivos do cargo Prisma AI.",
   "Avisar a equipe no canal de erros quando uma resposta ou ação da IA falhar, preservando o contexto necessário para diagnóstico sem expor credenciais.",
   "Manter o assunto exato de uma mensagem respondida, priorizar o contexto do chat em perguntas curtas e consultar a atividade musical somente quando a pessoa falar explicitamente sobre o que está ouvindo.",
   "Adaptar o comportamento por cargo em cada resposta, usando um modo relaxed mais livre e contextual quando autorizado, sem remover segurança crítica nem regras administrativas do banco.",

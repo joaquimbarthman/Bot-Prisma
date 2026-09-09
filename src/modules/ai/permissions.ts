@@ -41,6 +41,15 @@ export function accessLevel(member: GuildMember): AccessLevel {
   return member.roles.cache.has(config.prismaAi.accessRoleId) ? "member" : "none";
 }
 
+export function isPrismaWeekend(now = new Date(), timezone = config.prismaAi.timezone): boolean {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(now);
+  return weekday === "Sat" || weekday === "Sun";
+}
+
+export function canChatWithPrisma(member: GuildMember, now = new Date()): boolean {
+  return accessLevel(member) !== "none" || isPrismaWeekend(now);
+}
+
 export function shouldGrantAccessRole(member: GuildMember): boolean {
   return member.premiumSinceTimestamp !== null && !member.roles.cache.has(config.prismaAi.accessRoleId);
 }

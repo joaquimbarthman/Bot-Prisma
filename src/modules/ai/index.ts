@@ -1,7 +1,7 @@
 import { ActivityType, type Client, type Interaction, type Message, type Presence } from "discord.js";
 import { config } from "../../config.js";
 import { localModeration } from "../moderation/filter.js";
-import { accessLevel } from "./permissions.js";
+import { accessLevel, canChatWithPrisma } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
@@ -323,10 +323,10 @@ export async function handleAiMessage(client: Client, message: Message): Promise
     if (canSendTestNotice(message.author.id, config.prismaAi.testNoticeCooldownSeconds * 1000)) await message.reply({ content: "O prisma está atualmente sendo testado, logo ele volta pra conversar com você!", allowedMentions: { repliedUser: false } });
     return true;
   }
-  const level = accessLevel(message.member);
+  const canChat = canChatWithPrisma(message.member);
   const direct = asksAboutActivity(message.content) || addressedToPrisma || !!operatorRuleCommand;
   const botInsult = direct && isDirectBotInsult(message.content, client.user?.id);
-  if (level === "none" && !operatorRuleCommand) {
+  if (!canChat && !operatorRuleCommand) {
     if (direct) {
       const notice = await message.reply({ content: `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.boosterRoleId}>.`, allowedMentions: { parse: [], roles: [] } });
       setTimeout(() => notice.delete().catch(() => undefined), 10_000).unref();
