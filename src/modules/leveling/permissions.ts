@@ -16,7 +16,7 @@ const channelBenefits = [
   [100, "MuteMembers", PermissionFlagsBits.MuteMembers],
 ] as const;
 
-const roleBenefits = [[10, PermissionFlagsBits.ChangeNickname]] as const;
+const roleBenefits = [[1, PermissionFlagsBits.ChangeNickname]] as const;
 const managedRolePermissions = roleBenefits.map(([, permission]) => permission);
 
 export function levelChannelBenefits(level: number): bigint[] {

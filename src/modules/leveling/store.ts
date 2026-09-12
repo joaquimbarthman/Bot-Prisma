@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "../../config.js";
 import { calculateLevel } from "./progression.js";
 
-export type LevelingSettings = { guildId: string; globalMultiplier: number; chatMultiplier: number; voiceMultiplier: number; boosterRoleId: string | null; boosterMultiplier: number; chatCooldownSeconds: number; voiceCooldownSeconds: number; announcementChannelId: string; maxLevel: number; enabled: boolean };
+export type LevelingSettings = { guildId: string; globalMultiplier: number; chatMultiplier: number; voiceMultiplier: number; prismaReplyBonus: number; boosterRoleId: string | null; boosterMultiplier: number; chatCooldownSeconds: number; voiceCooldownSeconds: number; announcementChannelId: string; maxLevel: number; enabled: boolean };
 export type MemberLevel = { guildId: string; userId: string; xpTotal: number; level: number; lastChatXpAt: string | null; lastVoiceXpAt: string | null; currentRewardRoleId: string | null; createdAt: string; updatedAt: string };
 export type LevelReward = { guildId: string; level: number; roleId: string; emoji: string; title: string; shortMessage: string };
 export type BlacklistEntry = { guildId: string; type: "chat" | "voice"; targetType: "channel" | "role"; targetId: string };
@@ -16,7 +16,7 @@ const file = path.resolve(config.dataDir, "leveling.json");
 const supabase = config.supabaseUrl && config.supabaseSecretKey ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }) : null;
 let queue = Promise.resolve();
 const empty = (): LocalDatabase => ({ settings: [], members: [], rewards: [], blacklist: [] });
-export const defaultSettings = (guildId: string): LevelingSettings => ({ guildId, globalMultiplier: 1, chatMultiplier: 1, voiceMultiplier: 1, boosterRoleId: DEFAULT_BOOSTER_ROLE, boosterMultiplier: 2, chatCooldownSeconds: 30, voiceCooldownSeconds: 300, announcementChannelId: DEFAULT_CHANNEL, maxLevel: 100, enabled: true });
+export const defaultSettings = (guildId: string): LevelingSettings => ({ guildId, globalMultiplier: 1, chatMultiplier: 1, voiceMultiplier: 1, prismaReplyBonus: 1, boosterRoleId: DEFAULT_BOOSTER_ROLE, boosterMultiplier: 2, chatCooldownSeconds: 30, voiceCooldownSeconds: 300, announcementChannelId: DEFAULT_CHANNEL, maxLevel: 100, enabled: true });
 
 async function readLocal(): Promise<LocalDatabase> { try { return { ...empty(), ...JSON.parse(await readFile(file, "utf8")) } as LocalDatabase; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return empty(); throw error; } }
 async function writeLocal(db: LocalDatabase): Promise<void> { await mkdir(path.dirname(file), { recursive: true }); const temp = `${file}.${process.pid}.tmp`; await writeFile(temp, JSON.stringify(db, null, 2), { encoding: "utf8", mode: 0o600 }); await rename(temp, file); await chmod(file, 0o600).catch(() => undefined); }
@@ -26,11 +26,11 @@ function memberFromRow(row: Record<string, unknown>): MemberLevel { return { gui
 function rewardFromRow(row: Record<string, unknown>): LevelReward { return { guildId: String(row.guild_id), level: Number(row.level), roleId: String(row.role_id), emoji: String(row.emoji ?? ""), title: String(row.title ?? "Novo marco conquistado"), shortMessage: String(row.short_message ?? "Marco conquistado") }; }
 
 export async function getSettings(guildId: string): Promise<LevelingSettings> {
-  if (!supabase) { await queue; return (await readLocal()).settings.find((item) => item.guildId === guildId) ?? defaultSettings(guildId); }
+  if (!supabase) { await queue; return { ...defaultSettings(guildId), ...(await readLocal()).settings.find((item) => item.guildId === guildId) }; }
   const { data, error } = await supabase.from("leveling_settings").select("*").eq("guild_id", guildId).maybeSingle();
   if (error) throw new Error(`[LEVELING] Falha ao ler configuracao: ${error.message}`);
   if (!data) { const value = defaultSettings(guildId); const { error: insertError } = await supabase.from("leveling_settings").insert({ guild_id: guildId }); if (insertError) throw new Error(`[LEVELING] Falha ao criar configuracao: ${insertError.message}`); return value; }
-  return { guildId, globalMultiplier: Number(data.global_multiplier), chatMultiplier: Number(data.chat_multiplier), voiceMultiplier: Number(data.voice_multiplier), boosterRoleId: data.booster_role_id ? String(data.booster_role_id) : DEFAULT_BOOSTER_ROLE, boosterMultiplier: Number(data.booster_multiplier), chatCooldownSeconds: Number(data.chat_cooldown_seconds), voiceCooldownSeconds: Number(data.voice_cooldown_seconds), announcementChannelId: String(data.announcement_channel_id), maxLevel: Number(data.max_level), enabled: data.enabled === true };
+  return { guildId, globalMultiplier: Number(data.global_multiplier), chatMultiplier: Number(data.chat_multiplier), voiceMultiplier: Number(data.voice_multiplier), prismaReplyBonus: Number(data.prisma_reply_bonus ?? 1), boosterRoleId: data.booster_role_id ? String(data.booster_role_id) : DEFAULT_BOOSTER_ROLE, boosterMultiplier: Number(data.booster_multiplier), chatCooldownSeconds: Number(data.chat_cooldown_seconds), voiceCooldownSeconds: Number(data.voice_cooldown_seconds), announcementChannelId: String(data.announcement_channel_id), maxLevel: Number(data.max_level), enabled: data.enabled === true };
 }
 
 export async function getBlacklist(guildId: string, type: "chat" | "voice"): Promise<BlacklistEntry[]> {

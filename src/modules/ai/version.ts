@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.63";
+export const PRISMA_AI_VERSION = "v2.64";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Quando a Prisma realmente responde a uma mensagem que ganhou XP de chat, a pessoa recebe mais 1 XP usando o mesmo cooldown do chat geral, inclusive durante o acesso livre dos fins de semana.",
   "Aos sábados e domingos, todas as pessoas podem conversar com a Prisma; durante a semana, o acesso continua exclusivo do cargo Prisma AI, assim como o painel pessoal.",
   "Iniciar um Boost não concede mais automaticamente o cargo de verificado; esse cargo agora continua exclusivo do fluxo normal de verificação e aprovação da equipe.",
   "Quando uma nova informação corrige uma memória da mesma entidade, a Prisma agora reescreve o registro existente no momento do salvamento, sem alterar as demais validações de memória.",
@@ -97,6 +98,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Conceder 1 XP adicional quando responder de verdade a uma mensagem elegível no sistema de evolução, respeitando o mesmo cooldown do chat geral.",
   "Liberar a conversa com todas as pessoas aos sábados e domingos no fuso horário configurado, mantendo o painel pessoal e o acesso nos demais dias exclusivos do cargo Prisma AI.",
   "Avisar a equipe no canal de erros quando uma resposta ou ação da IA falhar, preservando o contexto necessário para diagnóstico sem expor credenciais.",
   "Manter o assunto exato de uma mensagem respondida, priorizar o contexto do chat em perguntas curtas e consultar a atividade musical somente quando a pessoa falar explicitamente sobre o que está ouvindo.",

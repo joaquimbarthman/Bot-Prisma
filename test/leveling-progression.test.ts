@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateLevel, calculateXpAward, getTotalXpRequired, getXpRequiredForLevel } from "../src/modules/leveling/progression.js";
+import { consumePrismaReplyBonusEligibility, markPrismaReplyBonusEligible } from "../src/modules/leveling/index.js";
 
 test("calcula XP progressivo sem tabela fixa", () => {
   assert.equal(getXpRequiredForLevel(1), 32);
@@ -29,4 +30,13 @@ test("rejeita entradas invalidas", () => {
 test("soma XP global, da atividade e do Booster", () => {
   assert.equal(calculateXpAward(1, 1), 2);
   assert.equal(calculateXpAward(1, 1, 2), 4);
+});
+
+test("bonus da resposta da Prisma so pode ser consumido uma vez e antes de expirar", () => {
+  const now = Date.now();
+  markPrismaReplyBonusEligible("mensagem-valida", now + 2_000);
+  assert.equal(consumePrismaReplyBonusEligibility("mensagem-valida", now + 1_000), true);
+  assert.equal(consumePrismaReplyBonusEligibility("mensagem-valida", now + 1_000), false);
+  markPrismaReplyBonusEligible("mensagem-expirada", now + 2_000);
+  assert.equal(consumePrismaReplyBonusEligibility("mensagem-expirada", now + 2_001), false);
 });

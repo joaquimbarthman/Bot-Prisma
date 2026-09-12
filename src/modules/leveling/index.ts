@@ -7,6 +7,7 @@ import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, ge
 const chatCooldowns = new Map<string, number>();
 const voiceEligibleSince = new Map<string, number>();
 const voiceGuildsProcessing = new Set<string>();
+const pendingPrismaReplyBonuses = new Map<string, number>();
 const cache = new Map<string, { expiresAt: number; settings: Awaited<ReturnType<typeof getSettings>>; chat: Awaited<ReturnType<typeof getBlacklist>>; voice: Awaited<ReturnType<typeof getBlacklist>> }>();
 const CACHE_MS = 60_000;
 
@@ -16,6 +17,18 @@ function blacklisted(entries: Awaited<ReturnType<typeof getBlacklist>>, channelI
 function xpAmount(member: GuildMember, sourceXp: number, settings: Awaited<ReturnType<typeof getSettings>>): number {
   const isBooster = !!settings.boosterRoleId && member.roles.cache.has(settings.boosterRoleId);
   return calculateXpAward(settings.globalMultiplier, sourceXp, isBooster ? settings.boosterMultiplier : 0);
+}
+
+export function markPrismaReplyBonusEligible(messageId: string, expiresAt = Date.now() + 5 * 60_000): void {
+  const now = Date.now();
+  for (const [id, expiry] of pendingPrismaReplyBonuses) if (expiry < now) pendingPrismaReplyBonuses.delete(id);
+  pendingPrismaReplyBonuses.set(messageId, expiresAt);
+}
+
+export function consumePrismaReplyBonusEligibility(messageId: string, now = Date.now()): boolean {
+  const expiresAt = pendingPrismaReplyBonuses.get(messageId);
+  pendingPrismaReplyBonuses.delete(messageId);
+  return expiresAt !== undefined && expiresAt >= now;
 }
 
 function panelDate(date = new Date()): string {
@@ -120,8 +133,18 @@ export async function handleLevelingMessage(message: Message): Promise<boolean> 
   const amount = xpAmount(message.member, settings.chatMultiplier, settings); if (!amount) return false;
   chatCooldowns.set(key, now);
   const result = await awardXp(message.guildId, message.author.id, amount, "chat", settings.maxLevel);
+  markPrismaReplyBonusEligible(message.id);
   await processLevelChange(message.member, result.before.level, result.after.level, settings.announcementChannelId);
   return false;
+}
+
+export async function awardPrismaReplyBonus(message: Message): Promise<boolean> {
+  if (!message.inGuild() || !message.member || !consumePrismaReplyBonusEligibility(message.id)) return false;
+  const settings = await getSettings(message.guildId);
+  if (!settings.enabled || settings.prismaReplyBonus <= 0) return false;
+  const result = await awardXp(message.guildId, message.author.id, settings.prismaReplyBonus, "chat", settings.maxLevel);
+  await processLevelChange(message.member, result.before.level, result.after.level, settings.announcementChannelId);
+  return true;
 }
 
 async function processVoiceGuild(guild: Guild): Promise<void> {

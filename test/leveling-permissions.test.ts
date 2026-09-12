@@ -16,9 +16,9 @@ test("beneficios de canal sao cumulativos entre os marcos", () => {
   assert.equal(levelChannelBenefits(50).length, levelChannelBenefits(35).length);
 });
 
-test("alterar o proprio apelido e liberado a partir do nivel 10", () => {
-  assert.deepEqual(levelRoleBenefits(9), []);
-  assert.deepEqual(levelRoleBenefits(10), [PermissionFlagsBits.ChangeNickname]);
+test("alterar o proprio apelido e liberado a partir do nivel 1", () => {
+  assert.deepEqual(levelRoleBenefits(0), []);
+  assert.deepEqual(levelRoleBenefits(1), [PermissionFlagsBits.ChangeNickname]);
   assert.deepEqual(levelRoleBenefits(100), [PermissionFlagsBits.ChangeNickname]);
 });
 

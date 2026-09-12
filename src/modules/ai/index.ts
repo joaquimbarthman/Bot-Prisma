@@ -16,6 +16,7 @@ import { asksAboutPrismaCreator } from "./creator.js";
 import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./daily-summary.js";
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
 import { analyzeSocialTreatment } from "./social-reciprocity.js";
+import { awardPrismaReplyBonus } from "../leveling/index.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -478,6 +479,7 @@ export async function handleAiMessage(client: Client, message: Message): Promise
       ...allowedMentionUserIds,
     ])];
     const sent = await message.reply({ content: `${prefix}${answer}`, allowedMentions: { parse: [], users: replyMentionUserIds, roles: [], repliedUser: false } });
+    await awardPrismaReplyBonus(message).catch((error) => console.error(`[LEVELING] A Prisma respondeu, mas não foi possível entregar o bônus de XP para ${message.author.id}:`, error));
     // A autorização pertence a uma única resposta; descarte explícito após o envio.
     allowedMentionUserIds.length = 0;
     replyContext.allowedMentionUserIds = [];
