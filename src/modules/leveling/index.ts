@@ -1,6 +1,7 @@
 import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
+import { clearLevelBenefitPermissions, syncLevelBenefitPermissions } from "./permissions.js";
 import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
@@ -250,8 +251,25 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
   const legacyLevel = input.match(/nivel\((\d{1,3})\)/i)?.[1];
   const level = Number(shortLevel ?? legacyLevel);
   if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply(command === "!addl" ? "Use `!addl <nivel> @cargo`." : "Use `!removel <nivel>`."); return true; }
-  if (command === "!removel") { await removeReward(message.guild.id, level); await message.reply(`Recompensa do nivel ${level} removida.`); return true; }
-  const role = message.mentions.roles.first(); if (!role) { await message.reply("Use `!addl <nivel> @cargo`."); return true; } const copy = rewardCopy[level] ?? ["✦", `Novo marco no nivel ${level}`, "Marco conquistado"]; await setReward({ guildId: message.guild.id, level, roleId: role.id, emoji: copy[0], title: copy[1], shortMessage: copy[2] }); await message.reply(`Nivel ${level} vinculado a ${role}.`); return true;
+  if (command === "!removel") {
+    const existing = (await getRewards(message.guild.id)).find((item) => item.level === level);
+    await removeReward(message.guild.id, level);
+    const remaining = await getRewards(message.guild.id);
+    if (existing && !remaining.some((item) => item.roleId === existing.roleId)) await clearLevelBenefitPermissions(message.guild, existing.roleId);
+    await syncLevelBenefitPermissions(message.guild, remaining);
+    await message.reply(`Recompensa do nivel ${level} removida e permissoes sincronizadas.`);
+    return true;
+  }
+  const role = message.mentions.roles.first();
+  if (!role) { await message.reply("Use `!addl <nivel> @cargo`."); return true; }
+  const existing = (await getRewards(message.guild.id)).find((item) => item.level === level);
+  const copy = rewardCopy[level] ?? ["✦", `Novo marco no nivel ${level}`, "Marco conquistado"];
+  await setReward({ guildId: message.guild.id, level, roleId: role.id, emoji: copy[0], title: copy[1], shortMessage: copy[2] });
+  const rewards = await getRewards(message.guild.id);
+  if (existing && existing.roleId !== role.id && !rewards.some((item) => item.roleId === existing.roleId)) await clearLevelBenefitPermissions(message.guild, existing.roleId);
+  await syncLevelBenefitPermissions(message.guild, rewards);
+  await message.reply(`Nivel ${level} vinculado a ${role} e permissoes sincronizadas.`);
+  return true;
 }
 
 async function sendRank(target: Message, member: GuildMember): Promise<void> {
@@ -323,6 +341,8 @@ export async function syncLevelingRoles(
 ): Promise<void> {
   const rewards = await getRewards(guild.id);
   if (!rewards.length) return;
+  const updatedChannels = await syncLevelBenefitPermissions(guild, rewards);
+  console.log(`[LEVELING] Beneficios aplicados em ${updatedChannels} sobrescrita(s) de canal.`);
   members ??= await guild.members.fetch();
   for (const member of members.values()) {
     if (member.user.bot) continue;

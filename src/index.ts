@@ -16,6 +16,7 @@ import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/in
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
 import { handleDirectMessage } from "./modules/direct-message/index.js";
 import { handleLevelingMemberRemove, handleLevelingMessage, handleLevelingVoiceState, startLevelingModule, syncLevelingRoles } from "./modules/leveling/index.js";
+import { syncLevelBenefitsForChannel } from "./modules/leveling/permissions.js";
 import { interactionErrorContext, messageErrorContext, publicInteractionAction, reportPublicError, type PublicFeature } from "./public-error-reporter.js";
 
 validateConfig();
@@ -107,6 +108,7 @@ client.on(Events.ShardError, (error, shardId) => {
 
 client.on(Events.ChannelCreate, async (channel) => {
   await handleNewPunishmentChannel(channel).catch((error) => console.error("[CASTIGO] Falha ao proteger novo canal:", error));
+  await syncLevelBenefitsForChannel(channel).catch((error) => console.error("[LEVELING] Falha ao aplicar beneficios no novo canal:", error));
 });
 
 client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
