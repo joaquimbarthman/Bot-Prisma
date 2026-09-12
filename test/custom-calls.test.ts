@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCustomCallName, parseCustomCallEmoji } from "../src/modules/custom-calls/index.js";
+import { buildCustomCallName, buildCustomCallRoleName, parseCustomCallEmoji } from "../src/modules/custom-calls/index.js";
 
-test("gera o mesmo nome em letras minúsculas para canal e cargo", () => {
+test("usa call minúscula no canal e Call maiúscula no cargo", () => {
   assert.equal(buildCustomCallName("DscJoaquim"), "💦・call dscjoaquim");
+  assert.equal(buildCustomCallRoleName("DscJoaquim"), "💦・Call DscJoaquim");
 });
 
 test("remove quebras de linha e respeita o limite de nome do Discord", () => {
@@ -14,6 +15,7 @@ test("remove quebras de linha e respeita o limite de nome do Discord", () => {
 
 test("aplica um emoji escolhido ao canal e ao cargo", () => {
   assert.equal(buildCustomCallName("DscJoaquim", "🌸"), "🌸・call dscjoaquim");
+  assert.equal(buildCustomCallRoleName("DscJoaquim", "🌸"), "🌸・Call DscJoaquim");
 });
 
 test("aceita um único emoji Unicode e recusa texto ou emoji do servidor", () => {
