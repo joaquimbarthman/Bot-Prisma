@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.64";
+export const PRISMA_AI_VERSION = "v2.65";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A Prisma agora entende perguntas como 'tá bem?', 'tudo bem?', 'td bem?' e 'tá bem, Prisma?' como perguntas sobre como ela está, sem substituí-las por uma reação fora de contexto.",
   "Quando a Prisma realmente responde a uma mensagem que ganhou XP de chat, a pessoa recebe mais 1 XP usando o mesmo cooldown do chat geral, inclusive durante o acesso livre dos fins de semana.",
   "Aos sábados e domingos, todas as pessoas podem conversar com a Prisma; durante a semana, o acesso continua exclusivo do cargo Prisma AI, assim como o painel pessoal.",
   "Iniciar um Boost não concede mais automaticamente o cargo de verificado; esse cargo agora continua exclusivo do fluxo normal de verificação e aprovação da equipe.",
