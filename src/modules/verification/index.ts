@@ -392,6 +392,19 @@ async function scheduleDeletion(channel: TextChannel): Promise<void> {
   setTimeout(() => channel.delete("Atendimento de verificação concluído").catch(console.error), verification.deleteDelaySeconds * 1_000);
 }
 
+async function blockApplicantMessages(channel: TextChannel, userId: string): Promise<void> {
+  await channel.permissionOverwrites.edit(userId, {
+    SendMessages: false,
+    SendMessagesInThreads: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false,
+  }, { reason: "Atendimento de verificação finalizado" });
+}
+
+export function singleParagraphReason(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 async function configureChannelPermissions(guild: Guild): Promise<void> {
   const botId = guild.members.me?.id; if (!botId) return;
   const panel = await guild.channels.fetch(verification.panelChannelId).catch(() => null);
@@ -471,6 +484,7 @@ export async function startVerificationModule(client: Client): Promise<void> {
         }
       }
       if (!state?.deleteAt) continue;
+      await blockApplicantMessages(textChannel, state.userId).catch(console.error);
       const remaining = Date.parse(state.deleteAt) - Date.now();
       if (remaining <= 0) await channel.delete("Limpeza de verificação concluída").catch(console.error);
       else setTimeout(() => channel.delete("Limpeza de verificação concluída").catch(console.error), remaining);
@@ -559,7 +573,10 @@ export async function handleVerificationInteraction(interaction: Interaction): P
   if (action === "close" && interaction.isButton()) {
     const next = await setChannelState(channel, { status: "encerrada", staffId: staff.id });
     const panel = interaction.message; await panel.edit({ components: staffPanelComponents({ ...state, status: "encerrada", staffId: staff.id, staffUsername: staff.user.username }, false) });
-    if (next) await sendLog(interaction.client, next, staff, channel.id, "Encerrada", undefined, { name: state.name, birthDate: state.birthDate }); await channel.send(`<@${state.userId}>, este atendimento foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`); await scheduleDeletion(channel); await interaction.followUp({ content: "Atendimento encerrado.", flags: ["Ephemeral"] }); return true;
+    await blockApplicantMessages(channel, state.userId);
+    if (next) await sendLog(interaction.client, next, staff, channel.id, "Encerrada", undefined, { name: state.name, birthDate: state.birthDate });
+    await channel.send(`<@${state.userId}>, este atendimento foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
+    await scheduleDeletion(channel); await interaction.followUp({ content: "Atendimento encerrado.", flags: ["Ephemeral"] }); return true;
   }
   return true;
 }
@@ -591,6 +608,7 @@ async function approve(interaction: ButtonInteraction, channel: TextChannel, sta
   await member.roles.add(verification.verifiedRoleId!, `Verificação aprovada por ${staff.user.tag}`);
   const next = await setChannelState(channel, { status: "aprovada", staffId: staff.id }); const panel = await findStaffPanel(channel);
   if (panel) await panel.edit({ components: staffPanelComponents({ ...state, status: "aprovada", staffId: staff.id, staffUsername: staff.user.username }, false) });
+  await blockApplicantMessages(channel, state.userId);
   await channel.send(`<@${state.userId}>, sua verificação foi **aprovada** e o cargo foi entregue. Este canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   await member.send("Sua verificação no servidor foi aprovada. Você já recebeu o cargo de verificado.").catch(() => undefined);
   if (next) await sendLog(interaction.client, next, staff, channel.id, "Aprovada", undefined, { name: state.name, birthDate: state.birthDate }); await scheduleDeletion(channel);
@@ -598,10 +616,11 @@ async function approve(interaction: ButtonInteraction, channel: TextChannel, sta
 }
 
 async function reject(interaction: ModalSubmitInteraction, channel: TextChannel, state: State, staff: GuildMember): Promise<true> {
-  await interaction.deferReply({ flags: ["Ephemeral"] }); const reason = interaction.fields.getTextInputValue("reason").trim();
+  await interaction.deferReply({ flags: ["Ephemeral"] }); const reason = singleParagraphReason(interaction.fields.getTextInputValue("reason"));
   const next = await setChannelState(channel, { status: "recusada", staffId: staff.id }); const panel = await findStaffPanel(channel);
   if (panel) await panel.edit({ components: staffPanelComponents({ ...state, status: "recusada", reason, staffId: staff.id, staffUsername: staff.user.username }, false) });
-  await channel.send(`<@${state.userId}>, sua verificação foi **recusada**. Motivo: ${reason}\nEste canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
+  await blockApplicantMessages(channel, state.userId);
+  await channel.send(`<@${state.userId}>, sua verificação foi **recusada**. Motivo: ${reason} Este canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   const member = await interaction.guild!.members.fetch(state.userId).catch(() => null);
   await member?.send(`Sua verificação foi recusada. Motivo: ${reason}`).catch(() => undefined);
   if (next) await sendLog(interaction.client, next, staff, channel.id, "Recusada", reason, { name: state.name, birthDate: state.birthDate }); await scheduleDeletion(channel);

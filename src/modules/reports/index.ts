@@ -21,6 +21,7 @@ import { reportWarningEmoji, verificationBlockEmoji, verificationCheckEmoji, lfg
 
 type ReportStatus = "pending" | "resolved" | "unresolved" | "closed";
 type ReportState = { userId: string; status: ReportStatus };
+const REPORT_DELETE_DELAY_MS = 60_000;
 
 export function reportChannelName(displayName: string): string {
   const nickname = displayName
@@ -307,8 +308,15 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
   const transcript = await reportTranscript(channel);
   await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
-  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 10 segundos.", flags: ["Ephemeral"] });
-  setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), 10_000).unref();
+  await channel.permissionOverwrites.edit(userId, {
+    SendMessages: false,
+    SendMessagesInThreads: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false,
+  }, { reason: "Atendimento finalizado" });
+  await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 1 minuto.`, allowedMentions: { users: [userId] } });
+  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 1 minuto.", flags: ["Ephemeral"] });
+  setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), REPORT_DELETE_DELAY_MS).unref();
 }
 
 export async function handleReportInteraction(interaction: import("discord.js").Interaction): Promise<boolean> {

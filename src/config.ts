@@ -50,7 +50,7 @@ export const config = {
     verifiedChatChannelId: process.env.VERIFIED_CHAT_CHANNEL_ID?.trim() || "138026764260085821",
     verifiedRoleId: process.env.VERIFIED_ROLE_ID?.trim() || "1538272377111318649",
     logChannelId: process.env.VERIFICATION_LOG_CHANNEL_ID?.trim(),
-    deleteDelaySeconds: integer("VERIFICATION_DELETE_DELAY_SECONDS", 10),
+    deleteDelaySeconds: integer("VERIFICATION_DELETE_DELAY_SECONDS", 60),
   },
   reports: {
     panelChannelId: process.env.REPORT_PANEL_CHANNEL_ID?.trim() || "1538296088459608087",
