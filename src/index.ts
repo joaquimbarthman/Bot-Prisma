@@ -10,7 +10,7 @@ import { grantAccessRoleToBooster, syncBoosterAccessRoles } from "./modules/ai/p
 import { handleVerificationInteraction, handleVerificationMessage, startVerificationModule } from "./modules/verification/index.js";
 import { handleReportInteraction, startReportModule } from "./modules/reports/index.js";
 import { handleLfgInteraction, handleLfgMessageDelete, handleLfgVoiceState, startLfgCleanup, startLfgModule } from "./modules/lfg/index.js";
-import { handleCustomCallInteraction, startCustomCallsModule, syncCustomCallAccess, syncCustomCallAccessRoles } from "./modules/custom-calls/index.js";
+import { handleCustomCallInteraction, handleCustomCallVoiceState, startCustomCallsModule, syncCustomCallAccess, syncCustomCallAccessRoles, syncCustomCallHistory } from "./modules/custom-calls/index.js";
 import { handleNewPunishmentChannel, syncPunishmentPermissions } from "./modules/moderation/punishment-role.js";
 import { handleBumpMessage, startBumpReminder } from "./modules/bump-reminder/index.js";
 import { grantPairedRoleOnce, syncPairedRoleGrants } from "./modules/paired-role-grant/index.js";
@@ -49,6 +49,7 @@ client.once(Events.ClientReady, async (ready) => {
   await startLfgModule(ready);
   const guild = config.guildId ? await ready.guilds.fetch(config.guildId).catch(() => null) : ready.guilds.cache.first();
   if (guild) {
+    await syncCustomCallHistory(guild).catch((error) => console.error("[CUSTOM-CALL] Falha ao proteger o histórico das calls existentes:", error));
     // Buscar todos os membros usa o opcode 8, que possui um limite rigoroso no
     // Gateway. As sincronizações abaixo devem compartilhar a mesma resposta.
     const members = await guild.members.fetch().catch((error) => {
@@ -116,6 +117,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
 });
 
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  await handleCustomCallVoiceState(oldState, newState).catch((error) => console.error(`[CUSTOM-CALL] Falha ao processar entrada ou saída da call de ${newState.id}:`, error));
   await handleLevelingVoiceState(oldState, newState).catch((error) => console.error(`[LEVELING] Falha ao atualizar tempo de voz de ${newState.id}:`, error));
   await handleLfgVoiceState(oldState, newState).catch((error) => console.error(`[LFG] Falha ao atualizar a call atual de ${newState.id}:`, error));
 });

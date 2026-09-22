@@ -1,16 +1,71 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, ModalBuilder, PermissionFlagsBits, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
-  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type ModalSubmitInteraction, type Snowflake, type UserSelectMenuInteraction,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ComponentType, ModalBuilder, PermissionFlagsBits, SeparatorSpacingSize, SnowflakeUtil, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
+  type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type ModalSubmitInteraction, type Snowflake, type UserSelectMenuInteraction, type VoiceChannel, type VoiceState,
 } from "discord.js";
 import { config } from "../../config.js";
 import { verificationCheckEmoji, lfgSoundEmoji, verificationCloseEmoji, customCallAddEmoji, customCallRemoveEmoji, customCallEmojiPickerEmoji, customCallTrashEmoji } from "../../emoji-manager.js";
-import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallMembers, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
+import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallByChannel, getCustomCallMembers, listCustomCalls, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
 
 const PREFIX = "custom-call:";
 const locks = new Set<string>();
 const privateMessageCleanups = new Map<string, Array<() => Promise<unknown>>>();
 const PUBLIC_PANEL_COLOR = 0x008000;
 const PRIVATE_PANEL_COLOR = 0x5865f2;
+const JOIN_BOT_ROLE_ID = "1551806974885109930";
+type JoinSession = { botId: string; joinedAt: number };
+const joinSessions = new Map<string, JoinSession>();
+
+function joinSessionKey(guildId: string, channelId: string): string { return `${guildId}:${channelId}`; }
+
+export function messageDuringConfirmedJoin(createdAt: number, joinedAt: number, leftAt: number): boolean {
+  return createdAt >= joinedAt && createdAt <= leftAt;
+}
+
+async function protectCallHistory(channel: VoiceChannel, roleId: string, botId: string): Promise<void> {
+  await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { ViewChannel: false, Connect: false, ReadMessageHistory: false });
+  await channel.permissionOverwrites.edit(roleId, { ViewChannel: true, ReadMessageHistory: true });
+  if (channel.guild.roles.cache.has(JOIN_BOT_ROLE_ID) || await channel.guild.roles.fetch(JOIN_BOT_ROLE_ID).catch(() => null)) {
+    await channel.permissionOverwrites.edit(JOIN_BOT_ROLE_ID, { ViewChannel: true, Connect: true, ReadMessageHistory: false });
+  }
+  await channel.permissionOverwrites.edit(botId, { ViewChannel: true, ReadMessageHistory: true, ManageMessages: true });
+}
+
+export async function handleCustomCallVoiceState(oldState: VoiceState, newState: VoiceState): Promise<void> {
+  if (oldState.channelId === newState.channelId) return;
+  const transitionAt = Date.now();
+  const member = newState.member ?? oldState.member ?? await newState.guild.members.fetch(newState.id).catch(() => null);
+  if (!member?.user.bot) return;
+  if (oldState.channelId) {
+    const key = joinSessionKey(oldState.guild.id, oldState.channelId);
+    const session = joinSessions.get(key);
+    if (session?.botId === oldState.id) {
+      joinSessions.delete(key);
+      const channel = oldState.channel;
+      if (channel?.type === ChannelType.GuildVoice) {
+        const leftAt = transitionAt;
+        let before = SnowflakeUtil.generate({ timestamp: leftAt + 1 }).toString();
+        while (true) {
+          const page = await channel.messages.fetch({ limit: 100, before }).catch((error) => {
+            console.error(`[CUSTOM-CALL] Falha ao consultar chat da call ${channel.id}:`, error);
+            return null;
+          });
+          if (!page?.size) break;
+          const messages = [...page.values()].sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+          for (const message of messages) {
+            if (messageDuringConfirmedJoin(message.createdTimestamp, session.joinedAt, leftAt)) {
+              await message.delete().catch((error) => console.error(`[CUSTOM-CALL] Falha ao apagar mensagem ${message.id}:`, error));
+            }
+          }
+          if (page.size < 100 || messages.at(-1)!.createdTimestamp < session.joinedAt) break;
+          before = messages.at(-1)!.id;
+        }
+      }
+    }
+  }
+  if (member.roles.cache.has(JOIN_BOT_ROLE_ID) && newState.channelId && newState.channel?.type === ChannelType.GuildVoice && await getCustomCallByChannel(newState.guild.id, newState.channelId)) {
+    joinSessions.set(joinSessionKey(newState.guild.id, newState.channelId), { botId: newState.id, joinedAt: transitionAt });
+  }
+}
 
 type CustomCallComponentInteraction = ButtonInteraction | UserSelectMenuInteraction | ModalSubmitInteraction;
 
@@ -185,8 +240,8 @@ function deleteConfirmationPanel(): APIContainerComponent[] {
   );
 }
 async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\`・dono <@${call.ownerId}>${targetUserId ? `・alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"}・Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
-async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; call = { ...call, emoji: parseCustomCallEmoji(call.emoji ?? "") ?? DEFAULT_CALL_EMOJI }; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expectedChannelName = buildCustomCallName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); const expectedRoleName = buildCustomCallRoleName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); if (!role) { role = await member.guild.roles.create({ name: expectedRoleName, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true }); }
-  if (channel.name !== expectedChannelName) await channel.setName(expectedChannelName, "Sincronização do username da call personalizada"); if (role.name !== expectedRoleName) await role.setName(expectedRoleName, "Sincronização do username da call personalizada"); return call; }
+async function ensureOwnedCall(member: GuildMember): Promise<CustomCall | null> { let call = await getCustomCall(member.guild.id, member.id); if (!call) return null; call = { ...call, emoji: parseCustomCallEmoji(call.emoji ?? "") ?? DEFAULT_CALL_EMOJI }; const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); if (!channel?.isVoiceBased()) { const role = await member.guild.roles.fetch(call.roleId).catch(() => null); await role?.delete("Call personalizada sem canal").catch(() => undefined); await deleteCustomCallRecord(call); return null; } let role = await member.guild.roles.fetch(call.roleId).catch(() => null); const expectedChannelName = buildCustomCallName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); const expectedRoleName = buildCustomCallRoleName(member.user.username, call.emoji ?? DEFAULT_CALL_EMOJI); if (!role) { role = await member.guild.roles.create({ name: expectedRoleName, reason: `Reconstrução da call personalizada de ${member.id}` }); call = { ...call, roleId: role.id, updatedAt: new Date().toISOString() }; await saveCustomCall(call); const savedMembers = await getCustomCallMembers(call.id); await Promise.all([member.id, ...savedMembers.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((item) => item.roles.add(role!, "Reconstrução de acesso à call personalizada")).catch(() => undefined))); await channel.permissionOverwrites.edit(role.id, { ViewChannel: true, Connect: true, Speak: true, ReadMessageHistory: true }); }
+  if (channel.type === ChannelType.GuildVoice && member.guild.members.me) await protectCallHistory(channel, role.id, member.guild.members.me.id); if (channel.name !== expectedChannelName) await channel.setName(expectedChannelName, "Sincronização do username da call personalizada"); if (role.name !== expectedRoleName) await role.setName(expectedRoleName, "Sincronização do username da call personalizada"); return call; }
 async function owner(interaction: Interaction): Promise<GuildMember | null> { if (!interaction.inGuild() || !interaction.guild) return null; const member = interaction.guild.members.cache.get(interaction.user.id) ?? await interaction.guild.members.fetch(interaction.user.id).catch(() => null); return member && hasAccess(member) ? member : null; }
 
 export async function syncCustomCallAccess(member: GuildMember): Promise<boolean> {
@@ -233,7 +288,7 @@ export async function grantManualCustomCallAccess(member: GuildMember): Promise<
 export async function revokeManualCustomCallAccess(member: GuildMember): Promise<void> { await setCustomCallAccess(member.guild.id, member.id, { manualAccess: false }); await syncCustomCallAccess(member); }
 export async function syncCustomCallAccessRoles(guild: Guild, members?: Collection<Snowflake, GuildMember>): Promise<void> { members ??= await guild.members.fetch(); for (const member of members.values()) await syncCustomCallAccess(member); }
 
-async function createCall(interaction: ButtonInteraction, member: GuildMember): Promise<void> { const key = `${member.guild.id}:${member.id}`; if (locks.has(key)) { await interaction.update({ components: container("## Calls Personalizadas\nSua call já está sendo criada.") }); return; } locks.add(key); let roleId: string | null = null; try { const existing = await ensureOwnedCall(member); if (existing) { await interaction.update({ components: await mainPanel(existing, member) }); return; } const category = await member.guild.channels.fetch(config.customCalls.categoryId).catch(() => null); if (!category || category.type !== ChannelType.GuildCategory) throw new Error(`CUSTOM_CALL_CATEGORY_ID ${config.customCalls.categoryId} não aponta para uma categoria válida.`); const me = member.guild.members.me; if (!me?.permissions.has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers])) throw new Error("A Prisma precisa das permissões Gerenciar canais, Gerenciar cargos e Mover membros."); const channelName = buildCustomCallName(member.user.username); const roleName = buildCustomCallRoleName(member.user.username); const role = await member.guild.roles.create({ name: roleName, reason: `Call personalizada de ${member.id}` }); roleId = role.id; const channel = await member.guild.channels.create({ name: channelName, type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: member.guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.Connect] }, { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] }, { id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers] }], reason: `Call personalizada de ${member.id}` }); const now = new Date().toISOString(); const call: CustomCall = { id: crypto.randomUUID(), guildId: member.guild.id, ownerId: member.id, voiceChannelId: channel.id, roleId: role.id, createdAt: now, updatedAt: now }; try { await member.roles.add(role, "Dono da call personalizada"); await saveCustomCall(call); } catch (error) { await channel.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); await role.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); throw error; } await log(interaction.client, "CALL_CREATED", call); await interaction.update({ components: await mainPanel(call, member) }); } finally { locks.delete(key); if (roleId && !(await getCustomCall(member.guild.id, member.id).catch(() => null))) await member.guild.roles.delete(roleId, "Limpeza de criação incompleta").catch(() => undefined); } }
+async function createCall(interaction: ButtonInteraction, member: GuildMember): Promise<void> { const key = `${member.guild.id}:${member.id}`; if (locks.has(key)) { await interaction.update({ components: container("## Calls Personalizadas\nSua call já está sendo criada.") }); return; } locks.add(key); let roleId: string | null = null; try { const existing = await ensureOwnedCall(member); if (existing) { await interaction.update({ components: await mainPanel(existing, member) }); return; } const category = await member.guild.channels.fetch(config.customCalls.categoryId).catch(() => null); if (!category || category.type !== ChannelType.GuildCategory) throw new Error(`CUSTOM_CALL_CATEGORY_ID ${config.customCalls.categoryId} não aponta para uma categoria válida.`); const me = member.guild.members.me; if (!me?.permissions.has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers])) throw new Error("A Prisma precisa das permissões Gerenciar canais, Gerenciar cargos e Mover membros."); const channelName = buildCustomCallName(member.user.username); const roleName = buildCustomCallRoleName(member.user.username); const role = await member.guild.roles.create({ name: roleName, reason: `Call personalizada de ${member.id}` }); roleId = role.id; const channel = await member.guild.channels.create({ name: channelName, type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: member.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ReadMessageHistory] }, { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.ReadMessageHistory] }, { id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.MoveMembers] }], reason: `Call personalizada de ${member.id}` }); const now = new Date().toISOString(); const call: CustomCall = { id: crypto.randomUUID(), guildId: member.guild.id, ownerId: member.id, voiceChannelId: channel.id, roleId: role.id, createdAt: now, updatedAt: now }; try { await member.roles.add(role, "Dono da call personalizada"); await saveCustomCall(call); await protectCallHistory(channel, role.id, me.id); } catch (error) { await channel.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); await role.delete("Falha ao concluir criação da call personalizada").catch(() => undefined); await deleteCustomCallRecord(call).catch(() => undefined); throw error; } await log(interaction.client, "CALL_CREATED", call); await interaction.update({ components: await mainPanel(call, member) }); } finally { locks.delete(key); if (roleId && !(await getCustomCall(member.guild.id, member.id).catch(() => null))) await member.guild.roles.delete(roleId, "Limpeza de criação incompleta").catch(() => undefined); } }
 async function selection(interaction: UserSelectMenuInteraction, kind: "add" | "remove", member: GuildMember): Promise<void> {
   const call = await ensureOwnedCall(member);
   if (!call || call.ownerId !== interaction.user.id) { await interaction.update({ components: createPanel(member.user.username) }); await sendNotification(interaction, "**Sua call não foi encontrada!**"); return; }
@@ -287,6 +342,15 @@ async function changeEmoji(interaction: ModalSubmitInteraction, member: GuildMem
   await log(interaction.client, "CALL_EMOJI_CHANGED", updated);
   await interaction.editReply({ components: await mainPanel(updated, member) });
   await sendNotification(interaction, `Emoji alterado para ${emoji} no canal e no cargo da sua call.`);
+}
+
+export async function syncCustomCallHistory(guild: Guild): Promise<void> {
+  const botId = (guild.members.me ?? await guild.members.fetchMe().catch(() => null))?.id;
+  if (!botId) return;
+  for (const call of await listCustomCalls(guild.id)) {
+    const channel = await guild.channels.fetch(call.voiceChannelId).catch(() => null);
+    if (channel?.type === ChannelType.GuildVoice) await protectCallHistory(channel, call.roleId, botId).catch((error) => console.error(`[CUSTOM-CALL] Falha ao proteger histórico de ${channel.id}:`, error));
+  }
 }
 
 export async function startCustomCallsModule(client: Client): Promise<void> {
