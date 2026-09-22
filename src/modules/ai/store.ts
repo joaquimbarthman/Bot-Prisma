@@ -24,7 +24,7 @@ import { decideMemoryPersistence, planMemoryCleanup } from "./memory-policy.js";
 
 export type { PrismaMood, PrismaRelationship, PrismaStateUpdate, PrismaTemperament, PrismaUserState } from "./state.js";
 
-export type UserSettings = { nickname: string; aboutMe: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
+export type UserSettings = { nickname: string; aboutMe: string; birthday: string; allowMentions: boolean; memoryEnabled: boolean; spontaneousInteractions: boolean };
 export type HistoryItem = { discordId: string; channelId: string; role: "user" | "assistant"; content: string; createdAt: string };
 export type PrismaProfile = { userId: string; displayName: string | null; profileSummary: string | null; communicationStyle: string | null; interests: string[]; knownPreferences: string[] };
 export type PrismaMemory = { id?: number; userId: string; memoryType: string; content: string; importance: number; confidence: number; sourceMessageId?: string | null; memoryKey?: string; occurrenceCount?: number; lastSeenAt?: string; status?: "active" | "superseded" | "forgotten"; supersededBy?: number | null; validUntil?: string | null; lastConfirmedAt?: string };
@@ -55,8 +55,8 @@ type Database = {
   dailySummaryJobs?: PrismaDailySummaryJob[];
 };
 
-const defaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
-const privacySafeDefaults: UserSettings = { nickname: "", aboutMe: "", allowMentions: false, memoryEnabled: false, spontaneousInteractions: false };
+const defaults: UserSettings = { nickname: "", aboutMe: "", birthday: "", allowMentions: true, memoryEnabled: true, spontaneousInteractions: false };
+const privacySafeDefaults: UserSettings = { nickname: "", aboutMe: "", birthday: "", allowMentions: false, memoryEnabled: false, spontaneousInteractions: false };
 const file = path.resolve(config.dataDir, "ai-module.json");
 const supabase = config.supabaseUrl && config.supabaseSecretKey
   ? createClient(config.supabaseUrl, config.supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
@@ -84,6 +84,7 @@ function normalizeSettings(value: Partial<UserSettings>): UserSettings {
   return {
     nickname: sanitizeNickname(value.nickname),
     aboutMe: safeAboutMe(value.aboutMe) ?? "",
+    birthday: typeof value.birthday === "string" && /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])$/.test(value.birthday) ? value.birthday : "",
     allowMentions: booleanOrDefault(value.allowMentions, defaults.allowMentions),
     memoryEnabled: booleanOrDefault(value.memoryEnabled, defaults.memoryEnabled),
     spontaneousInteractions: booleanOrDefault(value.spontaneousInteractions, defaults.spontaneousInteractions),
@@ -95,6 +96,7 @@ function fromSettings(row: Record<string, unknown> | null): UserSettings {
   return normalizeSettings({
     nickname: row.nickname as string,
     aboutMe: row.about_me as string,
+    birthday: row.birthday as string,
     allowMentions: row.allow_mentions as boolean,
     memoryEnabled: row.memory_enabled as boolean,
     spontaneousInteractions: row.spontaneous_interactions as boolean,
@@ -106,6 +108,7 @@ function toSettings(id: string, value: UserSettings) {
     discord_id: id,
     nickname: value.nickname,
     about_me: value.aboutMe,
+    birthday: value.birthday || null,
     allow_mentions: value.allowMentions,
     memory_enabled: value.memoryEnabled,
     spontaneous_interactions: value.spontaneousInteractions,
@@ -1250,4 +1253,19 @@ export async function cleanupExpired(): Promise<void> {
       return true;
     });
   }, true);
+}
+
+export async function claimBirthdayGreetings(date: string, dayMonth: string): Promise<string[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("user_settings").select("discord_id").eq("birthday", dayMonth).or(`birthday_greeted_on.is.null,birthday_greeted_on.neq.${date}`);
+  if (error) { remoteFailure("listar anivers?rios", error.message); return []; }
+  const claimed: string[] = [];
+  for (const row of data ?? []) {
+    const { data: updated, error: claimError } = await supabase.from("user_settings")
+      .update({ birthday_greeted_on: date }).eq("discord_id", row.discord_id).eq("birthday", dayMonth)
+      .or(`birthday_greeted_on.is.null,birthday_greeted_on.neq.${date}`).select("discord_id");
+    if (claimError) remoteFailure("reservar sauda??o de anivers?rio", claimError.message);
+    if (updated?.length) claimed.push(row.discord_id);
+  }
+  return claimed;
 }

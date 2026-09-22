@@ -8,7 +8,7 @@ const verificationEmojis: { start?: string } = {};
 const lfgEmojis: { check?: string; close?: string; sound?: string; trash?: string; warning?: string; gamepad?: string } = {};
 const customCallEmojis: { add?: string; remove?: string; members?: string; emoji?: string; trash?: string } = {};
 const paginationEmojis: { previous?: string; next?: string } = {};
-export const aiPanelEmojis: { user?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string; reset?: string; close?: string } = {};
+export const aiPanelEmojis: { user?: string; birthday?: string; memory?: string; mention?: string; spontaneous?: string; humor?: string; trash?: string; reset?: string; close?: string } = {};
 
 export function verificationCheckEmoji(): string | undefined {
   return moderationEmojis.check;
@@ -90,7 +90,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       emojis.find((emoji) => emoji.name === name)
       ?? guild.emojis.create({ attachment: path.resolve("assets", file), name, reason });
 
-    const [empty, full, details, trash, warning, instagram, comment, block, check, verificationStart, aiUser, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose, lfgSound, lfgGamepad, customCallAdd, customCallRemove, paginationPrevious, paginationNext] = await Promise.all([
+    const [empty, full, details, trash, warning, instagram, comment, block, check, verificationStart, aiUser, aiBirthday, aiMemory, aiMention, aiSpontaneous, aiHumor, aiReset, aiClose, lfgSound, lfgGamepad, customCallAdd, customCallRemove, paginationPrevious, paginationNext] = await Promise.all([
       ensure("coracao_vazio_branco", "heart.png", "Ícone branco da galeria"),
       ensure("coracao_cheio_branco", "heart-fill.png", "Ícone branco da galeria"),
       ensure("icone_detalhes_branco", "line.png", "Ícone branco da galeria"),
@@ -102,6 +102,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
       ensure("icone_confiar_branco", "check.png", "Ícone do painel de moderação"),
       ensure("verificacao_iniciar", "verificar.png", "Ícone do painel de verificação"),
       ensure("prisma_ai_usuario", "do-utilizador.png", "Ícone do painel Prisma IA"),
+      ensure("prisma_ai_aniversario", "bolo-de-queijo.png", "Ícone de aniversário da Prisma IA"),
       ensure("prisma_ai_memoria", "lasca.png", "Ícone do painel Prisma IA"),
       ensure("prisma_ai_mencao", "em.png", "Ícone do painel Prisma IA"),
       ensure("prisma_ai_espontanea", "simbolo-flash.png", "Ícone do painel Prisma IA"),
@@ -121,7 +122,7 @@ export async function setupCustomEmojis(client: Client): Promise<void> {
     Object.assign(lfgEmojis, { check: check.id, close: aiClose.id, sound: lfgSound.id, trash: trash.id, warning: warning.id, gamepad: lfgGamepad.id });
     Object.assign(customCallEmojis, { add: customCallAdd.id, remove: customCallRemove.id, members: aiUser.id, emoji: aiHumor.id, trash: trash.id });
     Object.assign(paginationEmojis, { previous: paginationPrevious.id, next: paginationNext.id });
-    Object.assign(aiPanelEmojis, { user: aiUser.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id, reset: aiReset.id, close: aiClose.id });
+    Object.assign(aiPanelEmojis, { user: aiUser.id, birthday: aiBirthday.id, memory: aiMemory.id, mention: aiMention.id, spontaneous: aiSpontaneous.id, humor: aiHumor.id, trash: trash.id, reset: aiReset.id, close: aiClose.id });
     console.log("[EMOJIS] Ícones personalizados carregados.");
   } catch (error) {
     console.error("[EMOJIS] Falha ao carregar ícones; usando símbolos padrão:", error);

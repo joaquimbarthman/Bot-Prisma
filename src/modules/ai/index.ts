@@ -5,7 +5,7 @@ import { accessLevel, canChatWithPrisma } from "./permissions.js";
 import { publishPanel, handlePanelInteraction, refreshAiPanel } from "./panel.js";
 import { generateReply, rewriteOperatorRule, suppressUnrequestedSelfActivity, type ReplyContext } from "./provider.js";
 import { SpontaneousReservationLedger } from "./spontaneous-quota.js";
-import { addAbsenceOutreach, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getSettings, lastAbsenceOutreachAt, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
+import { addAbsenceOutreach, addPrismaMessage, addSpontaneous, applyPrismaStateUpdate, checkSupabaseConnection, claimBirthdayGreetings, cleanupExpired, clearPrismaThought, getPrismaState, getPrismaThought, getSettings, lastAbsenceOutreachAt, lastSpontaneousAt, listPrismaOperatorRules, recentHistory, savePrismaOperatorRule, setPrismaThought, spontaneousCountToday, updateSettings } from "./store.js";
 import { canSendTestNotice, getAiRuntimeState, setAiTestMode } from "./runtime.js";
 import { PRISMA_AI_VERSION } from "./version.js";
 import { learnFromInteraction } from "./learning.js";
@@ -48,6 +48,21 @@ export function startAiCleanup(client: Client): void {
   };
   runScheduledDailySummary();
   setInterval(runScheduledDailySummary, 20_000).unref();
+  const greetBirthdays = async () => {
+    if (!config.prismaAi.enabled || !config.prismaAi.generalChannelId) return;
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: config.prismaAi.timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+    if (part("hour") !== "12") return;
+    const date = `${part("year")}-${part("month")}-${part("day")}`;
+    const dayMonth = `${part("day")}/${part("month")}`;
+    const channel = await client.channels.fetch(config.prismaAi.generalChannelId).catch(() => null);
+    if (!channel?.isSendable() || channel.isDMBased()) return;
+    for (const id of await claimBirthdayGreetings(date, dayMonth)) {
+      await channel.send({ content: `Feliz aniversário, <@${id}>! 🎂 Que seu dia seja muito especial!`, allowedMentions: { users: [id] } }).catch((error) => console.error("[PRISMA-IA] Falha na saudação de aniversário:", error));
+    }
+  };
+  greetBirthdays().catch(console.error);
+  setInterval(() => greetBirthdays().catch(console.error), 60_000).unref();
   setTimeout(() => sendOccasionalAbsenceMessage(client).catch(console.error), 5 * 60_000).unref();
   setInterval(() => sendOccasionalAbsenceMessage(client).catch(console.error), 60 * 60_000).unref();
   getPrismaThought(config.prismaAi.operatorUserId)

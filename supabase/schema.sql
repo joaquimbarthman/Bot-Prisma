@@ -4,6 +4,8 @@ create table if not exists public.user_settings (
   discord_id text primary key,
   nickname text not null default '',
   about_me text not null default '',
+  birthday text,
+  birthday_greeted_on date,
   personality text not null default 'prisma_default',
   humor_level integer not null default 1 check (humor_level between 1 and 5),
   allow_mentions boolean not null default true,
@@ -63,6 +65,11 @@ create index if not exists prisma_self_learning_evidence_learning_idx on public.
 -- Garante compatibilidade ao reaplicar o schema sobre instalações anteriores.
 alter table public.user_settings
   add column if not exists about_me text not null default '';
+alter table public.user_settings add column if not exists birthday text;
+alter table public.user_settings add column if not exists birthday_greeted_on date;
+alter table public.user_settings drop constraint if exists user_settings_birthday_check;
+alter table public.user_settings add constraint user_settings_birthday_check
+  check (birthday is null or birthday ~ '^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])$');
 alter table public.user_settings drop constraint if exists user_settings_about_me_length;
 alter table public.user_settings
   add constraint user_settings_about_me_length check (char_length(about_me) <= 300);

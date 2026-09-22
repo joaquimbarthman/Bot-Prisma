@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.65";
+export const PRISMA_AI_VERSION = "v2.66";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O painel pessoal permite cadastrar dia e mês do aniversário; a Prisma mostra a data, reconhece o aniversário nas conversas e envia uma saudação ao meio-dia.",
   "A Prisma agora entende perguntas como 'tá bem?', 'tudo bem?', 'td bem?' e 'tá bem, Prisma?' como perguntas sobre como ela está, sem substituí-las por uma reação fora de contexto.",
   "Quando a Prisma realmente responde a uma mensagem que ganhou XP de chat, a pessoa recebe mais 1 XP usando o mesmo cooldown do chat geral, inclusive durante o acesso livre dos fins de semana.",
   "Aos sábados e domingos, todas as pessoas podem conversar com a Prisma; durante a semana, o acesso continua exclusivo do cargo Prisma AI, assim como o painel pessoal.",
@@ -99,6 +100,7 @@ export const PRISMA_AI_LATEST_UPDATE = [
  * Mantenha esta lista limitada a recursos que realmente existem no bot.
  */
 export const PRISMA_AI_CAPABILITIES = [
+  "Guardar dia e mês do aniversário no painel, reconhecer a data nas conversas e enviar uma saudação ao meio-dia no dia cadastrado.",
   "Conceder 1 XP adicional quando responder de verdade a uma mensagem elegível no sistema de evolução, respeitando o mesmo cooldown do chat geral.",
   "Liberar a conversa com todas as pessoas aos sábados e domingos no fuso horário configurado, mantendo o painel pessoal e o acesso nos demais dias exclusivos do cargo Prisma AI.",
   "Avisar a equipe no canal de erros quando uma resposta ou ação da IA falhar, preservando o contexto necessário para diagnóstico sem expor credenciais.",

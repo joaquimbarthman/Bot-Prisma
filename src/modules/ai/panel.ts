@@ -42,6 +42,7 @@ function userPanelButtons(settings: UserSettings): ActionRowBuilder<ButtonBuilde
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:nickname").setLabel("Apelido").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("prisma-ai:birthday").setLabel("Aniversário").setEmoji(aiPanelEmojis.birthday ?? "🎂").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:about-me").setLabel("Sobre mim").setEmoji(aiPanelEmojis.humor ?? "🙂").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:memory").setLabel("Memória").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:spontaneous").setLabel("Espontâneas").setEmoji(aiPanelEmojis.spontaneous ?? "⚡").setStyle(settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary),
@@ -250,10 +251,10 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   const selfServiceDeletion = [...deletionActions, ...confirmationActions, "cancel-deletion", "reset-only", "reset-with-history", "reset-cancel", "nickname-remove", "view-memories", "memories-page", "forget-confirm", "delete-all-confirm"].includes(action);
   const confirmsDeletion = interaction.isButton() && confirmationActions.includes(action);
   const opensDeletionConfirmation = interaction.isButton() && deletionActions.includes(action);
-  const opensModal = interaction.isButton() && (action === "nickname" || action === "about-me");
+  const opensModal = interaction.isButton() && (action === "nickname" || action === "about-me" || action === "birthday");
   const opensMemoriesView = interaction.isButton() && ["view-memories", "memories-page"].includes(action);
   const updatesPanel = (interaction.isButton() && ["nickname-remove", "memory", "spontaneous"].includes(action))
-    || (interaction.isModalSubmit() && ["nickname-save", "about-me-save"].includes(action));
+    || (interaction.isModalSubmit() && ["nickname-save", "about-me-save", "birthday-save"].includes(action));
   if (confirmsDeletion) await interaction.deferUpdate();
   else if (updatesPanel) await interaction.deferUpdate();
   else if (!opensModal && !opensMemoriesView && action !== "open" && !opensDeletionConfirmation && action !== "cancel-deletion") await interaction.deferReply({ flags: ["Ephemeral"] });
@@ -270,6 +271,25 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     const modal = new ModalBuilder().setCustomId("prisma-ai:nickname-save").setTitle("Apelido do Prisma");
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("nickname").setLabel("Como Prisma deve chamar você?").setStyle(TextInputStyle.Short).setMaxLength(32).setRequired(true)));
     await interaction.showModal(modal); return true;
+  }
+  if (action === "birthday" && interaction.isButton()) {
+    const settings = await getSettings(interaction.user.id);
+    const modal = new ModalBuilder().setCustomId("prisma-ai:birthday-save").setTitle("Seu aniversário");
+    const input = new TextInputBuilder().setCustomId("birthday").setLabel("Dia e mês (DD/MM)").setPlaceholder("Ex.: 25/12").setStyle(TextInputStyle.Short).setMaxLength(5).setRequired(true);
+    if (settings.birthday) input.setValue(settings.birthday);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    await interaction.showModal(modal); return true;
+  }
+  if (action === "birthday-save" && interaction.isModalSubmit()) {
+    const value = interaction.fields.getTextInputValue("birthday").trim();
+    const match = /^(\d{1,2})\/(\d{1,2})$/.exec(value);
+    const day = Number(match?.[1]); const month = Number(match?.[2]);
+    if (!match || month < 1 || month > 12 || day < 1 || day > new Date(2024, month, 0).getDate()) {
+      await interaction.editReply({ components: panelNoticeComponents("Data inválida", "Informe dia e mês no formato DD/MM."), allowedMentions: { parse: [] } });
+      return true;
+    }
+    await updateSettings(interaction.user.id, { birthday: `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}` });
+    await refreshUserPanel(interaction); return true;
   }
   if (action === "about-me" && interaction.isButton()) {
     const settings = await getSettings(interaction.user.id);
