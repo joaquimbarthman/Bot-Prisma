@@ -1,7 +1,10 @@
-export const PRISMA_AI_VERSION = "v2.67";
+export const PRISMA_AI_VERSION = "v2.71";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O botão Ver memórias agora aparece antes de Espontâneas na mesma linha do painel pessoal.",
+  "Os botões para apagar memórias, apagar histórico e reiniciar a relação agora ficam juntos em uma linha no painel pessoal.",
+  "O painel pessoal agora exibe o aniversário cadastrado, ou informa quando ainda não há uma data salva.",
   "Ao contar no chat o dia e mês do próprio aniversário, a pessoa agora tem a data validada e salva automaticamente no painel e no banco.",
   "O painel pessoal permite cadastrar dia e mês do aniversário; a Prisma mostra a data, reconhece o aniversário nas conversas e envia uma saudação ao meio-dia.",
   "A Prisma agora entende perguntas como 'tá bem?', 'tudo bem?', 'td bem?' e 'tá bem, Prisma?' como perguntas sobre como ela está, sem substituí-las por uma reação fora de contexto.",

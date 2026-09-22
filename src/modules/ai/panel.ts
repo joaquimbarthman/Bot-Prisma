@@ -44,14 +44,14 @@ function userPanelButtons(settings: UserSettings): ActionRowBuilder<ButtonBuilde
       new ButtonBuilder().setCustomId("prisma-ai:nickname").setLabel("Apelido").setEmoji(aiPanelEmojis.user ?? "👤").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("prisma-ai:birthday").setLabel("Aniversário").setEmoji(aiPanelEmojis.birthday ?? "🎂").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:about-me").setLabel("Sobre mim").setEmoji(aiPanelEmojis.humor ?? "🙂").setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:memory").setLabel("Memória").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("prisma-ai:view-memories").setLabel("Ver memórias").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:spontaneous").setLabel("Espontâneas").setEmoji(aiPanelEmojis.spontaneous ?? "⚡").setStyle(settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("prisma-ai:view-memories").setLabel("Ver memórias").setEmoji(aiPanelEmojis.memory ?? "🧠").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("prisma-ai:forget").setLabel("Apagar memórias").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
-    ),
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("prisma-ai:clear-history").setLabel("Apagar histórico").setEmoji(aiPanelEmojis.trash ?? "🗑️").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("prisma-ai:reset-relationship").setLabel("Reiniciar relação").setEmoji(aiPanelEmojis.reset ?? "🔄").setStyle(ButtonStyle.Danger),
     ),
@@ -155,7 +155,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       {
         type: ComponentType.TextDisplay,
-        content: `### Perfil e preferências\n**Apelido** ・ ${settings.nickname || "Não definido"}\n**Sobre mim** ・ ${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Memória** ・ ${status(settings.memoryEnabled)}\n**Interações espontâneas** ・ ${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
+        content: `### Perfil e preferências\n**Apelido** ・ ${settings.nickname || "Não definido"}\n**Sobre mim** ・ ${settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado"}\n**Aniversário** ・ ${settings.birthday || "Não informado"}\n**Memória** ・ ${status(settings.memoryEnabled)}\n**Interações espontâneas** ・ ${status(settings.spontaneousInteractions)}\n\n-# Privacidade: apagar memórias, histórico ou relação são ações separadas.`,
       },
       { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
       ...userPanelButtons(settings).map((row) => row.toJSON()),
