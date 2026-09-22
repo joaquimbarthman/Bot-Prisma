@@ -1,7 +1,8 @@
-export const PRISMA_AI_VERSION = "v2.66";
+export const PRISMA_AI_VERSION = "v2.67";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "Ao contar no chat o dia e mês do próprio aniversário, a pessoa agora tem a data validada e salva automaticamente no painel e no banco.",
   "O painel pessoal permite cadastrar dia e mês do aniversário; a Prisma mostra a data, reconhece o aniversário nas conversas e envia uma saudação ao meio-dia.",
   "A Prisma agora entende perguntas como 'tá bem?', 'tudo bem?', 'td bem?' e 'tá bem, Prisma?' como perguntas sobre como ela está, sem substituí-las por uma reação fora de contexto.",
   "Quando a Prisma realmente responde a uma mensagem que ganhou XP de chat, a pessoa recebe mais 1 XP usando o mesmo cooldown do chat geral, inclusive durante o acesso livre dos fins de semana.",

@@ -17,6 +17,7 @@ import { shouldRunDailySummary, summarizeCompletedConversationDays } from "./dai
 import { asksFavoriteSongPart, researchLyrics } from "./lyrics.js";
 import { analyzeSocialTreatment } from "./social-reciprocity.js";
 import { awardPrismaReplyBonus } from "../leveling/index.js";
+import { statedBirthday } from "./birthday.js";
 
 const cooldowns = new Map<string, number>();
 const presenceInFlight = new Set<string>();
@@ -351,6 +352,11 @@ export async function handleAiMessage(client: Client, message: Message): Promise
   }
 
   let settings = await getSettings(message.author.id);
+  const birthday = statedBirthday(message.content);
+  if (birthday && birthday !== settings.birthday) {
+    try { settings = await updateSettings(message.author.id, { birthday }); }
+    catch (error) { console.error("[PRISMA-IA] Não foi possível salvar o aniversário informado no chat:", error); }
+  }
   if (requestsSpontaneousOptOut(message.content) && settings.spontaneousInteractions) {
     settings = await updateSettings(message.author.id, { spontaneousInteractions: false });
     await message.reply({ content: "beleza, não vou mais te chamar do nada. se quiser, você pode ativar isso de novo no painel da Prisma.", allowedMentions: { repliedUser: false } });
