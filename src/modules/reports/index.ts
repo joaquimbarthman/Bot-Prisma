@@ -41,11 +41,33 @@ function reportUserId(channel: TextChannel): string | null {
   )?.id ?? null;
 }
 
-function statusFromValue(value: string): ReportStatus {
+function reportStatusFromValue(value: string): ReportStatus {
   if (value.includes("Encerrado sem resolução")) return "closed";
   if (value.includes("Não resolvido")) return "unresolved";
   if (value.includes("Resolvido")) return "resolved";
   return "pending";
+}
+
+export function reportStatusFromPanelContent(value: string): ReportStatus {
+  const statusText = value.match(/\*\*Status\*\*(?:\\n|\n)([^"\\\n]+)/)?.[1] ?? "";
+  return reportStatusFromValue(statusText);
+}
+
+function scheduleReportDeletion(channel: TextChannel, delayMs: number, reason: string): void {
+  setTimeout(() => channel.delete(reason).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), Math.max(0, delayMs)).unref();
+}
+
+async function blockReportApplicantMessages(channel: TextChannel, userId: string): Promise<void> {
+  await channel.permissionOverwrites.edit(userId, {
+    SendMessages: false,
+    SendMessagesInThreads: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false,
+  }, { reason: "Atendimento finalizado" }).catch((error: unknown) => {
+    // O overwrite pode desaparecer quando a pessoa sai do servidor ou outra
+    // rotina altera as permissões. Isso não pode cancelar a exclusão do canal.
+    console.warn(`[ATENDIMENTOS] Não foi possível bloquear mensagens de ${userId} no canal ${channel.id}:`, error);
+  });
 }
 
 function openButton(): ActionRowBuilder<ButtonBuilder> {
@@ -227,8 +249,19 @@ async function migrateTechnicalTopics(guild: Guild): Promise<void> {
   const channels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText && isReportChannelName(channel.name));
   for (const channel of channels.values()) {
     if (channel.type !== ChannelType.GuildText) continue;
-    const userId = reportUserId(channel);
+    const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((component) => hasButtonWithCustomId(component, "report:resolved")));
+    const panelContent = panel ? JSON.stringify(panel.components.map((component) => component.toJSON())) : "";
+    const userId = reportUserId(channel) ?? panelContent.match(/<@(\d{17,20})>/)?.[1] ?? null;
     if (!userId) continue;
+    const componentStatus = reportStatusFromPanelContent(panelContent);
+    const legacyStatus = reportStatusFromValue(panel?.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
+    const status = panelContent.includes("**Status**") ? componentStatus : legacyStatus;
+    if (panel && status !== "pending") {
+      const deleteAt = (panel.editedTimestamp ?? panel.createdTimestamp) + REPORT_DELETE_DELAY_MS;
+      scheduleReportDeletion(channel, deleteAt - Date.now(), `Limpeza de atendimento ${status}`);
+      continue;
+    }
     await channel.permissionOverwrites.edit(config.reports.staffRoleId, {
       ViewChannel: true,
       SendMessages: true,
@@ -248,10 +281,7 @@ async function migrateTechnicalTopics(guild: Guild): Promise<void> {
     if (expectedName && channel.name !== expectedName) {
       await channel.setName(expectedName).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar nome de ${channel.id}:`, error));
     }
-    const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-    const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((component) => hasButtonWithCustomId(component, "report:resolved")));
     if (panel) {
-      const status = statusFromValue(panel.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
       await panel.edit({ embeds: [], components: reportComponents(userId, status), flags: ["IsComponentsV2"] }).catch((error) => console.error(`[ATENDIMENTOS] Falha ao atualizar painel de ${channel.id}:`, error));
     }
   }
@@ -308,15 +338,10 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
   const transcript = await reportTranscript(channel);
   await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
-  await channel.permissionOverwrites.edit(userId, {
-    SendMessages: false,
-    SendMessagesInThreads: false,
-    CreatePublicThreads: false,
-    CreatePrivateThreads: false,
-  }, { reason: "Atendimento finalizado" });
+  scheduleReportDeletion(channel, REPORT_DELETE_DELAY_MS, `Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`);
+  await blockReportApplicantMessages(channel, userId);
   await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 1 minuto.`, allowedMentions: { users: [userId] } });
   await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 1 minuto.", flags: ["Ephemeral"] });
-  setTimeout(() => channel.delete(`Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`).catch((error) => console.error("[ATENDIMENTOS] Falha ao excluir canal:", error)), REPORT_DELETE_DELAY_MS).unref();
 }
 
 export async function handleReportInteraction(interaction: import("discord.js").Interaction): Promise<boolean> {
