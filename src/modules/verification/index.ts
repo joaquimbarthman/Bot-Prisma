@@ -551,6 +551,13 @@ export async function handleVerificationInteraction(interaction: Interaction): P
   const channel = interaction.channel as TextChannel | null;
   const state = channel ? await readChannelState(channel) : null;
   if (!channel || !state) {
+    if (channel?.type === ChannelType.GuildText && channel.name.startsWith("verificacao-") && action === "close" && interaction.isButton()) {
+      await interaction.message.edit({ components: [] }).catch(() => undefined);
+      await scheduleDeletion(channel);
+      await channel.send(`Este atendimento de verificação foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`).catch(() => undefined);
+      await interaction.followUp({ content: "Verificação órfã encerrada; a exclusão do canal foi agendada.", flags: ["Ephemeral"] });
+      return true;
+    }
     if (deferredUpdate) await interaction.followUp({ content: "Este não é um canal de verificação válido.", flags: ["Ephemeral"] });
     else await interaction.reply({ content: "Este não é um canal de verificação válido.", flags: ["Ephemeral"] });
     return true;

@@ -41,6 +41,29 @@ function reportUserId(channel: TextChannel): string | null {
   )?.id ?? null;
 }
 
+export function reportUserIdFromPanelContent(value: string): string | null {
+  return value.match(/(?:Olá,\s*)?<@(\d{17,20})>/)?.[1] ?? null;
+}
+
+function reportPanelContent(message: Message): string {
+  return JSON.stringify(message.components.map((component) => component.toJSON()));
+}
+
+async function resolveReportUserId(channel: TextChannel, currentPanel?: Message): Promise<string | null> {
+  const overwriteUserId = reportUserId(channel);
+  if (overwriteUserId) return overwriteUserId;
+
+  const currentPanelUserId = currentPanel ? reportUserIdFromPanelContent(reportPanelContent(currentPanel)) : null;
+  if (currentPanelUserId) return currentPanelUserId;
+
+  const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  const panel = messages?.find((message) =>
+    message.author.id === channel.client.user.id
+    && message.components.some((component) => hasButtonWithCustomId(component, "report:close")),
+  );
+  return panel ? reportUserIdFromPanelContent(reportPanelContent(panel)) : null;
+}
+
 function reportStatusFromValue(value: string): ReportStatus {
   if (value.includes("Encerrado sem resolução")) return "closed";
   if (value.includes("Não resolvido")) return "unresolved";
@@ -251,8 +274,8 @@ async function migrateTechnicalTopics(guild: Guild): Promise<void> {
     if (channel.type !== ChannelType.GuildText) continue;
     const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
     const panel = messages?.find((message) => message.author.id === guild.client.user.id && message.components.some((component) => hasButtonWithCustomId(component, "report:resolved")));
-    const panelContent = panel ? JSON.stringify(panel.components.map((component) => component.toJSON())) : "";
-    const userId = reportUserId(channel) ?? panelContent.match(/<@(\d{17,20})>/)?.[1] ?? null;
+    const panelContent = panel ? reportPanelContent(panel) : "";
+    const userId = reportUserId(channel) ?? reportUserIdFromPanelContent(panelContent);
     if (!userId) continue;
     const componentStatus = reportStatusFromPanelContent(panelContent);
     const legacyStatus = reportStatusFromValue(panel?.embeds[0]?.fields.find((field) => field.name === "Status")?.value ?? "");
@@ -323,25 +346,37 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
   if (!interaction.inGuild() || !interaction.channel || interaction.channel.type !== ChannelType.GuildText || !interaction.member || !("roles" in interaction.member)) return;
   if (!isStaff(interaction.member as GuildMember)) { await interaction.reply({ content: "Apenas a equipe responsável pode usar este painel.", flags: ["Ephemeral"] }); return; }
   const channel = interaction.channel as TextChannel;
-  const userId = reportUserId(channel);
-  if (!userId || !isReportChannelName(channel.name)) { await interaction.reply({ content: "Este canal não possui um atendimento válido.", flags: ["Ephemeral"] }); return; }
-  if (!(action === "resolved" || action === "unresolved" || action === "close")) return;
+  if (!isReportChannelName(channel.name) || !(action === "resolved" || action === "unresolved" || action === "close")) return;
+  const userId = await resolveReportUserId(channel, interaction.message);
+  if (!userId) {
+    if (action !== "close") { await interaction.reply({ content: "Não foi possível identificar o solicitante. Use Encerrar atendimento para excluir este canal órfão.", flags: ["Ephemeral"] }); return; }
+    await interaction.update({ components: [] });
+    scheduleReportDeletion(channel, REPORT_DELETE_DELAY_MS, `Atendimento órfão encerrado por ${interaction.user.tag}`);
+    await channel.send("Este atendimento foi encerrado. O canal será excluído em 1 minuto.").catch(() => undefined);
+    await interaction.followUp({ content: "Atendimento órfão encerrado. Este canal será excluído em 1 minuto.", flags: ["Ephemeral"] });
+    return;
+  }
   const state: ReportState = { userId, status: "pending" };
   const finalStatus: ReportStatus = action === "close" ? "closed" : action;
   await interaction.update({ components: reportComponents(state.userId, finalStatus) });
   const log = await interaction.guild!.channels.fetch(config.reports.logChannelId).catch(() => null);
-  if (!log?.isSendable()) {
-    await interaction.followUp({ content: "Não encontrei o canal de registros de atendimento. Este canal não será apagado.", flags: ["Ephemeral"] });
-    await interaction.message.edit({ components: reportComponents(state.userId, "pending") });
-    return;
-  }
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
   const transcript = await reportTranscript(channel);
-  await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
+  if (log?.isSendable()) {
+    await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } })
+      .catch((error) => console.error("[ATENDIMENTOS] Falha ao enviar registro; o canal ainda será excluído:", error));
+  } else {
+    console.error("[ATENDIMENTOS] Canal de registros indisponível; o atendimento ainda será excluído.");
+  }
   scheduleReportDeletion(channel, REPORT_DELETE_DELAY_MS, `Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`);
   await blockReportApplicantMessages(channel, userId);
-  await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 1 minuto.`, allowedMentions: { users: [userId] } });
-  await interaction.followUp({ content: "Registro do atendimento enviado. Este canal será excluído em 1 minuto.", flags: ["Ephemeral"] });
+  await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 1 minuto.`, allowedMentions: { users: [userId] } }).catch(() => undefined);
+  await interaction.followUp({
+    content: log?.isSendable()
+      ? "Atendimento encerrado. Este canal será excluído em 1 minuto."
+      : "Atendimento encerrado. O registro não pôde ser enviado, mas este canal será excluído em 1 minuto.",
+    flags: ["Ephemeral"],
+  });
 }
 
 export async function handleReportInteraction(interaction: import("discord.js").Interaction): Promise<boolean> {
