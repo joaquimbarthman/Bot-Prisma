@@ -132,8 +132,11 @@ export async function handleModerationButton(interaction: ButtonInteraction): Pr
   try {
     if (action === "banir") {
       if (!member?.bannable) throw new Error("Membro não encontrado ou não pode ser banido.");
-      await member.ban({ reason: `Banido pela moderação: ${interaction.user.tag}` });
-      await interaction.editReply(`${member.user.tag} foi banido do servidor.`);
+      await member.ban({
+        deleteMessageSeconds: 24 * 60 * 60,
+        reason: `Banido pela moderação: ${interaction.user.tag}`,
+      });
+      await interaction.editReply(`${member.user.tag} foi banido do servidor e as mensagens das últimas 24 horas foram apagadas.`);
     } else if (action === "confiar") {
       await resetModerationState(interaction.guild.id, userId);
       if (member) { if (member.isCommunicationDisabled()) await member.timeout(null, `Confiança restaurada por ${interaction.user.tag}`); await forgiveMember(member); }
