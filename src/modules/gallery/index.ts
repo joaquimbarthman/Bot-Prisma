@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, SeparatorSpacingSize, TextInputBuilder, TextInputStyle, escapeMarkdown, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle, escapeMarkdown, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "../../config.js";
 import { galleryButtons, galleryCloseEmoji, galleryTrashEmoji, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { aiModeration } from "../moderation/ai.js";
@@ -23,20 +23,42 @@ async function blockedGalleryComment(content: string): Promise<boolean> {
 }
 
 function deleteConfirmationComponents(messageId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {
-  const content = result === "confirmed"
-    ? "A foto foi removida da galeria."
-    : result === "cancelled"
-      ? "A publicação continua na galeria."
-      : "## Apagar publicação\nTem certeza de que deseja apagar esta foto? **Essa ação não pode ser desfeita.**";
-  const components: APIContainerComponent["components"] = [{ type: ComponentType.TextDisplay, content }];
-  if (!result) components.push(
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`galeria:excluir-cancel:${messageId}`).setLabel("Cancelar").setEmoji(galleryCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`galeria:excluir-confirm:${messageId}`).setLabel("Apagar").setEmoji(galleryTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
-    ).toJSON(),
-  );
-  return [{ type: ComponentType.Container, accent_color: result === "confirmed" ? 0x57f287 : result === "cancelled" ? 0x99aab5 : 0xed4245, components }];
+  if (result === "confirmed") return [{
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.TextDisplay, content: "**Publicação apagada**\n-# A foto foi removida da galeria." }],
+  }];
+  if (result === "cancelled") return [{
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.TextDisplay, content: "**Exclusão cancelada**\n-# A publicação continua na galeria." }],
+  }];
+  return [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Apagar publicação**\n-# Remova esta foto permanentemente da galeria." }],
+        accessory: new ButtonBuilder()
+          .setCustomId(`galeria:excluir-confirm:${messageId}`)
+          .setLabel("Apagar")
+          .setEmoji(galleryTrashEmoji() ?? "🗑️")
+          .setStyle(ButtonStyle.Danger)
+          .toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Manter publicação**\n-# Volte sem remover esta foto da galeria." }],
+        accessory: new ButtonBuilder()
+          .setCustomId(`galeria:excluir-cancel:${messageId}`)
+          .setLabel("Voltar")
+          .setEmoji(previousPageEmoji() ?? galleryCloseEmoji() ?? "↩️")
+          .setStyle(ButtonStyle.Secondary)
+          .toJSON(),
+      }],
+    },
+  ];
 }
 
 function galleryPostComponents(userId: string, mediaUrl: string, caption: string, post: GalleryPost): APIContainerComponent[] {
