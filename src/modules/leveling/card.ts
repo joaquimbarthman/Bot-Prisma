@@ -87,7 +87,7 @@ export async function generateLevelUpCard(member: GuildMember, reward: LevelRewa
   const rewardRole = levelRewardRoleLabel(role?.name ?? "Novo cargo", reward.emoji);
   const svg = levelUpCardSvg({
     avatarDataUrl,
-    memberName: member.displayName,
+    memberName: member.user.username,
     rewardTitle: reward.title,
     rewardLevel: reward.level,
     rewardRole,
@@ -164,7 +164,7 @@ export async function generateRankCard(member: GuildMember, values: {
 }): Promise<Buffer> {
   const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256, forceStatic: true });
   const avatarDataUrl = await imageDataUrl(avatarUrl);
-  const svg = rankCardSvg({ avatarDataUrl, memberName: member.displayName, ...values });
+  const svg = rankCardSvg({ avatarDataUrl, memberName: member.user.username, ...values });
   return sharp(Buffer.from(svg), { density: 144 }).png({ quality: 100, compressionLevel: 9 }).toBuffer();
 }
 
@@ -244,7 +244,7 @@ export async function generateTop10Card(entries: Array<{ member: GuildMember; le
   const profiles: Record<string, TopCardProfile> = {};
   await Promise.all(entries.map(async ({ member }) => {
     const avatarUrl = member.displayAvatarURL({ extension: "png", size: 128, forceStatic: true });
-    profiles[member.id] = { name: member.displayName, avatarDataUrl: await imageDataUrl(avatarUrl) };
+    profiles[member.id] = { name: member.user.username, avatarDataUrl: await imageDataUrl(avatarUrl) };
   }));
   const svg = top10CardSvg(
     entries.map(({ member, level, xpTotal, position }) => ({ userId: member.id, level, xpTotal, position })),
