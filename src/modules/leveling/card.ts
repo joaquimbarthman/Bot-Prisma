@@ -12,7 +12,11 @@ function escapeXml(value: string): string {
 }
 
 function compact(value: string, maximum: number): string {
-  const clean = value.replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+  const clean = value
+    .replace(/[・･]/gu, "•")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
   return clean.length > maximum ? `${clean.slice(0, maximum - 3).trimEnd()}...` : clean;
 }
 
@@ -40,7 +44,7 @@ export function levelUpCardSvg(values: {
 }): string {
   const memberName = escapeXml(compact(values.memberName, 30));
   const rewardTitle = escapeXml(compact(values.rewardTitle, 48));
-  const footerMessage = escapeXml(compact(`${values.rewardRole} ・ ${values.rewardShortMessage}`, 84));
+  const footerMessage = escapeXml(compact(`${values.rewardRole} • ${values.rewardShortMessage}`, 84));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="770" height="245" viewBox="0 0 660 210">
   <defs>
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#342035"/><stop offset=".55" stop-color="#55263F"/><stop offset="1" stop-color="#79304D"/></linearGradient>
