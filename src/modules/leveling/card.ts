@@ -13,7 +13,7 @@ function escapeXml(value: string): string {
 
 function compact(value: string, maximum: number): string {
   const clean = value
-    .replace(/[・･]/gu, "•")
+    .replace(/\s*[・･]\s*/gu, " • ")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
