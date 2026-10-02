@@ -395,9 +395,8 @@ async function sendRank(target: Message, member: GuildMember): Promise<void> {
       serverPosition: position,
     });
     await target.reply({
-      content: `<@${member.id}>`,
       files: [new AttachmentBuilder(card, { name: `rank-${member.id}.png` })],
-      allowedMentions: { parse: [], users: [member.id] },
+      allowedMentions: { parse: [] },
     });
   } catch (error) {
     console.error(`[LEVELING] Falha ao gerar card de rank para ${member.id}:`, error);
