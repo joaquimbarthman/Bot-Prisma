@@ -21,7 +21,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationStartEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
+import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
 
 const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
@@ -63,30 +63,24 @@ function panelEmbed(client: Client): EmbedBuilder {
     .setFooter({ text: "Atendimento humano • Se já houver uma solicitação, mostraremos seu canal aberto" });
 }
 
-function startButton(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("verification:start").setLabel("Começar verificação").setEmoji(verificationStartEmoji() ?? "✅").setStyle(ButtonStyle.Primary),
-  );
-}
-
 function publicPanelComponents(): APIContainerComponent[] {
-  return [{
+  const header: APIContainerComponent = {
     type: ComponentType.Container,
-    accent_color: 0x7c5cff,
-    components: [
-      {
-        type: ComponentType.TextDisplay,
-        content: "## PRISMA ・ Verificação\n\n### Uma experiência mais segura para todos\n\nConclua uma breve verificação humana para acessar as áreas exclusivas da comunidade.",
-      },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      {
-        type: ComponentType.MediaGallery,
-        items: [{ media: { url: "https://imgur.com/SAg0MOT.gif" } }],
-      },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      startButton().toJSON(),
-    ],
-  }];
+    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • Verificação\n-# Uma experiência mais segura para toda a comunidade." }],
+  };
+  const banner: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.MediaGallery, items: [{ media: { url: "https://imgur.com/SAg0MOT.gif" } }] }],
+  };
+  const action: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.Section,
+      components: [{ type: ComponentType.TextDisplay, content: "**Verifique seu acesso**\n-# Conclua uma breve verificação humana para acessar áreas exclusivas." }],
+      accessory: new ButtonBuilder().setCustomId("verification:start").setLabel("Começar verificação").setStyle(ButtonStyle.Primary).toJSON(),
+    }],
+  };
+  return [header, banner, action];
 }
 
 function staffButtons(reviewReady = false): ActionRowBuilder<ButtonBuilder>[] {
@@ -453,18 +447,25 @@ async function configureChannelPermissions(guild: Guild): Promise<void> {
   }
 }
 
+export function containsVerificationStartButton(component: unknown): boolean {
+  if (!component || typeof component !== "object") return false;
+  const value = component as { customId?: unknown; custom_id?: unknown; accessory?: unknown; components?: unknown[] };
+  if (value.customId === "verification:start" || value.custom_id === "verification:start") return true;
+  if (value.accessory && containsVerificationStartButton(value.accessory)) return true;
+  return value.components?.some(containsVerificationStartButton) === true;
+}
+
 async function ensurePublicPanel(client: Client, guild: Guild): Promise<void> {
   const channel = await client.channels.fetch(verification.panelChannelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.isSendable()) throw new Error("Canal do painel de verificação indisponível.");
   const recent = await channel.messages.fetch({ limit: 50 });
-  const containsStartButton = (component: unknown): boolean => {
-    if (!component || typeof component !== "object") return false;
-    const value = component as { customId?: unknown; components?: unknown[] };
-    return value.customId === "verification:start" || value.components?.some(containsStartButton) === true;
-  };
-  const existing = recent.find((message) => message.author.id === client.user!.id && message.components.some(containsStartButton));
+  const existingPanels = recent.filter((message) => message.author.id === client.user!.id && message.components.some(containsVerificationStartButton));
+  const existing = existingPanels.first();
   const payload = { components: publicPanelComponents(), flags: ["IsComponentsV2"] as const };
   if (existing) await existing.edit({ ...payload, embeds: [] }); else await channel.send(payload);
+  for (const duplicate of existingPanels.filter((message) => message.id !== existing?.id).values()) {
+    await duplicate.delete().catch(() => undefined);
+  }
 }
 
 export async function startVerificationModule(client: Client): Promise<void> {

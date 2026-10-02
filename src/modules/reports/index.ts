@@ -17,7 +17,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { reportWarningEmoji, verificationBlockEmoji, verificationCheckEmoji, lfgCloseEmoji  } from "../../emoji-manager.js";
+import { verificationBlockEmoji, verificationCheckEmoji, lfgCloseEmoji  } from "../../emoji-manager.js";
 
 type ReportStatus = "pending" | "resolved" | "unresolved" | "closed";
 type ReportState = { userId: string; status: ReportStatus };
@@ -91,12 +91,6 @@ async function blockReportApplicantMessages(channel: TextChannel, userId: string
     // rotina altera as permissões. Isso não pode cancelar a exclusão do canal.
     console.warn(`[ATENDIMENTOS] Não foi possível bloquear mensagens de ${userId} no canal ${channel.id}:`, error);
   });
-}
-
-function openButton(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:open").setLabel(" Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Success),
-  );
 }
 
 function staffButtons(status: ReportStatus): ActionRowBuilder<ButtonBuilder> {
@@ -210,39 +204,30 @@ function isReportChannelName(name: string): boolean {
 }
 
 function publicPanelComponents(): APIContainerComponent[] {
-  return [{
+  const header: APIContainerComponent = {
     type: ComponentType.Container,
-    accent_color: 0x57f287,
-    components: [
-      {
-        type: ComponentType.TextDisplay,
-        content: "## PRISMA • Segurança\n ### Central de atendimentos\nUse o botao abaixo para abrir um atendimento privado com a equipe. Explique o ocorrido e envie provas no canal criado.",
-      },
-      {
-        type: ComponentType.Separator,
-        divider: true,
-        spacing: SeparatorSpacingSize.Small,
-      },
-      {
-        type: ComponentType.MediaGallery,
-        items: [{
-          media: { url: "https://i.imgur.com/4WikC8s.gif" },
-        }],
-      },
-      {
-        type: ComponentType.Separator,
-        divider: true,
-        spacing: SeparatorSpacingSize.Small,
-      },
-      openButton().toJSON(),
-    ],
-  }];
+    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • Segurança\n-# Atendimento privado e direto com a equipe." }],
+  };
+  const banner: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.MediaGallery, items: [{ media: { url: "https://i.imgur.com/4WikC8s.gif" } }] }],
+  };
+  const action: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.Section,
+      components: [{ type: ComponentType.TextDisplay, content: "**Central de atendimentos**\n-# Relate o ocorrido e envie as provas em um canal privado." }],
+      accessory: new ButtonBuilder().setCustomId("report:open").setLabel("Abrir atendimento").setStyle(ButtonStyle.Success).toJSON(),
+    }],
+  };
+  return [header, banner, action];
 }
 
-function hasButtonWithCustomId(component: unknown, customId: string): boolean {
+export function hasButtonWithCustomId(component: unknown, customId: string): boolean {
   if (!component || typeof component !== "object") return false;
-  const candidate = component as { customId?: unknown; components?: unknown };
-  if (candidate.customId === customId) return true;
+  const candidate = component as { customId?: unknown; custom_id?: unknown; accessory?: unknown; components?: unknown };
+  if (candidate.customId === customId || candidate.custom_id === customId) return true;
+  if (candidate.accessory && hasButtonWithCustomId(candidate.accessory, customId)) return true;
   return Array.isArray(candidate.components) && candidate.components.some((child) => hasButtonWithCustomId(child, customId));
 }
 
@@ -259,12 +244,14 @@ async function ensurePanel(client: Client, guild: Guild): Promise<void> {
   const channel = await guild.channels.fetch(config.reports.panelChannelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) throw new Error(`Canal do painel de atendimentos ${config.reports.panelChannelId} não encontrado.`);
   const recent = await channel.messages.fetch({ limit: 50 });
-  const existing = recent.find((message) => message.author.id === client.user?.id && message.components.some((component) => hasButtonWithCustomId(component, "report:open")));
+  const existingPanels = recent.filter((message) => message.author.id === client.user?.id && message.components.some((component) => hasButtonWithCustomId(component, "report:open")));
+  const existing = existingPanels.first();
   const panel = { components: publicPanelComponents(), flags: ["IsComponentsV2"] as const };
-  if (existing) { await existing.edit({ ...panel, embeds: [] }); return; }
-  await channel.send({
-    ...panel,
-  });
+  if (existing) await existing.edit({ ...panel, embeds: [] });
+  else await channel.send({ ...panel });
+  for (const duplicate of existingPanels.filter((message) => message.id !== existing?.id).values()) {
+    await duplicate.delete().catch(() => undefined);
+  }
 }
 
 async function migrateTechnicalTopics(guild: Guild): Promise<void> {

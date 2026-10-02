@@ -1,7 +1,26 @@
-export const PRISMA_AI_VERSION = "v2.71";
+export const PRISMA_AI_VERSION = "v2.90";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O painel público da Prisma ganhou uma apresentação mais limpa, com cabeçalho, banner e entrada do painel separados e sem barra lateral ou ícone no botão.",
+  "O progresso do vínculo e a percepção da Prisma agora aparecem em dois containers separados para facilitar a leitura do painel.",
+  "A apresentação do painel agora deixa explícito que as memórias e interações configuradas são da Prisma.",
+  "A apresentação do painel pessoal ficou mais curta e direta, resumindo vínculo, perfil, memórias e interações.",
+  "As boas-vindas do painel agora usam somente o primeiro nome da pessoa e continuam limitadas a 20 caracteres para preservar o layout.",
+  "O nome exibido nas boas-vindas do painel agora é limitado a 20 caracteres, evitando que nomes longos prejudiquem o alinhamento com o avatar.",
+  "A apresentação do painel pessoal agora explica melhor que ele reúne vínculo, perfil, memórias e preferências de interação.",
+  "O painel principal agora resume Perfil, Preferências e Privacidade em três seções com Ver detalhes; cada seção abre seus controles em containers separados na mesma mensagem e mantém o botão de voltar.",
+  "Os subtítulos das ações de privacidade e suas confirmações ficaram mais curtos e diretos.",
+  "As confirmações para apagar dados agora usam a própria mensagem do painel, preservam as boas-vindas e exibem ações laterais sem barras coloridas ou ícones.",
+  "Memórias da Prisma agora aparece como título destacado acima da lista de registros no painel pessoal.",
+  "A visualização de memórias voltou a exibir o título Memórias da Prisma, preservando a lista compacta e sem formato de citação.",
+  "A lista de memórias ficou mais enxuta, sem cabeçalho repetido nem formato de citação, e agora apresenta cada registro como texto secundário numerado.",
+  "A visualização de memórias agora abre na própria mensagem do painel, mantém as boas-vindas em todas as páginas e oferece um botão para voltar às configurações principais.",
+  "O card de relacionamento agora destaca a quantidade de interações e apresenta o progresso e a percepção da Prisma como informações secundárias mais discretas.",
+  "O card de relacionamento do painel ficou mais direto e agora começa pelo estado atual do vínculo, sem repetir um título genérico.",
+  "Os controles do painel pessoal agora aparecem em linhas empilhadas, com contexto à esquerda e cada botão alinhado à direita, removendo resumos repetidos acima das ações.",
+  "O painel pessoal ficou mais compacto: agora recebe cada pessoa pelo nome e agrupa perfil e preferências em cinco blocos principais, sem repetir a identificação do usuário.",
+  "O painel pessoal da Prisma agora organiza vínculo, perfil, preferências e privacidade em containers separados, com uma aparência consistente com o painel de calls.",
   "O botão Ver memórias agora aparece antes de Espontâneas na mesma linha do painel pessoal.",
   "Os botões para apagar memórias, apagar histórico e reiniciar a relação agora ficam juntos em uma linha no painel pessoal.",
   "O painel pessoal agora exibe o aniversário cadastrado, ou informa quando ainda não há uma data salva.",

@@ -81,9 +81,7 @@ function levelUpLayout(member: GuildMember, reward: LevelReward): APIContainerCo
 }
 
 function levelUpMessageComponents(member: GuildMember, reward: LevelReward) {
-  return [
-    levelUpLayout(member, reward),
-  ];
+  return [levelUpLayout(member, reward)];
 }
 
 async function announce(member: GuildMember, reward: LevelReward, channelId: string): Promise<void> {
