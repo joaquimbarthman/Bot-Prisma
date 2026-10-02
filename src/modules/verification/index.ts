@@ -21,7 +21,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
+import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationStartEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
 
 const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
@@ -66,7 +66,7 @@ function panelEmbed(client: Client): EmbedBuilder {
 function publicPanelComponents(): APIContainerComponent[] {
   const header: APIContainerComponent = {
     type: ComponentType.Container,
-    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • Verificação\n-# Uma experiência mais segura para toda a comunidade." }],
+    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • VERIFICAÇÃO\n-# Uma experiência mais segura para toda a comunidade." }],
   };
   const banner: APIContainerComponent = {
     type: ComponentType.Container,
@@ -77,7 +77,7 @@ function publicPanelComponents(): APIContainerComponent[] {
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "**Verifique seu acesso**\n-# Conclua uma breve verificação humana para acessar áreas exclusivas." }],
-      accessory: new ButtonBuilder().setCustomId("verification:start").setLabel("Começar verificação").setStyle(ButtonStyle.Primary).toJSON(),
+      accessory: new ButtonBuilder().setCustomId("verification:start").setLabel("Começar verificação").setEmoji(verificationStartEmoji() ?? "✅").setStyle(ButtonStyle.Primary).toJSON(),
     }],
   };
   return [header, banner, action];

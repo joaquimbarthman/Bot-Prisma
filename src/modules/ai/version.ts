@@ -1,7 +1,17 @@
-export const PRISMA_AI_VERSION = "v2.90";
+export const PRISMA_AI_VERSION = "v3.00";
 
 /** Novidades que foram introduzidas especificamente na versão atual. */
 export const PRISMA_AI_LATEST_UPDATE = [
+  "O painel público agora é reconhecido corretamente após reinicializações, evitando novas cópias e removendo publicações duplicadas.",
+  "O botão do painel público da Prisma agora usa o ícone de memória lasca.png.",
+  "O botão de abertura do painel público voltou a exibir seu ícone visual.",
+  "As ações de apagar agora usam o ícone de lixeira, enquanto reiniciar relação usa o ícone de recarregar e mantém o texto correto também na confirmação.",
+  "Os botões de memória, memórias salvas e interações espontâneas agora usam seus próprios ícones visuais no painel.",
+  "Os ícones dos botões agora usam alternativas Unicode válidas quando os emojis personalizados ainda não estiverem disponíveis, evitando falhas ao abrir o painel.",
+  "Os botões de perfil e retorno agora usam os ícones visuais correspondentes: menção, aniversário, usuário e voltar.",
+  "Os botões Ver detalhes do painel pessoal agora usam o ícone visual line.png do servidor.",
+  "O painel pessoal agora usa o mesmo apelido exibido no servidor que os demais painéis, mantendo o nome global apenas como alternativa quando necessário.",
+  "O cabeçalho do painel pessoal voltou a usar corretamente o primeiro nome da própria pessoa, sem depender de variáveis do painel de calls.",
   "O painel público da Prisma ganhou uma apresentação mais limpa, com cabeçalho, banner e entrada do painel separados e sem barra lateral ou ícone no botão.",
   "O progresso do vínculo e a percepção da Prisma agora aparecem em dois containers separados para facilitar a leitura do painel.",
   "A apresentação do painel agora deixa explícito que as memórias e interações configuradas são da Prisma.",

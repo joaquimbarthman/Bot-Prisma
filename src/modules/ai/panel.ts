@@ -17,11 +17,13 @@ import {
   type APIContainerComponent,
 } from "discord.js";
 import { config } from "../../config.js";
-import { nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
+import { aiPanelEmojis, detailsEmoji, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
 import { clearNickname, clearUserHistory, deletePrismaUserData, getPrismaState, getSettings, listPrismaMemories, resetPrismaState, updateSettings, type PrismaMemory, type UserSettings } from "./store.js";
+
+type PanelIdentity = Interaction["user"] | GuildMember;
 
 export function publicPanelComponents(): APIContainerComponent[] {
   const header: APIContainerComponent = {
@@ -46,6 +48,7 @@ export function publicPanelComponents(): APIContainerComponent[] {
       accessory: new ButtonBuilder()
         .setCustomId("prisma-ai:open")
         .setLabel("Abrir painel")
+        .setEmoji(aiPanelEmojis.memory ?? "🧠")
         .setStyle(ButtonStyle.Secondary)
         .toJSON(),
     }],
@@ -55,7 +58,7 @@ export function publicPanelComponents(): APIContainerComponent[] {
 
 type DeletionTarget = "memories" | "history" | "relationship" | "all";
 
-function deletionConfirmationComponents(user: Interaction["user"], target: DeletionTarget): APIContainerComponent[] {
+function deletionConfirmationComponents(user: PanelIdentity, target: DeletionTarget): APIContainerComponent[] {
   const details: Record<DeletionTarget, { title: string; description: string }> = {
     memories: { title: "Apagar memórias", description: "Remove memórias, perfil aprendido e resumos." },
     history: { title: "Apagar histórico", description: "Remove todo o histórico de conversa." },
@@ -63,12 +66,18 @@ function deletionConfirmationComponents(user: Interaction["user"], target: Delet
     all: { title: "Apagar todos os dados", description: "Remove permanentemente todos os seus dados." },
   };
   const item = details[target];
+  const isRelationshipReset = target === "relationship";
+  const confirmButton = new ButtonBuilder()
+    .setCustomId(`prisma-ai:confirm-${target}`)
+    .setLabel(isRelationshipReset ? "Reiniciar" : "Apagar")
+    .setEmoji(isRelationshipReset ? aiPanelEmojis.reset ?? "🔄" : aiPanelEmojis.trash ?? "🗑️")
+    .setStyle(ButtonStyle.Danger);
   const confirmation: APIContainerComponent = {
     type: ComponentType.Container,
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: `**${item.title}**\n-# ${item.description}` }],
-      accessory: new ButtonBuilder().setCustomId(`prisma-ai:confirm-${target}`).setLabel("Apagar").setStyle(ButtonStyle.Danger).toJSON(),
+      accessory: confirmButton.toJSON(),
     }],
   };
   return [userWelcomeContainer(user), confirmation, backToUserPanelContainer("prisma-ai:cancel-deletion")];
@@ -123,7 +132,7 @@ export function panelFirstName(displayName: string): string {
   return firstName.length > 20 ? `${firstName.slice(0, 17)}...` : firstName;
 }
 
-function userWelcomeContainer(user: Interaction["user"]): APIContainerComponent {
+function userWelcomeContainer(user: PanelIdentity): APIContainerComponent {
   const displayName = panelFirstName(user.displayName);
   return {
     type: ComponentType.Container,
@@ -152,50 +161,52 @@ function backToUserPanelContainer(customId = "prisma-ai:panel-back"): APIContain
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "**Voltar ao painel**\n-# Retorne às suas configurações principais." }],
-      accessory: new ButtonBuilder().setCustomId(customId).setLabel("Voltar").setStyle(ButtonStyle.Secondary).toJSON(),
+      accessory: new ButtonBuilder().setCustomId(customId).setLabel("Voltar").setEmoji(previousPageEmoji() ?? "↩️").setStyle(ButtonStyle.Secondary).toJSON(),
     }],
   };
 }
 
-function panelActionSection(title: string, subtitle: string, customId: string, label: string, style = ButtonStyle.Secondary): APIComponentInContainer {
+function panelActionSection(title: string, subtitle: string, customId: string, label: string, style = ButtonStyle.Secondary, emoji?: string): APIComponentInContainer {
+  const button = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  if (emoji) button.setEmoji(emoji);
   return {
     type: ComponentType.Section,
     components: [{ type: ComponentType.TextDisplay, content: `**${title}**\n-# ${subtitle}` }],
-    accessory: new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).toJSON(),
+    accessory: button.toJSON(),
   };
 }
 
-export function profileDetailsComponents(user: Interaction["user"], settings: UserSettings): APIContainerComponent[] {
+export function profileDetailsComponents(user: PanelIdentity, settings: UserSettings): APIContainerComponent[] {
   return [
     userWelcomeContainer(user),
-    { type: ComponentType.Container, components: [panelActionSection("Apelido", settings.nickname || "Não definido", "prisma-ai:nickname", "Alterar", ButtonStyle.Primary)] },
-    { type: ComponentType.Container, components: [panelActionSection("Aniversário", settings.birthday || "Não informado", "prisma-ai:birthday", "Alterar")] },
-    { type: ComponentType.Container, components: [panelActionSection("Sobre mim", settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado", "prisma-ai:about-me", "Alterar")] },
+    { type: ComponentType.Container, components: [panelActionSection("Apelido", settings.nickname || "Não definido", "prisma-ai:nickname", "Alterar", ButtonStyle.Primary, aiPanelEmojis.mention ?? "📧")] },
+    { type: ComponentType.Container, components: [panelActionSection("Aniversário", settings.birthday || "Não informado", "prisma-ai:birthday", "Alterar", ButtonStyle.Secondary, aiPanelEmojis.birthday ?? "🎂")] },
+    { type: ComponentType.Container, components: [panelActionSection("Sobre mim", settings.aboutMe ? shortAboutMe(settings.aboutMe) : "Não informado", "prisma-ai:about-me", "Alterar", ButtonStyle.Secondary, aiPanelEmojis.user ?? "👤")] },
     backToUserPanelContainer(),
   ];
 }
 
-export function preferenceDetailsComponents(user: Interaction["user"], settings: UserSettings): APIContainerComponent[] {
+export function preferenceDetailsComponents(user: PanelIdentity, settings: UserSettings): APIContainerComponent[] {
   return [
     userWelcomeContainer(user),
-    { type: ComponentType.Container, components: [panelActionSection("Memória", settings.memoryEnabled ? "Ativada" : "Desativada", "prisma-ai:memory", settings.memoryEnabled ? "Desativar" : "Ativar", settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary)] },
-    { type: ComponentType.Container, components: [panelActionSection("Memórias salvas", "Consulte o que a Prisma guardou sobre você.", "prisma-ai:view-memories", "Visualizar")] },
-    { type: ComponentType.Container, components: [panelActionSection("Interações espontâneas", settings.spontaneousInteractions ? "Ativadas" : "Desativadas", "prisma-ai:spontaneous", settings.spontaneousInteractions ? "Desativar" : "Ativar", settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary)] },
+    { type: ComponentType.Container, components: [panelActionSection("Memória", settings.memoryEnabled ? "Ativada" : "Desativada", "prisma-ai:memory", settings.memoryEnabled ? "Desativar" : "Ativar", settings.memoryEnabled ? ButtonStyle.Success : ButtonStyle.Secondary, aiPanelEmojis.memory ?? "🧠")] },
+    { type: ComponentType.Container, components: [panelActionSection("Memórias salvas", "Consulte o que a Prisma guardou sobre você.", "prisma-ai:view-memories", "Visualizar", ButtonStyle.Secondary, detailsEmoji() ?? "➖")] },
+    { type: ComponentType.Container, components: [panelActionSection("Interações espontâneas", settings.spontaneousInteractions ? "Ativadas" : "Desativadas", "prisma-ai:spontaneous", settings.spontaneousInteractions ? "Desativar" : "Ativar", settings.spontaneousInteractions ? ButtonStyle.Success : ButtonStyle.Secondary, aiPanelEmojis.spontaneous ?? "⚡")] },
     backToUserPanelContainer(),
   ];
 }
 
-export function privacyDetailsComponents(user: Interaction["user"]): APIContainerComponent[] {
+export function privacyDetailsComponents(user: PanelIdentity): APIContainerComponent[] {
   return [
     userWelcomeContainer(user),
-    { type: ComponentType.Container, components: [panelActionSection("Apagar memórias", "Remove lembranças salvas.", "prisma-ai:forget", "Apagar", ButtonStyle.Danger)] },
-    { type: ComponentType.Container, components: [panelActionSection("Apagar histórico", "Remove conversas anteriores.", "prisma-ai:clear-history", "Apagar", ButtonStyle.Danger)] },
-    { type: ComponentType.Container, components: [panelActionSection("Reiniciar relação", "Recomeça o vínculo com a Prisma.", "prisma-ai:reset-relationship", "Reiniciar", ButtonStyle.Danger)] },
+    { type: ComponentType.Container, components: [panelActionSection("Apagar memórias", "Remove lembranças salvas.", "prisma-ai:forget", "Apagar", ButtonStyle.Danger, aiPanelEmojis.trash ?? "🗑️")] },
+    { type: ComponentType.Container, components: [panelActionSection("Apagar histórico", "Remove conversas anteriores.", "prisma-ai:clear-history", "Apagar", ButtonStyle.Danger, aiPanelEmojis.trash ?? "🗑️")] },
+    { type: ComponentType.Container, components: [panelActionSection("Reiniciar relação", "Recomeça o vínculo com a Prisma.", "prisma-ai:reset-relationship", "Reiniciar", ButtonStyle.Danger, aiPanelEmojis.reset ?? "🔄")] },
     backToUserPanelContainer(),
   ];
 }
 
-export function userPanelComponents(user: Interaction["user"], settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
+export function userPanelComponents(user: PanelIdentity, settings: UserSettings, relationship: PrismaRelationship): APIContainerComponent[] {
   const relationshipScore = relationshipPercentage(relationship);
   const relationshipLabel = sentenceCase(qualitativeRelationship(relationship));
   const relationshipView = relationship.relationshipSummary
@@ -217,15 +228,15 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
   };
   const profile: APIContainerComponent = {
     type: ComponentType.Container,
-    components: [panelActionSection("Perfil", "Apelido, aniversário e apresentação pessoal.", "prisma-ai:profile-details", "Ver detalhes", ButtonStyle.Primary)],
+    components: [panelActionSection("Perfil", "Apelido, aniversário e apresentação pessoal.", "prisma-ai:profile-details", "Ver detalhes", ButtonStyle.Primary, detailsEmoji() ?? "➖")],
   };
   const preferences: APIContainerComponent = {
     type: ComponentType.Container,
-    components: [panelActionSection("Preferências", "Memória e interações espontâneas.", "prisma-ai:preferences-details", "Ver detalhes")],
+    components: [panelActionSection("Preferências", "Memória e interações espontâneas.", "prisma-ai:preferences-details", "Ver detalhes", ButtonStyle.Secondary, detailsEmoji() ?? "➖")],
   };
   const privacy: APIContainerComponent = {
     type: ComponentType.Container,
-    components: [panelActionSection("Privacidade", "Controle seus dados e seu vínculo com a Prisma.", "prisma-ai:privacy-details", "Ver detalhes")],
+    components: [panelActionSection("Privacidade", "Controle seus dados e seu vínculo com a Prisma.", "prisma-ai:privacy-details", "Ver detalhes", ButtonStyle.Secondary, detailsEmoji() ?? "➖")],
   };
   return [
     header,
@@ -237,7 +248,7 @@ export function userPanelComponents(user: Interaction["user"], settings: UserSet
   ];
 }
 
-function memoriesViewComponents(user: Interaction["user"], memories: PrismaMemory[], requestedPage = 0): APIContainerComponent[] {
+function memoriesViewComponents(user: PanelIdentity, memories: PrismaMemory[], requestedPage = 0): APIContainerComponent[] {
   const pageSize = 10;
   const pageCount = Math.max(1, Math.ceil(memories.length / pageSize));
   const page = Math.max(0, Math.min(requestedPage, pageCount - 1));
@@ -263,14 +274,22 @@ function memoriesViewComponents(user: Interaction["user"], memories: PrismaMemor
   ];
 }
 
-function hasPrismaControls(message: import("discord.js").Message): boolean {
-  const containsControl = (component: unknown): boolean => {
-    if (!component || typeof component !== "object") return false;
-    const value = component as { customId?: unknown; components?: unknown[] };
-    return (typeof value.customId === "string" && value.customId.startsWith("prisma-ai:"))
-      || (Array.isArray(value.components) && value.components.some(containsControl));
+export function hasPrismaControlComponent(component: unknown): boolean {
+  if (!component || typeof component !== "object") return false;
+  const value = component as {
+    customId?: unknown;
+    custom_id?: unknown;
+    accessory?: unknown;
+    components?: unknown[];
   };
-  return message.components.some(containsControl);
+  const customId = typeof value.customId === "string" ? value.customId : value.custom_id;
+  return (typeof customId === "string" && customId.startsWith("prisma-ai:"))
+    || hasPrismaControlComponent(value.accessory)
+    || (Array.isArray(value.components) && value.components.some(hasPrismaControlComponent));
+}
+
+function hasPrismaControls(message: import("discord.js").Message): boolean {
+  return message.components.some(hasPrismaControlComponent);
 }
 
 async function updateOrCreatePanel(client: Client, channel: SendableChannels): Promise<void> {
@@ -280,7 +299,7 @@ async function updateOrCreatePanel(client: Client, channel: SendableChannels): P
   if (current) await current.edit({ embeds: [], components: publicPanelComponents(), flags: ["IsComponentsV2"] });
   else await channel.send({ components: publicPanelComponents(), flags: ["IsComponentsV2"] });
   for (const duplicate of existing.filter((message) => message.id !== current?.id).values()) {
-    await duplicate.edit({ components: [] }).catch(() => undefined);
+    await duplicate.delete().catch(() => undefined);
   }
 }
 
@@ -311,7 +330,8 @@ async function authorizedMember(interaction: Interaction): Promise<GuildMember |
 async function refreshUserPanel(interaction: Interaction): Promise<void> {
   if (!(interaction.isButton() || interaction.isModalSubmit())) return;
   const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
-  await interaction.editReply({ components: userPanelComponents(interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
+  const member = interaction.inGuild() ? await authorizedMember(interaction) : null;
+  await interaction.editReply({ components: userPanelComponents(member ?? interaction.user, settings, state.relationship), allowedMentions: { parse: [] } });
 }
 
 export async function handlePanelInteraction(interaction: Interaction): Promise<boolean> {
@@ -334,6 +354,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   else if (!opensModal && !opensMemoriesView && action !== "open" && !opensDeletionConfirmation && action !== "cancel-deletion") await interaction.deferReply({ flags: ["Ephemeral"] });
 
   const member = await authorizedMember(interaction);
+  const panelIdentity = member ?? interaction.user;
   if (!selfServiceDeletion && (!member || accessLevel(member) === "none")) {
     const content = `Para conversar com a Prisma, você deve ser <@&${config.prismaAi.boosterRoleId}>.`;
     if (interaction.deferred) await interaction.followUp({ content, flags: ["Ephemeral"], allowedMentions: { parse: [] } });
@@ -407,7 +428,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   if (action === "open" && interaction.isButton()) {
     const [settings, state] = await Promise.all([getSettings(interaction.user.id), getPrismaState(interaction.user.id)]);
     await interaction.reply({
-      components: userPanelComponents(interaction.user, settings, state.relationship),
+      components: userPanelComponents(panelIdentity, settings, state.relationship),
       flags: ["Ephemeral", "IsComponentsV2"],
       allowedMentions: { parse: [] },
     });
@@ -415,16 +436,16 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   }
   if (action === "profile-details") {
     const settings = await getSettings(interaction.user.id);
-    await interaction.editReply({ components: profileDetailsComponents(interaction.user, settings), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: profileDetailsComponents(panelIdentity, settings), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "preferences-details") {
     const settings = await getSettings(interaction.user.id);
-    await interaction.editReply({ components: preferenceDetailsComponents(interaction.user, settings), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: preferenceDetailsComponents(panelIdentity, settings), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "privacy-details") {
-    await interaction.editReply({ components: privacyDetailsComponents(interaction.user), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: privacyDetailsComponents(panelIdentity), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "nickname-save" && interaction.isModalSubmit()) {
@@ -447,17 +468,17 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
   }
   if (opensDeletionConfirmation) {
     const target: DeletionTarget = action === "forget" ? "memories" : action === "clear-history" ? "history" : action === "reset-relationship" ? "relationship" : "all";
-    await interaction.editReply({ components: deletionConfirmationComponents(interaction.user, target), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: deletionConfirmationComponents(panelIdentity, target), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "view-memories") {
     const memories = await listPrismaMemories(interaction.user.id);
-    await interaction.editReply({ components: memoriesViewComponents(interaction.user, memories), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: memoriesViewComponents(panelIdentity, memories), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "memories-page" && interaction.isButton()) {
     const memories = await listPrismaMemories(interaction.user.id);
-    await interaction.editReply({ components: memoriesViewComponents(interaction.user, memories, Number(rawPage) || 0), allowedMentions: { parse: [] } });
+    await interaction.editReply({ components: memoriesViewComponents(panelIdentity, memories, Number(rawPage) || 0), allowedMentions: { parse: [] } });
     return true;
   }
   if (action === "panel-back") {

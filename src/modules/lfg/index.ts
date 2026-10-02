@@ -1,10 +1,10 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, PermissionFlagsBits, SeparatorSpacingSize,
   StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type ButtonInteraction, type Client,
-  type APIContainerComponent, type Interaction, type Message, type ModalSubmitInteraction, type PartialMessage, type VoiceState,
+  type APIContainerComponent, type Interaction, type Message, type ModalSubmitInteraction, type PartialMessage, type User, type VoiceState,
 } from "discord.js";
 import { config } from "../../config.js";
-import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgTrashEmoji, lfgWarningEmoji } from "../../emoji-manager.js";
+import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgTrashEmoji, lfgWarningEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { LFG_GAMES, type LfgGameKey } from "./config.js";
 import { mutate, sessions, type LfgSession } from "./store.js";
 
@@ -31,22 +31,68 @@ function label(session: LfgSession, status: LfgSession["status"]): string {
   if ((status === "open" || status === "completed") && remaining > 0 && remaining <= DELETION_WARNING_MS) return "🗑️ Será apagado em breve";
   return ({ open: "🟢 Aberto", completed: "✅ Completo", closed: "🔒 Fechado", expired: "⌛ Expirado", deleted: "🗑️ Excluído" })[status];
 }
-function currentCall(client: Client, session: LfgSession): string {
+function currentCall(client: Client, session: LfgSession): string | null {
   const channelId = client.guilds.cache.get(session.guildId)?.voiceStates.cache.get(session.creatorId)?.channelId;
-  return channelId ? `<#${channelId}>` : "Nenhuma call";
+  return channelId ? `<#${channelId}>` : null;
 }
 function publicationComponents(client: Client, session: LfgSession): APIContainerComponent[] {
-  const game = LFG_GAMES[session.game]; const status = sessionStatus(session);
+  const game = LFG_GAMES[session.game];
   const roleMention = lfgGameRoleMention(session.game);
   const participants = session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum";
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}join:${session.id}`).setLabel("Participar").setEmoji(lfgCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(inactive),
-    new ButtonBuilder().setCustomId(`${PREFIX}leave:${session.id}`).setLabel("Sair").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary).setDisabled(session.status !== "open"),
-  );
-  row.addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}delete:${session.id}`).setLabel("Apagar LFG").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger),
-  );
+  const activeCall = currentCall(client, session);
+  const header: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.Section,
+      components: [{ type: ComponentType.TextDisplay, content: `-# \u200b\n## ${roleMention || game.name}` }],
+      accessory: { type: ComponentType.Thumbnail, media: { url: game.img }, description: game.name },
+    }, {
+      type: ComponentType.Separator,
+      divider: true,
+      spacing: SeparatorSpacingSize.Small,
+    }, {
+      type: ComponentType.TextDisplay,
+      content: "-# Reúna sua equipe, complete as vagas e prepare-se para a próxima partida.",
+    }],
+  };
+  const description: APIContainerComponent[] = session.note ? [{
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.TextDisplay, content: `**Descrição**\n-# ${session.note}` }],
+  }] : [];
+  const information: APIContainerComponent[] = [
+    { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: `**Jogadores**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.` }] },
+    ...(activeCall ? [{ type: ComponentType.Container as const, components: [{ type: ComponentType.TextDisplay as const, content: `**Call atual**\n-# ${activeCall}` }] }] : []),
+    { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: `**Participantes**\n-# ${participants}` }] },
+  ];
+  const actions: APIContainerComponent[] = [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Participar do grupo**\n-# Entre na lista de jogadores deste LFG." }],
+        accessory: new ButtonBuilder().setCustomId(`${PREFIX}join:${session.id}`).setLabel("Participar").setEmoji(lfgCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(inactive).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Sair do grupo**\n-# Remova sua participação deste LFG." }],
+        accessory: new ButtonBuilder().setCustomId(`${PREFIX}leave:${session.id}`).setLabel("Sair").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary).setDisabled(session.status !== "open").toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Apagar LFG**\n-# Encerre o grupo e remova esta publicação." }],
+        accessory: new ButtonBuilder().setCustomId(`${PREFIX}delete:${session.id}`).setLabel("Apagar").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger).toJSON(),
+      }],
+    },
+  ];
+  return [header, ...description, ...information, ...actions];
+  /* Layout anterior preservado como referência da migração para Components V2.
   return [{
     type: ComponentType.Container,
     accent_color: status === "open" ? 0x57f287 : status === "completed" ? 0x5865f2 : 0x99aab5,
@@ -68,24 +114,31 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
       row.toJSON(),
     ],
   }];
+  */
 }
 function lfgPanelComponents(): APIContainerComponent[] {
-  return [{
+  const header: APIContainerComponent = {
     type: ComponentType.Container,
-    accent_color: 0x5865f2,
-    components: [
-      {
-        type: ComponentType.TextDisplay,
-        content: "## PRISMA • LFG\n### Encontrar pessoas para jogar\nCrie um grupo em poucos toques e reúna sua equipe.",
-      },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.MediaGallery, items: [{ media: { url: "https://i.imgur.com/r0pG15G.gif" } }] },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`${PREFIX}create`).setLabel(" Criar grupo").setEmoji(lfgGamepadEmoji() ?? "🎮").setStyle(ButtonStyle.Primary),
-      ).toJSON(),
-    ],
-  }];
+    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • LFG\n-# Encontre pessoas, monte sua equipe e organize a próxima partida." }],
+  };
+  const banner: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.MediaGallery, items: [{ media: { url: "https://i.imgur.com/r0pG15G.gif" } }] }],
+  };
+  const action: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.Section,
+      components: [{ type: ComponentType.TextDisplay, content: "**Crie seu grupo**\n-# Escolha o jogo, defina as vagas e publique seu LFG." }],
+      accessory: new ButtonBuilder()
+        .setCustomId(`${PREFIX}create`)
+        .setLabel("Criar grupo")
+        .setEmoji(lfgGamepadEmoji() ?? "🎮")
+        .setStyle(ButtonStyle.Primary)
+        .toJSON(),
+    }],
+  };
+  return [header, banner, action];
 }
 
 function creationResultComponents(content: string, success = false): APIContainerComponent[] {
@@ -98,25 +151,105 @@ function creationResultComponents(content: string, success = false): APIContaine
 
 function hasButtonWithCustomId(component: unknown, customId: string): boolean {
   if (!component || typeof component !== "object") return false;
-  const candidate = component as { customId?: unknown; components?: unknown };
+  const candidate = component as { customId?: unknown; accessory?: unknown; components?: unknown };
   if (candidate.customId === customId) return true;
+  if (candidate.accessory && hasButtonWithCustomId(candidate.accessory, customId)) return true;
   return Array.isArray(candidate.components) && candidate.components.some((child) => hasButtonWithCustomId(child, customId));
 }
 
-function draftView(draft: Draft): { components: APIContainerComponent[] } {
-  const slots = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}draft-slots`).setPlaceholder(`Vagas: ${draft.maxPlayers}`).addOptions([2, 3, 4, 5, 6, 8, 10, 12].map((value) => ({ label: `${value} jogadores`, value: String(value), default: value === draft.maxPlayers }))));
-  const options = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}draft-note`).setLabel("Adicionar observação").setEmoji(lfgWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Secondary));
-  const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}draft-create`).setLabel("Publicar LFG").setEmoji(lfgCheckEmoji() ?? "✅").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`${PREFIX}draft-cancel`).setLabel("Cancelar").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary));
+function lfgPrivateWelcome(user: User): APIContainerComponent {
+  const cleanedName = user.displayName.replace(/[\r\n]/g, " ").trim() || "usuário";
+  const firstName = cleanedName.split(/\s+/u)[0];
+  const displayName = firstName.length > 20 ? `${firstName.slice(0, 17)}...` : firstName;
   return {
-    components: [{ type: ComponentType.Container, accent_color: 0x5865f2, components: [
-      { type: ComponentType.TextDisplay, content: `## Criar grupo • ${LFG_GAMES[draft.game].name}\nConfigure seu grupo em poucos toques. A observação é opcional.` },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content: `**Vagas**\n${draft.maxPlayers} jogadores\n\n**Observação**\n${draft.note || "Nenhuma"}` },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      slots.toJSON(), options.toJSON(),
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      actions.toJSON(),
-    ] }],
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.Section,
+      components: [{ type: ComponentType.TextDisplay, content: `-# \u200b\n## Bem-vindo(a), ${displayName}!` }],
+      accessory: {
+        type: ComponentType.Thumbnail,
+        media: { url: user.displayAvatarURL({ extension: "png", size: 256 }) },
+        description: `Avatar de ${user.username}`,
+      },
+    }, {
+      type: ComponentType.Separator,
+      divider: true,
+      spacing: SeparatorSpacingSize.Small,
+    }, {
+      type: ComponentType.TextDisplay,
+      content: "-# Monte seu grupo, defina as vagas e publique seu LFG.",
+    }],
+  };
+}
+
+function gameSelectionView(user: User): { components: APIContainerComponent[] } {
+  const games = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`${PREFIX}game`)
+      .setPlaceholder("Selecione o jogo")
+      .addOptions(Object.entries(LFG_GAMES).map(([value, game]) => ({ label: game.name, value }))),
+  );
+  return {
+    components: [
+      lfgPrivateWelcome(user),
+      {
+        type: ComponentType.Container,
+        components: [
+          { type: ComponentType.TextDisplay, content: "**Escolha o jogo**\n-# Selecione o jogo para configurar seu grupo." },
+          games.toJSON(),
+        ],
+      },
+    ],
+  };
+}
+
+function draftView(draft: Draft, user: User): { components: APIContainerComponent[] } {
+  const game = LFG_GAMES[draft.game];
+  const slots = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}draft-slots`).setPlaceholder(`Vagas: ${draft.maxPlayers}`).addOptions([2, 3, 4, 5, 6, 8, 10, 12].map((value) => ({ label: `${value} jogadores`, value: String(value), default: value === draft.maxPlayers }))));
+  return {
+    components: [
+      lfgPrivateWelcome(user),
+      {
+        type: ComponentType.Container,
+        components: [{ type: ComponentType.TextDisplay, content: `**Jogo selecionado**\n-# ${game.name}` }],
+      },
+      {
+        type: ComponentType.Container,
+        components: [
+          { type: ComponentType.TextDisplay, content: `**Vagas do grupo**\n-# Atualmente configurado para ${draft.maxPlayers} jogadores.` },
+          slots.toJSON(),
+        ],
+      },
+      {
+        type: ComponentType.Container,
+        components: [{
+          type: ComponentType.Section,
+          components: [{ type: ComponentType.TextDisplay, content: `**Observação**\n-# ${draft.note || "Adicione modo, rank ou objetivo do grupo."}` }],
+          accessory: new ButtonBuilder()
+            .setCustomId(`${PREFIX}draft-note`)
+            .setLabel(draft.note ? "Alterar" : "Adicionar")
+            .setEmoji(lfgWarningEmoji() ?? "⚠️")
+            .setStyle(ButtonStyle.Secondary)
+            .toJSON(),
+        }],
+      },
+      {
+        type: ComponentType.Container,
+        components: [{
+          type: ComponentType.Section,
+          components: [{ type: ComponentType.TextDisplay, content: "**Publicar LFG**\n-# Envie o grupo para o canal com estas configurações." }],
+          accessory: new ButtonBuilder().setCustomId(`${PREFIX}draft-create`).setLabel("Publicar").setEmoji(lfgCheckEmoji() ?? "✅").setStyle(ButtonStyle.Primary).toJSON(),
+        }],
+      },
+      {
+        type: ComponentType.Container,
+        components: [{
+          type: ComponentType.Section,
+          components: [{ type: ComponentType.TextDisplay, content: "**Voltar**\n-# Escolha outro jogo para o seu grupo." }],
+          accessory: new ButtonBuilder().setCustomId(`${PREFIX}draft-back`).setLabel("Voltar").setEmoji(previousPageEmoji() ?? "↩️").setStyle(ButtonStyle.Secondary).toJSON(),
+        }],
+      },
+    ],
   };
 }
 async function updateMessage(client: Client, session: LfgSession): Promise<void> { if (!session.messageId) return; const channel = await client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await channel.messages.fetch(session.messageId).then((message) => message.edit({ embeds: [], components: publicationComponents(client, session), flags: ["IsComponentsV2"] })).catch(() => undefined); }
@@ -137,8 +270,7 @@ export async function handleLfgMessageDelete(message: Message | PartialMessage):
 async function showCreate(interaction: ButtonInteraction): Promise<void> {
   await interaction.deferReply({ flags: ["Ephemeral"] });
   const last = createdCooldowns.get(interaction.user.id) ?? 0; if (Date.now() - last < config.lfg.createCooldownSeconds * 1000) { await interaction.editReply({ content: "Aguarde um instante antes de criar outro LFG." }); return; }
-  const games = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}game`).setPlaceholder("Selecione o jogo").addOptions(Object.entries(LFG_GAMES).map(([value, game]) => ({ label: game.name, value }))));
-  await interaction.editReply({ components: [{ type: ComponentType.Container, accent_color: 0x5865f2, components: [{ type: ComponentType.TextDisplay, content: "## Criar grupo\nEscolha o jogo para começar." }, games.toJSON()] }], flags: ["IsComponentsV2"] });
+  await interaction.editReply({ ...gameSelectionView(interaction.user), flags: ["IsComponentsV2"] });
 }
 async function submitCreate(interaction: ButtonInteraction, draft: Draft): Promise<void> {
   if (!interaction.inGuild()) return; const { game, maxPlayers } = draft;
@@ -184,12 +316,12 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
   const [,, id] = interaction.customId.split(":");
   if (interaction.isButton() && interaction.customId === `${PREFIX}create`) { await showCreate(interaction); return true; }
   if (interaction.isButton() && interaction.customId === `${PREFIX}open`) { const active = (await sessions()).filter((value) => value.guildId === interaction.guildId && value.status === "open" && lfgExpiresAt(value) > Date.now()); await interaction.reply({ content: active.length ? active.map((value) => `• **${LFG_GAMES[value.game].name}** — ${value.participants.length}/${value.maxPlayers} <#${value.channelId}>`).join("\n") : "Não há grupos abertos agora.", flags: ["Ephemeral"], allowedMentions: { parse: [] } }); return true; }
-  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}game`) { const game = interaction.values[0]; if (!isLfgGameKey(game)) { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "Esse jogo não está mais disponível. Abra a criação novamente para ver a lista atualizada." }] }] }); return true; } const draft: Draft = { game, maxPlayers: 4, note: "", expiresAt: Date.now() + 15 * 60_000 }; drafts.set(draftKey(interaction), draft); await interaction.update(draftView(draft)); return true; }
-  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}draft-slots`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.maxPlayers = Number(interaction.values[0]); await interaction.update(draftView(draft)); return true; }
-  if (interaction.isModalSubmit() && interaction.customId === `${PREFIX}draft-note-modal`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.note = interaction.fields.getTextInputValue("note").trim().replace(/@(?:everyone|here)|<@&?\d+>/g, "@").slice(0, 500); await interaction.reply({ ...draftView(draft), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}game`) { const game = interaction.values[0]; if (!isLfgGameKey(game)) { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "Esse jogo não está mais disponível. Abra a criação novamente para ver a lista atualizada." }] }] }); return true; } const draft: Draft = { game, maxPlayers: 4, note: "", expiresAt: Date.now() + 15 * 60_000 }; drafts.set(draftKey(interaction), draft); await interaction.update(draftView(draft, interaction.user)); return true; }
+  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}draft-slots`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.maxPlayers = Number(interaction.values[0]); await interaction.update(draftView(draft, interaction.user)); return true; }
+  if (interaction.isModalSubmit() && interaction.customId === `${PREFIX}draft-note-modal`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.note = interaction.fields.getTextInputValue("note").trim().replace(/@(?:everyone|here)|<@&?\d+>/g, "@").slice(0, 500); if (interaction.isFromMessage()) await interaction.update(draftView(draft, interaction.user)); else await interaction.reply({ ...draftView(draft, interaction.user), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (!interaction.isButton()) return true;
   const action = interaction.customId.split(":")[1];
-  if (action.startsWith("draft-")) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } if (action === "draft-note") { await interaction.showModal({ customId: `${PREFIX}draft-note-modal`, title: "Observação do grupo", components: [new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("note").setLabel("Modo, rank ou objetivo (opcional)").setStyle(TextInputStyle.Paragraph).setValue(draft.note).setRequired(false).setMaxLength(500))] }); return true; } if (action === "draft-cancel") { drafts.delete(draftKey(interaction)); await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0x99aab5, components: [{ type: ComponentType.TextDisplay, content: "Criação cancelada." }] }] }); return true; } if (action === "draft-create") { await interaction.deferUpdate(); await submitCreate(interaction, draft); return true; } }
+  if (action.startsWith("draft-")) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } if (action === "draft-note") { await interaction.showModal({ customId: `${PREFIX}draft-note-modal`, title: "Observação do grupo", components: [new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("note").setLabel("Modo, rank ou objetivo (opcional)").setStyle(TextInputStyle.Paragraph).setValue(draft.note).setRequired(false).setMaxLength(500))] }); return true; } if (action === "draft-back") { drafts.delete(draftKey(interaction)); await interaction.update(gameSelectionView(interaction.user)); return true; } if (action === "draft-create") { await interaction.deferUpdate(); await submitCreate(interaction, draft); return true; } }
   const deferredReply = action === "join" || action === "leave";
   const deferredUpdate = action === "confirm-delete";
   if (deferredReply) await interaction.deferReply({ flags: ["Ephemeral"] });
@@ -200,13 +332,13 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
     await interaction.editReply({ content: "Esta LFG expirou após 24 horas." });
     return true;
   }
-  if (action === "delete") { if (!canManage(session, interaction)) { await interaction.reply({ content: "Somente quem criou a LFG pode apagá-la.", flags: ["Ephemeral"] }); return true; } const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete:${id}`).setLabel("Excluir").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete:${id}`).setLabel("Cancelar").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary)); await interaction.reply({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "## Excluir LFG\nIsso encerrará o grupo e removerá a postagem." }, { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, buttons.toJSON()] }], flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
-  if (action === "cancel-delete") { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0x99aab5, components: [{ type: ComponentType.TextDisplay, content: "Exclusão cancelada." }] }] }); return true; }
+  if (action === "delete") { if (!canManage(session, interaction)) { await interaction.reply({ content: "Somente quem criou a LFG pode apagá-la.", flags: ["Ephemeral"] }); return true; } const confirm = new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete:${id}`).setLabel("Apagar").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger); const cancel = new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete:${id}`).setLabel("Cancelar").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary); await interaction.reply({ components: [{ type: ComponentType.Container, components: [{ type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: "**Apagar LFG**\n-# Encerre o grupo e remova esta publicação." }], accessory: confirm.toJSON() }] }, { type: ComponentType.Container, components: [{ type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: "**Cancelar exclusão**\n-# Mantenha o grupo e volte à publicação." }], accessory: cancel.toJSON() }] }], flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+  if (action === "cancel-delete") { await interaction.deferUpdate(); await interaction.deleteReply(); return true; }
   if (action === "confirm-delete") {
     if (!canManage(session, interaction)) { await interaction.editReply({ content: "Somente quem criou a LFG pode apagá-la.", components: [] }); return true; }
     await mutate((db) => { const value = db.sessions.find((item) => item.id === id); if (value) { value.status = "deleted"; value.updatedAt = new Date().toISOString(); } });
     if (session.messageId || session.roleMentionMessageId) { const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await Promise.all([session.messageId, session.roleMentionMessageId].filter((messageId): messageId is string => !!messageId).map((messageId) => channel.messages.fetch(messageId).then((message) => message.delete()).catch(() => undefined))); }
-    await interaction.editReply({ components: creationResultComponents("LFG excluído e anúncio apagado.", true) }); return true;
+    await interaction.editReply({ components: creationResultComponents("LFG apagado e publicação removida.", true) }); return true;
   }
   const saved = await mutate((db) => { const value = db.sessions.find((item) => item.id === id)!; if (action === "join") { if (value.status !== "open" || value.participants.length >= value.maxPlayers || value.participants.includes(interaction.user.id)) return value; value.participants.push(interaction.user.id); if (value.participants.length >= value.maxPlayers) value.status = "completed"; } else if (action === "leave") { value.participants = value.participants.filter((userId) => userId !== interaction.user.id); if (value.status === "completed") value.status = "open"; } value.updatedAt = new Date().toISOString(); return value; });
   await updateMessage(interaction.client, saved); await interaction.editReply({ content: action === "join" ? "Participação atualizada." : "Você saiu do grupo." }); return true;

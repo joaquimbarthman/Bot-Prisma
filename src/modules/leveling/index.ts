@@ -1,7 +1,8 @@
-import { ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
+import { AttachmentBuilder, ComponentType, SeparatorSpacingSize, type APIContainerComponent, type Client, type Collection, type Guild, type GuildMember, type Message, type Snowflake, type VoiceState } from "discord.js";
 import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
 import { clearLevelBenefitPermissions, syncLevelBenefitPermissions } from "./permissions.js";
+import { generateLevelUpCard, generateRankCard, generateTop10Card } from "./card.js";
 import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
@@ -87,7 +88,17 @@ function levelUpMessageComponents(member: GuildMember, reward: LevelReward) {
 async function announce(member: GuildMember, reward: LevelReward, channelId: string): Promise<void> {
   const channel = await member.guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
-  await channel.send({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+  try {
+    const card = await generateLevelUpCard(member, reward);
+    await channel.send({
+      content: `<@${member.id}>`,
+      files: [new AttachmentBuilder(card, { name: `nivel-${reward.level}-${member.id}.png` })],
+      allowedMentions: { parse: [], users: [member.id] },
+    });
+  } catch (error) {
+    console.error(`[LEVELING] Falha ao gerar card de nível para ${member.id}:`, error);
+    await channel.send({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+  }
 }
 
 export function removeLevelRewardEmoji(currentName: string, rewards: LevelReward[]): string {
@@ -219,7 +230,7 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     const members = fetchedMembers ?? message.guild.members.cache;
     const staleRows = fetchedMembers ? rows.filter((row) => !fetchedMembers.has(row.userId)) : [];
     await Promise.all(staleRows.map((row) => removeMemberLevel(row.guildId, row.userId)));
-    const activeRows = rows.filter((row) => members.has(row.userId)).slice(0, 10);
+    const activeRows = rows.filter((row) => members.has(row.userId)).slice(0, 5);
     const ranking = activeRows.map((row, index) =>
       `**${String(index + 1).padStart(2, "0")} <@${row.userId}> - Nível ${row.level}** • ${row.xpTotal.toLocaleString("pt-BR")} XP`,
     ).join("\n");
@@ -234,7 +245,20 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
         { type: ComponentType.TextDisplay, content: `-# Prismoria • Sistema de Evolução • ${panelDate()}` },
       ],
     }];
-    await message.reply({ components, flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
+    try {
+      const cardEntries = activeRows.flatMap((row, index) => {
+        const member = members.get(row.userId);
+        return member ? [{ member, level: row.level, xpTotal: row.xpTotal, position: index + 1 }] : [];
+      });
+      const card = await generateTop10Card(cardEntries);
+      await message.reply({
+        files: [new AttachmentBuilder(card, { name: `top-5-${message.guild.id}.png` })],
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      console.error(`[LEVELING] Falha ao gerar card do top 10 em ${message.guild.id}:`, error);
+      await message.reply({ components, flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
+    }
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
@@ -244,7 +268,17 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     const reward = (await getRewards(message.guild.id)).find((item) => item.level === level);
     if (!reward) { await message.reply(`O nivel ${level} ainda nao possui cargo configurado.`); return true; }
     const member = message.mentions.members?.first() ?? message.member;
-    await message.reply({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+    try {
+      const card = await generateLevelUpCard(member, reward);
+      await message.reply({
+        content: `<@${member.id}>`,
+        files: [new AttachmentBuilder(card, { name: `nivel-${reward.level}-${member.id}.png` })],
+        allowedMentions: { parse: [], users: [member.id] },
+      });
+    } catch (error) {
+      console.error(`[LEVELING] Falha ao gerar card de teste para ${member.id}:`, error);
+      await message.reply({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+    }
     return true;
   }
   if (command === "!listab") {
@@ -353,7 +387,22 @@ async function sendRank(target: Message, member: GuildMember): Promise<void> {
     ],
   }];
 
-  await target.reply({ components, flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
+  try {
+    const card = await generateRankCard(member, {
+      currentLevel: level,
+      currentLevelXp: levelProgressXp,
+      xpRequired: levelRequiredXp,
+      serverPosition: position,
+    });
+    await target.reply({
+      content: `<@${member.id}>`,
+      files: [new AttachmentBuilder(card, { name: `rank-${member.id}.png` })],
+      allowedMentions: { parse: [], users: [member.id] },
+    });
+  } catch (error) {
+    console.error(`[LEVELING] Falha ao gerar card de rank para ${member.id}:`, error);
+    await target.reply({ components, flags: ["IsComponentsV2"], allowedMentions: { parse: [] } });
+  }
 }
 
 export async function syncLevelingRoles(

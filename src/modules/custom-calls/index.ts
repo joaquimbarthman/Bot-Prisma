@@ -3,6 +3,7 @@ import {
   type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type ModalSubmitInteraction, type Snowflake, type UserSelectMenuInteraction, type VoiceChannel, type VoiceState,
 } from "discord.js";
 import { config } from "../../config.js";
+import { aiPanelEmojis, customCallAddEmoji, customCallEmojiPickerEmoji, customCallTrashEmoji, detailsEmoji, lfgSoundEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallByChannel, getCustomCallMembers, listCustomCalls, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
 
 const PREFIX = "custom-call:";
@@ -120,7 +121,7 @@ function publicPanel(): APIContainerComponent[] {
     type: ComponentType.Container,
     components: [{
       type: ComponentType.TextDisplay,
-      content: "## PRISMA • Calls Personalizadas\n-# Seu espaço, suas regras. Crie uma call exclusiva e controle quem pode entrar.",
+      content: "## PRISMA • CHAMADAS\n-# Seu espaço, suas regras. Crie uma call exclusiva e controle quem pode entrar.",
     }],
   };
   const banner: APIContainerComponent = {
@@ -141,6 +142,7 @@ function publicPanel(): APIContainerComponent[] {
       accessory: new ButtonBuilder()
         .setCustomId(`${PREFIX}open`)
         .setLabel("Abrir Painel")
+        .setEmoji(lfgSoundEmoji() ?? "🎵")
         .setStyle(ButtonStyle.Success)
         .toJSON(),
     }],
@@ -247,6 +249,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
       accessory: new ButtonBuilder()
         .setCustomId(`${PREFIX}emoji`)
         .setLabel("Alterar")
+        .setEmoji(customCallEmojiPickerEmoji() ?? "🎭")
         .setStyle(ButtonStyle.Secondary)
         .toJSON(),
     }],
@@ -263,6 +266,7 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
       accessory: new ButtonBuilder()
         .setCustomId(`${PREFIX}manage`)
         .setLabel("Gerenciar")
+        .setEmoji(detailsEmoji() ?? "➖")
         .setStyle(ButtonStyle.Primary)
         .toJSON(),
     }],
@@ -273,11 +277,12 @@ async function mainPanel(call: CustomCall, panelOwner: GuildMember, feedback?: s
       type: ComponentType.Section,
       components: [{
         type: ComponentType.TextDisplay,
-        content: "**Excluir Call**\n-# Esta ação remove a call e o cargo vinculado.",
+        content: "**Apagar Call**\n-# Esta ação remove a call e o cargo vinculado.",
       }],
       accessory: new ButtonBuilder()
         .setCustomId(`${PREFIX}delete`)
-        .setLabel("Excluir")
+        .setLabel("Apagar")
+        .setEmoji(customCallTrashEmoji() ?? "🗑️")
         .setStyle(ButtonStyle.Danger)
         .toJSON(),
     }],
@@ -330,6 +335,7 @@ function backButtonContainer(customId = `${PREFIX}back`): APIContainerComponent 
       accessory: new ButtonBuilder()
         .setCustomId(customId)
         .setLabel("Voltar")
+        .setEmoji(previousPageEmoji() ?? "↩️")
         .setStyle(ButtonStyle.Secondary)
         .toJSON(),
     }],
@@ -342,7 +348,7 @@ async function manageMembersPanel(call: CustomCall, panelOwner: GuildMember): Pr
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "**Adicionar membro**\n-# Conceda acesso à sua call para uma pessoa." }],
-      accessory: new ButtonBuilder().setCustomId(`${PREFIX}add`).setLabel("Adicionar").setStyle(ButtonStyle.Success).toJSON(),
+      accessory: new ButtonBuilder().setCustomId(`${PREFIX}add`).setLabel("Adicionar").setEmoji(customCallAddEmoji() ?? "➕").setStyle(ButtonStyle.Success).toJSON(),
     }],
   };
   const removeMember: APIContainerComponent = {
@@ -350,7 +356,7 @@ async function manageMembersPanel(call: CustomCall, panelOwner: GuildMember): Pr
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "**Remover membro**\n-# Retire o acesso de uma pessoa da sua call." }],
-      accessory: new ButtonBuilder().setCustomId(`${PREFIX}remove`).setLabel("Remover").setStyle(ButtonStyle.Secondary).toJSON(),
+      accessory: new ButtonBuilder().setCustomId(`${PREFIX}remove`).setLabel("Remover").setEmoji(aiPanelEmojis.close ?? "✖️").setStyle(ButtonStyle.Secondary).toJSON(),
     }],
   };
   return [welcomeContainer(panelOwner), members, addMember, removeMember, backButtonContainer()];
@@ -362,11 +368,12 @@ function deleteConfirmationPanel(panelOwner: GuildMember): APIContainerComponent
       type: ComponentType.Section,
       components: [{
         type: ComponentType.TextDisplay,
-        content: "**Excluir Call Personalizada**\n-# Essa ação não pode ser desfeita.",
+        content: "**Apagar Call Personalizada**\n-# Essa ação não pode ser desfeita.",
       }],
       accessory: new ButtonBuilder()
         .setCustomId(`${PREFIX}confirm-delete`)
-        .setLabel("Excluir Call")
+        .setLabel("Apagar")
+        .setEmoji(customCallTrashEmoji() ?? "🗑️")
         .setStyle(ButtonStyle.Danger)
         .toJSON(),
     }],

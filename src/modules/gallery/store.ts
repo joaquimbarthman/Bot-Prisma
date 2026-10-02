@@ -113,6 +113,28 @@ export async function toggleGalleryLike(messageId: string, userId: string): Prom
   await queue; return result;
 }
 
+export async function replaceGalleryLikes(messageId: string, likes: string[]): Promise<GalleryPost | undefined> {
+  const uniqueLikes = [...new Set(likes)];
+  if (supabase) {
+    const post = await getGalleryPost(messageId);
+    if (!post) return undefined;
+    const next = { ...post, likes: uniqueLikes };
+    const { error } = await supabase.from("gallery_posts").upsert(toRemote(messageId, next), { onConflict: "message_id" });
+    if (!error) return next;
+    console.error("[GALERIA] Não foi possível limpar curtidas no Supabase:", error.message);
+  }
+  let result: GalleryPost | undefined;
+  queue = queue.then(async () => {
+    const db = await read(); const post = db[messageId];
+    if (!post) return;
+    post.likes = uniqueLikes;
+    result = { ...post, likes: [...post.likes], comments: [...(post.comments ?? [])] };
+    await save(db);
+  });
+  await queue;
+  return result;
+}
+
 export async function addGalleryComment(messageId: string, userId: string, content: string): Promise<GalleryPost | undefined> {
   const comment: GalleryComment = { userId, content, createdAt: new Date().toISOString() };
   if (supabase) {

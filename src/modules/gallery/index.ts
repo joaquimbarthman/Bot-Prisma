@@ -4,7 +4,7 @@ import { galleryButtons, galleryCloseEmoji, galleryTrashEmoji, nextPageEmoji, pr
 import { aiModeration } from "../moderation/ai.js";
 import { localModeration } from "../moderation/filter.js";
 import { hasCensorshipBypassRole } from "../moderation/exemptions.js";
-import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
+import { addGalleryComment, createGalleryPost, deleteGalleryPost, getGalleryPost, listGalleryPosts, replaceGalleryLikes, toggleGalleryLike, updateGalleryInstagram, type GalleryPost } from "./store.js";
 import { prepareGalleryImage } from "./image.js";
 
 const GALLERY_COMMENT_MAX_LENGTH = 80;
@@ -40,14 +40,22 @@ function deleteConfirmationComponents(messageId: string, result?: "confirmed" | 
 }
 
 function galleryPostComponents(userId: string, mediaUrl: string, caption: string, post: GalleryPost): APIContainerComponent[] {
-  return [{ type: ComponentType.Container, components: [
-    { type: ComponentType.TextDisplay, content: `> -# <@${userId}>` },
-    ...(caption ? [{ type: ComponentType.TextDisplay as const, content: caption.slice(0, 150) }] : []),
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    { type: ComponentType.MediaGallery, items: [{ media: { url: mediaUrl } }] },
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
-  ] }];
+  const header: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.TextDisplay,
+      content: caption ? `> <@${userId}>\n-# ${caption.slice(0, 150)}` : `> <@${userId}>`,
+    }],
+  };
+  const media: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.MediaGallery, items: [{ media: { url: mediaUrl } }] }],
+  };
+  const interactions: APIContainerComponent = {
+    type: ComponentType.Container,
+    components: galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+  };
+  return [header, media, interactions];
 }
 
 function galleryDetailsComponents(post: GalleryPost, messageId: string, requestedLikesPage = 0, requestedCommentsPage = 0): APIContainerComponent[] {
@@ -57,48 +65,91 @@ function galleryDetailsComponents(post: GalleryPost, messageId: string, requeste
   const commentsPage = Math.max(0, Math.min(requestedCommentsPage, commentsPageCount - 1));
   const visibleLikes = post.likes.slice(likesPage * GALLERY_LIKES_PER_PAGE, (likesPage + 1) * GALLERY_LIKES_PER_PAGE);
   const likes = visibleLikes.length
-    ? visibleLikes.map((id) => `<@${id}>`).join("  ·  ")
+    ? `-# ${visibleLikes.map((id) => `<@${id}>`).join(" ・ ")}`
     : "-# Esta foto ainda não recebeu curtidas.";
 
   const visibleComments = [...post.comments].reverse().slice(commentsPage * GALLERY_COMMENTS_PER_PAGE, (commentsPage + 1) * GALLERY_COMMENTS_PER_PAGE);
   const comments = visibleComments.length
-    ? visibleComments.map((comment) => `> <@${comment.userId}>  **·**  ${escapeMarkdown(comment.content)}`).join("\n")
+    ? visibleComments.map((comment) => `-# <@${comment.userId}> ・ ${escapeMarkdown(comment.content)}`).join("\n")
     : "-# Ainda não há comentários. Seja a primeira pessoa a comentar!";
 
-  const navigationRows: APIContainerComponent["components"] = [];
-  if (likesPageCount > 1) navigationRows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const likesNavigation: APIContainerComponent["components"] = [];
+  if (likesPageCount > 1) likesNavigation.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage - 1}:${commentsPage}`).setEmoji(previousPageEmoji() ?? "◀️").setStyle(ButtonStyle.Secondary).setDisabled(likesPage === 0),
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage + 1}:${commentsPage}`).setLabel(`${likesPage + 1}/${likesPageCount}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage + 1}:${commentsPage}`).setEmoji(nextPageEmoji() ?? "▶️").setStyle(ButtonStyle.Secondary).setDisabled(likesPage >= likesPageCount - 1),
   ).toJSON());
-  if (commentsPageCount > 1) navigationRows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const commentsNavigation: APIContainerComponent["components"] = [];
+  if (commentsPageCount > 1) commentsNavigation.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage}:${commentsPage - 1}`).setEmoji(previousPageEmoji() ?? "◀️").setStyle(ButtonStyle.Secondary).setDisabled(commentsPage === 0),
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage}:${commentsPage + 1}`).setLabel(`${commentsPage + 1}/${commentsPageCount}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
     new ButtonBuilder().setCustomId(`galeria:detalhes-pagina:${messageId}:${likesPage}:${commentsPage + 1}`).setEmoji(nextPageEmoji() ?? "▶️").setStyle(ButtonStyle.Secondary).setDisabled(commentsPage >= commentsPageCount - 1),
   ).toJSON());
 
-  return [{
-    type: ComponentType.Container,
-    accent_color: 0xeb459e,
-    components: [
-      { type: ComponentType.TextDisplay, content: `## Detalhes da foto\n-# Publicada por <@${post.ownerId}>` },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content: `### Curtidas  ·  ${post.likes.length}\n${likes}` },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content: `### Comentários  ·  ${post.comments.length}\n${comments}` },
-      ...navigationRows,
-    ],
-  }];
+  return [
+    { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: `## Detalhes da publicação\n-# Publicada por <@${post.ownerId}>` }] },
+    { type: ComponentType.Container, components: [
+      { type: ComponentType.TextDisplay, content: `**Curtidas · ${post.likes.length}**\n${likes}` },
+      ...likesNavigation,
+    ] },
+    { type: ComponentType.Container, components: [
+      { type: ComponentType.TextDisplay, content: `**Comentários · ${post.comments.length}**\n${comments}` },
+      ...commentsNavigation,
+    ] },
+  ];
 }
 
-function componentsWithGalleryButtons(message: Message, post: GalleryPost) {
-  const container = message.components.find((component) => component.type === ComponentType.Container);
-  if (!container) return galleryButtons(post.likes.length, post.comments.length);
-  const data = container.toJSON() as APIContainerComponent;
-  return [{ ...data, components: [
-    ...data.components.filter((component) => component.type !== ComponentType.ActionRow),
-    ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
-  ] }];
+async function removeDepartedGalleryLikes(messageId: string, post: GalleryPost, guild: import("discord.js").Guild | null): Promise<GalleryPost> {
+  if (!guild || !post.likes.length) return post;
+  const members = await Promise.all(post.likes.map((userId) => guild.members.fetch(userId).catch(() => null)));
+  const validLikes = post.likes.filter((_, index) => members[index] !== null);
+  if (validLikes.length === post.likes.length) return post;
+  return await replaceGalleryLikes(messageId, validLikes) ?? { ...post, likes: validLikes };
+}
+
+function componentsWithGalleryButtons(message: Message, post: GalleryPost): APIContainerComponent[] {
+  const containers = message.components
+    .filter((component) => component.type === ComponentType.Container)
+    .map((component) => component.toJSON() as APIContainerComponent);
+  if (!containers.length) return [{
+    type: ComponentType.Container,
+    components: galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+  }];
+  let actionIndex = -1;
+  for (let index = containers.length - 1; index >= 0; index -= 1) {
+    if (containers[index].components.some((component) => component.type === ComponentType.ActionRow)) {
+      actionIndex = index;
+      break;
+    }
+  }
+  if (actionIndex < 0) return [...containers, {
+    type: ComponentType.Container,
+    components: galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+  }];
+  return containers.map((container, index) => index === actionIndex ? {
+    ...container,
+    components: [
+      ...container.components.filter((component) => component.type !== ComponentType.ActionRow),
+      ...galleryButtons(post.likes.length, post.comments.length).map((row) => row.toJSON()),
+    ],
+  } : container);
+}
+
+function galleryCaptionFromMessage(message: Message): string {
+  const contents: string[] = [];
+  const visit = (component: unknown): void => {
+    if (!component || typeof component !== "object") return;
+    const value = component as { content?: unknown; components?: unknown[] };
+    if (typeof value.content === "string") contents.push(value.content);
+    value.components?.forEach(visit);
+  };
+  message.components.forEach((component) => visit(component.toJSON()));
+  const labeled = contents.find((content) => content.startsWith("**Legenda**\n-# "));
+  if (labeled) return labeled.slice("**Legenda**\n-# ".length);
+  const compactHeader = contents.find((content) => /^(?:> )?<@\d+>\n{1,2}-# /u.test(content));
+  if (compactHeader) return compactHeader.replace(/^(?:> )?<@\d+>\n{1,2}-# /u, "");
+  const ownerIndex = contents.findIndex((content) => content.startsWith("> -# <@"));
+  return ownerIndex >= 0 ? contents[ownerIndex + 1] ?? "" : "";
 }
 
 async function refreshGalleryPost(messageId: string, client: Client, post: GalleryPost): Promise<void> {
@@ -111,14 +162,15 @@ async function refreshGalleryPost(messageId: string, client: Client, post: Galle
 export async function refreshGalleryButtons(client: Client): Promise<void> {
   const channel = await client.channels.fetch(config.galleryChannelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.isSendable()) return;
+  const guild = config.guildId ? await client.guilds.fetch(config.guildId).catch(() => null) : null;
   let refreshed = 0;
-  for (const [messageId, post] of await listGalleryPosts()) {
+  for (const [messageId, storedPost] of await listGalleryPosts()) {
+    const post = await removeDepartedGalleryLikes(messageId, storedPost, guild);
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) continue;
-    const isComponentsV2 = message.components.some((component) => component.type === ComponentType.Container);
     const imageUrl = message.embeds[0]?.image?.url ?? message.attachments.first()?.url;
-    if (!isComponentsV2 && imageUrl) {
-      const caption = message.embeds[0]?.description?.replace(/^###\s*/, "") ?? "";
+    if (imageUrl) {
+      const caption = message.embeds[0]?.description?.replace(/^###\s*/, "") ?? galleryCaptionFromMessage(message);
       await message.edit({ embeds: [], components: galleryPostComponents(post.ownerId, imageUrl, caption, post), flags: ["IsComponentsV2"] }).catch((error) => console.error(`[GALERIA] Falha ao migrar a publicação ${messageId}:`, error));
     } else await message.edit({ components: componentsWithGalleryButtons(message, post) }).catch((error) => console.error(`[GALERIA] Falha ao atualizar os botões de ${messageId}:`, error));
     refreshed += 1;
@@ -203,8 +255,9 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     return true;
   }
   if (action === "detalhes-pagina" && targetMessageId) {
-    const targetPost = await getGalleryPost(targetMessageId);
-    if (!targetPost) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
+    const storedPost = await getGalleryPost(targetMessageId);
+    if (!storedPost) { await interaction.reply({ content: "Esta publicação não está mais registrada.", flags: ["Ephemeral"] }); return true; }
+    const targetPost = await removeDepartedGalleryLikes(targetMessageId, storedPost, interaction.guild);
     await interaction.update({ components: galleryDetailsComponents(targetPost, targetMessageId, Number(rawLikesPage) || 0, Number(rawCommentsPage) || 0) });
     return true;
   }
@@ -226,7 +279,9 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
       await interaction.reply({ content: "Instagram da pessoa que publicou a foto:", components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel(`@${post.instagramHandle}`).setURL(`https://www.instagram.com/${post.instagramHandle}`).setStyle(ButtonStyle.Link))], flags: ["Ephemeral"] });
     } else await interaction.reply({ content: "A pessoa que publicou esta foto ainda não informou o Instagram.", flags: ["Ephemeral"] });
   } else if (action === "detalhes") {
-    await interaction.reply({ components: galleryDetailsComponents(post, interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
+    const cleanedPost = await removeDepartedGalleryLikes(interaction.message.id, post, interaction.guild);
+    if (cleanedPost.likes.length !== post.likes.length) await refreshGalleryPost(interaction.message.id, interaction.client, cleanedPost).catch((error) => console.error("[GALERIA] Falha ao atualizar curtidas removidas:", error));
+    await interaction.reply({ components: galleryDetailsComponents(cleanedPost, interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"], allowedMentions: { parse: [] } });
   } else if (action === "excluir") {
     if (interaction.user.id !== post.ownerId) { await interaction.reply({ content: "Somente quem publicou a foto pode excluir a publicação.", flags: ["Ephemeral"] }); return true; }
     await interaction.reply({ components: deleteConfirmationComponents(interaction.message.id), flags: ["Ephemeral", "IsComponentsV2"] });

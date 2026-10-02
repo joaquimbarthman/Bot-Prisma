@@ -77,6 +77,7 @@ export function customCallEmojiPickerEmoji(): string | undefined { return custom
 export function customCallTrashEmoji(): string | undefined { return customCallEmojis.trash; }
 export function previousPageEmoji(): string | undefined { return paginationEmojis.previous; }
 export function nextPageEmoji(): string | undefined { return paginationEmojis.next; }
+export function detailsEmoji(): string | undefined { return galleryEmojis.details; }
 
 export async function setupCustomEmojis(client: Client): Promise<void> {
   if (!config.guildId) {

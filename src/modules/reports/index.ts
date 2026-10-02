@@ -17,7 +17,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { config } from "../../config.js";
-import { verificationBlockEmoji, verificationCheckEmoji, lfgCloseEmoji  } from "../../emoji-manager.js";
+import { lfgCloseEmoji, reportWarningEmoji, verificationBlockEmoji, verificationCheckEmoji } from "../../emoji-manager.js";
 
 type ReportStatus = "pending" | "resolved" | "unresolved" | "closed";
 type ReportState = { userId: string; status: ReportStatus };
@@ -206,7 +206,7 @@ function isReportChannelName(name: string): boolean {
 function publicPanelComponents(): APIContainerComponent[] {
   const header: APIContainerComponent = {
     type: ComponentType.Container,
-    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • Segurança\n-# Atendimento privado e direto com a equipe." }],
+    components: [{ type: ComponentType.TextDisplay, content: "## PRISMA • SEGURANÇA\n-# Atendimento privado e direto com a equipe." }],
   };
   const banner: APIContainerComponent = {
     type: ComponentType.Container,
@@ -217,7 +217,7 @@ function publicPanelComponents(): APIContainerComponent[] {
     components: [{
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "**Central de atendimentos**\n-# Relate o ocorrido e envie as provas em um canal privado." }],
-      accessory: new ButtonBuilder().setCustomId("report:open").setLabel("Abrir atendimento").setStyle(ButtonStyle.Success).toJSON(),
+      accessory: new ButtonBuilder().setCustomId("report:open").setLabel("Abrir atendimento").setEmoji(reportWarningEmoji() ?? "⚠️").setStyle(ButtonStyle.Success).toJSON(),
     }],
   };
   return [header, banner, action];
