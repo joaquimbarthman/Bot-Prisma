@@ -1,6 +1,7 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle, escapeMarkdown, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "../../config.js";
 import { galleryButtons, galleryCloseEmoji, galleryTrashEmoji, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
+import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { aiModeration } from "../moderation/ai.js";
 import { localModeration } from "../moderation/filter.js";
 import { hasCensorshipBypassRole } from "../moderation/exemptions.js";
@@ -261,6 +262,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
   const [, action, targetMessageId, rawLikesPage, rawCommentsPage] = interaction.customId.split(":");
   if (action === "excluir-cancel" && targetMessageId) {
     await interaction.update({ components: deleteConfirmationComponents(targetMessageId, "cancelled") });
+    deletePrivateReplyAfter(interaction);
     return true;
   }
   if (action === "excluir-confirm" && targetMessageId) {
@@ -274,6 +276,7 @@ export async function handleGalleryInteraction(interaction: Interaction): Promis
     await deleteGalleryPost(targetMessageId);
     await publication?.delete().catch((error) => console.error("[GALERIA] Falha ao apagar publicação:", error));
     await interaction.update({ components: deleteConfirmationComponents(targetMessageId, "confirmed") });
+    deletePrivateReplyAfter(interaction);
     return true;
   }
   if (action === "detalhes-pagina" && targetMessageId) {

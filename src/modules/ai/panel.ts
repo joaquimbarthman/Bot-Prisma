@@ -18,6 +18,7 @@ import {
 } from "discord.js";
 import { config } from "../../config.js";
 import { aiPanelEmojis, detailsEmoji, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
+import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { accessLevel } from "./permissions.js";
 import { sanitizeNickname } from "./personality.js";
 import { qualitativeRelationship, safeAboutMe, type PrismaRelationship } from "./state.js";
@@ -486,7 +487,8 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     return true;
   }
   if (action === "cancel-deletion" && interaction.isButton()) {
-    await refreshUserPanel(interaction);
+    await interaction.editReply({ components: deletionResultComponents("Ação cancelada. Nenhuma informação foi alterada.", 0x99aab5) });
+    deletePrivateReplyAfter(interaction);
     return true;
   }
   if (confirmsDeletion) {
@@ -501,6 +503,7 @@ export async function handlePanelInteraction(interaction: Interaction): Promise<
     if (action === "confirm-relationship") { await resetPrismaState(interaction.user.id, false); await deletePrismaUserData(interaction.user.id, "relationship"); }
     if (action === "confirm-all") await deletePrismaUserData(interaction.user.id, "all");
     await interaction.editReply({ components: deletionResultComponents(descriptions[action] ?? "Os dados foram apagados.", 0x57f287) });
+    deletePrivateReplyAfter(interaction);
     return true;
   }
   if (action === "reset-cancel") {

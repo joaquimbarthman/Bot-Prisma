@@ -7,7 +7,6 @@ import {
   EmbedBuilder,
   ModalBuilder,
   PermissionFlagsBits,
-  SeparatorSpacingSize,
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
@@ -22,6 +21,7 @@ import {
 } from "discord.js";
 import { config } from "../../config.js";
 import { verificationBlockEmoji, verificationCheckEmoji, verificationCloseEmoji, verificationStartEmoji, verificationTakeEmoji } from "../../emoji-manager.js";
+import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 
 const verification = config.verification;
 const dangerousExtensions = /\.(?:exe|msi|msp|bat|cmd|com|scr|ps1|vbs|vbe|js|jse|jar|dll|apk|dmg|pkg|sh|reg|iso)$/i;
@@ -83,19 +83,6 @@ function publicPanelComponents(): APIContainerComponent[] {
   return [header, banner, action];
 }
 
-function staffButtons(reviewReady = false): ActionRowBuilder<ButtonBuilder>[] {
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("verification:take").setLabel("Assumir atendimento").setEmoji(verificationTakeEmoji() ?? "👤").setStyle(ButtonStyle.Primary),
-    ),
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("verification:approve").setLabel("Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady),
-      new ButtonBuilder().setCustomId("verification:reject").setLabel("Recusar").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(!reviewReady),
-      new ButtonBuilder().setCustomId("verification:close").setLabel("Encerrar atendimento").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
-    ),
-  ];
-}
-
 function statusDisplay(state: State): string {
   if (state.status === "em_atendimento") return "⏳ Verificação em andamento";
   if (state.status === "aguardando_chamada") return "Aguardando chamada";
@@ -105,76 +92,120 @@ function statusDisplay(state: State): string {
   return state.step === "ready" ? "Pronto para análise" : "Aguardando staff";
 }
 
-function requestedAtDisplay(value: string): string {
-  const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: config.prismaAi.timezone,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(value));
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("day")}/${part("month")}/${part("year")} ・ ${part("hour")}:${part("minute")}`;
-}
-
 function staffPanelComponents(state: State, showButtons = true): APIContainerComponent[] {
-  const details = [
-    `**Solicitado em**　　　　　 ** Status do atendimento**\n${requestedAtDisplay(state.createdAt)}　    　${statusDisplay(state)}`,
+  const attendanceDetails = [
+    `**Status do atendimento**\n${statusDisplay(state)}`,
   ];
-  if (state.status === "recusada" && state.reason) details.push(`**Motivo**\n${state.reason}`);
-  if (state.staffId) details.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
-  if (state.name) details.push(`**Nome informado**\n${state.name}`);
-  if (state.birthDate) details.push(`**Data de nascimento**\n${state.birthDate}`);
-  const components: APIContainerComponent["components"] = [
-    {
-      type: ComponentType.Section,
-      components: [{
-        type: ComponentType.TextDisplay,
-        content: `## Atendimento de verificação\n**Solicitante:** <@${state.userId}> \n\nAguarde uma pessoa da equipe assumir o atendimento. Depois, responda às solicitações do bot neste canal privado.\n\n-# <@&${verification.staffRoleId}> novo atendimento aguardando análise.`,
-      }],
-      accessory: {
-        type: ComponentType.Thumbnail,
-        media: { url: state.avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
-        description: `Avatar de ${safePrivateValue(state.username ?? "usuário")}`,
-      },
-    },
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    { type: ComponentType.TextDisplay, content: details.join("\n\n") },
-  ];
-  if (showButtons) components.push(
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    ...staffButtons(state.step === "ready").map((row) => row.toJSON()),
-  );
-  return [{ type: ComponentType.Container, accent_color: state.status === "aprovada" ? 0x57f287 : state.status === "recusada" ? 0xed4245 : state.status === "encerrada" ? 0x99aab5 : 0x5865f2, components }];
-}
+  if (state.staffId) attendanceDetails.push(`**Staff responsável**\n<@${state.staffId}> ・ ${safePrivateValue(state.staffUsername ?? "staff")}`);
 
-function confirmationButtons(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("verification:approve-confirm").setLabel("Confirmar aprovação").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("verification:approve-cancel").setLabel("Cancelar").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary),
+  const userDetails: string[] = [];
+  if (state.name) userDetails.push(`**Nome informado**\n${safePrivateValue(state.name)}`);
+  if (state.birthDate) userDetails.push(`**Data de nascimento**\n${safePrivateValue(state.birthDate)}`);
+
+  const containers: APIContainerComponent[] = [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{
+          type: ComponentType.TextDisplay,
+          content: `## Atendimento de verificação\n-# Solicitação de <@${state.userId}> para análise da equipe.\n\n-# Somente você e a equipe de <@&${verification.staffRoleId}> podem acessar este canal.`,
+        }],
+        accessory: {
+          type: ComponentType.Thumbnail,
+          media: { url: state.avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
+          description: `Avatar de ${safePrivateValue(state.username ?? "usuário")}`,
+        },
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{ type: ComponentType.TextDisplay, content: attendanceDetails.join("\n\n") }],
+    },
+  ];
+
+  if (userDetails.length) containers.push({
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.TextDisplay,
+      content: userDetails.join("\n\n"),
+    }],
+  });
+
+  if (state.status === "recusada" && state.reason) containers.push({
+    type: ComponentType.Container,
+    components: [{
+      type: ComponentType.TextDisplay,
+      content: `**Motivo**\n${safePrivateValue(state.reason)}`,
+    }],
+  });
+
+  if (!showButtons) return containers;
+  const reviewReady = state.step === "ready";
+  containers.push(
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Assumir atendimento**\n-# Torne-se responsável por conduzir esta verificação." }],
+        accessory: new ButtonBuilder().setCustomId("verification:take").setLabel("Assumir").setEmoji(verificationTakeEmoji() ?? "👤").setStyle(ButtonStyle.Primary).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Aprovar verificação**\n-# Entregue o acesso após conferir os dados enviados." }],
+        accessory: new ButtonBuilder().setCustomId("verification:approve").setLabel("Aprovar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(!reviewReady).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Recusar verificação**\n-# Informe o motivo e encerre a solicitação sem aprovar." }],
+        accessory: new ButtonBuilder().setCustomId("verification:reject").setLabel("Recusar").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(!reviewReady).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Encerrar atendimento**\n-# Finalize o atendimento sem aprovar ou recusar." }],
+        accessory: new ButtonBuilder().setCustomId("verification:close").setLabel("Encerrar").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary).toJSON(),
+      }],
+    },
   );
+  return containers;
 }
 
 function approvalConfirmationComponents(userId: string, result?: "confirmed" | "cancelled"): APIContainerComponent[] {
-  const content = result === "confirmed"
-    ? `## Aprovação confirmada\n<@${userId}> foi aprovado e recebeu o cargo de verificado.`
-    : result === "cancelled"
-      ? "## Aprovação cancelada\nNenhuma alteração foi realizada."
-      : `## Confirmar aprovação\nDeseja aprovar <@${userId}>? O cargo de verificado será entregue imediatamente.`;
-  const components: APIContainerComponent["components"] = [
-    { type: ComponentType.TextDisplay, content },
-  ];
-  if (!result) components.push(
-    { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-    confirmationButtons().toJSON(),
-  );
-  return [{
+  if (result === "confirmed") return [{
     type: ComponentType.Container,
-    accent_color: result === "confirmed" ? 0x57f287 : result === "cancelled" ? 0x99aab5 : 0x5865f2,
-    components,
+    components: [{ type: ComponentType.TextDisplay, content: `**Aprovação confirmada**\n-# <@${userId}> recebeu o cargo de verificado.` }],
   }];
+  if (result === "cancelled") return [{
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.TextDisplay, content: "**Aprovação cancelada**\n-# Nenhuma alteração foi realizada." }],
+  }];
+  return [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: `**Confirmar aprovação**\n-# Aprove <@${userId}> e entregue o cargo de verificado.` }],
+        accessory: new ButtonBuilder().setCustomId("verification:approve-confirm").setLabel("Confirmar").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Cancelar aprovação**\n-# Volte ao atendimento sem realizar alterações." }],
+        accessory: new ButtonBuilder().setCustomId("verification:approve-cancel").setLabel("Cancelar").setEmoji(verificationCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary).toJSON(),
+      }],
+    },
+  ];
 }
 
 async function memberIsStaff(guild: Guild, userId: string): Promise<boolean> {
@@ -234,7 +265,7 @@ async function readChannelState(channel: TextChannel): Promise<State | null> {
   const panel = await findStaffPanel(channel); if (!panel) return null;
   if (!panel.embeds[0]) {
     const text = componentText(panel).replace(/\\n/g, "\n");
-    const userId = text.match(/\*\*(?:Usuário|Solicitante):?\*\*[\s\S]*?<@(\d{17,20})>/)?.[1];
+    const userId = text.match(/<@(\d{17,20})>/)?.[1];
     if (!userId) return null;
     const value = (label: string) => text.match(new RegExp(`\\*\\*${label}\\*\\*\\n([^\\n"}]+)`))?.[1];
     const requestedUnix = text.match(/\*\*Solicitado em\*\*[\s\S]*?<t:(\d+)/)?.[1];
@@ -350,33 +381,49 @@ async function sendLog(client: Client, state: State, staff: GuildMember, channel
   const channel = await client.channels.fetch(verification.logChannelId!).catch(() => null);
   if (!channel?.isSendable()) { console.error("[VERIFICACAO] Canal de logs indisponível."); return; }
   const verifiedMember = await staff.guild.members.fetch(state.userId).catch(() => null);
-  const verificationChannel = await client.channels.fetch(channelId).catch(() => null);
-  const channelName = verificationChannel && "name" in verificationChannel ? verificationChannel.name : "verificacao";
-  const accentColor = result === "Aprovada" ? 0x57f287 : result === "Recusada" ? 0xed4245 : 0x99aab5;
   const resultLabel = result === "Aprovada" ? "✅ Aprovada" : result === "Recusada" ? "🚫 Recusada" : "🔒 Encerrada";
   const privateData = [
     data?.name && `Nome ・ ${data.name}`,
     data?.birthDate && `Nascimento ・ ${data.birthDate}`,
   ].filter(Boolean).join("\n");
   const safeReason = reason?.slice(0, 1000).replace(/```/g, "'''");
-  await channel.send({
-    components: [{
+  const containers: APIContainerComponent[] = [
+    {
       type: ComponentType.Container,
-      accent_color: accentColor,
-      components: [
-        { type: ComponentType.TextDisplay, content: `## Verificação ${result.toLowerCase()}\n> ${resultLabel}` },
-        { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-        { type: ComponentType.TextDisplay, content: `**Usuário** ・ <@${state.userId}>\n**Responsável** ・ <@${staff.id}>` },
-        ...(privateData ? [{ type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small }, { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: `**Dados informados**\n${privateData}` }] : []),
-        ...(safeReason ? [
-          { type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-          { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: "**Motivo**" },
-          { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: `\`\`\`text\n${safeReason}\n\`\`\`` },
-        ] : []),
-        { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-        { type: ComponentType.TextDisplay, content: `-# Aberto em ${verificationDateTime(Date.parse(state.createdAt))} ・ Fechado em ${verificationDateTime(Date.now())}` },
-      ],
-    }],
+      components: [{
+        type: ComponentType.Section,
+        components: [{
+          type: ComponentType.TextDisplay,
+          content: `## Verificação ${result.toLowerCase()}\n-# ${resultLabel}\n\n-# Aberto em ${verificationDateTime(Date.parse(state.createdAt))} ・ Fechado em ${verificationDateTime(Date.now())}`,
+        }],
+        accessory: {
+          type: ComponentType.Thumbnail,
+          media: { url: verifiedMember?.displayAvatarURL({ size: 256, forceStatic: true }) ?? state.avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
+          description: "Avatar da pessoa verificada",
+        },
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.TextDisplay,
+          content: `**Usuário**\n**<@${state.userId}>** ・ ${safePrivateValue(verifiedMember?.user.username ?? state.username ?? "usuário")}\n\n**Responsável**\n**<@${staff.id}>** ・ ${safePrivateValue(staff.user.username)}`,
+      }],
+    },
+  ];
+  if (privateData) containers.push({
+    type: ComponentType.Container,
+    components: [{ type: ComponentType.TextDisplay, content: `**Dados informados**\n${privateData}` }],
+  });
+  if (safeReason) containers.push({
+    type: ComponentType.Container,
+    components: [
+      { type: ComponentType.TextDisplay, content: "**Motivo**" },
+      { type: ComponentType.TextDisplay, content: `\`\`\`text\n${safeReason}\n\`\`\`` },
+    ],
+  });
+  await channel.send({
+    components: containers,
     flags: ["IsComponentsV2"],
     allowedMentions: { parse: [] },
   });
@@ -556,7 +603,6 @@ export async function handleVerificationInteraction(interaction: Interaction): P
       await interaction.message.edit({ components: [] }).catch(() => undefined);
       await scheduleDeletion(channel);
       await channel.send(`Este atendimento de verificação foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`).catch(() => undefined);
-      await interaction.followUp({ content: "Verificação órfã encerrada; a exclusão do canal foi agendada.", flags: ["Ephemeral"] });
       return true;
     }
     if (deferredUpdate) await interaction.followUp({ content: "Este não é um canal de verificação válido.", flags: ["Ephemeral"] });
@@ -574,7 +620,7 @@ export async function handleVerificationInteraction(interaction: Interaction): P
     await interaction.message.edit({ components: staffPanelComponents({ ...state, status: "aguardando_chamada", staffId: staff.id, staffUsername: staff.user.username }) }); return true;
   }
   if (action === "approve" && interaction.isButton()) { if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", flags: ["Ephemeral"] }); return true; } await interaction.reply({ components: approvalConfirmationComponents(state.userId), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
-  if (action === "approve-cancel" && interaction.isButton()) { await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "cancelled") }); return true; }
+  if (action === "approve-cancel" && interaction.isButton()) { await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "cancelled") }); deletePrivateReplyAfter(interaction); return true; }
   if (action === "approve-confirm" && interaction.isButton()) return approve(interaction, channel, state, staff);
   if (action === "reject" && interaction.isButton()) {
     if (state.step !== "ready") { await interaction.reply({ content: "Aguarde o usuário enviar nome e data de nascimento.", flags: ["Ephemeral"] }); return true; }
@@ -590,7 +636,7 @@ export async function handleVerificationInteraction(interaction: Interaction): P
     await blockApplicantMessages(channel, state.userId);
     if (next) await sendLog(interaction.client, next, staff, channel.id, "Encerrada", undefined, { name: state.name, birthDate: state.birthDate });
     await channel.send(`<@${state.userId}>, este atendimento foi encerrado. O canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
-    await interaction.followUp({ content: "Atendimento encerrado.", flags: ["Ephemeral"] }); return true;
+    return true;
   }
   return true;
 }
@@ -627,7 +673,9 @@ async function approve(interaction: ButtonInteraction, channel: TextChannel, sta
   await channel.send(`<@${state.userId}>, sua verificação foi **aprovada** e o cargo foi entregue. Este canal será apagado em ${verification.deleteDelaySeconds} segundos.`);
   await member.send("Sua verificação no servidor foi aprovada. Você já recebeu o cargo de verificado.").catch(() => undefined);
   if (next) await sendLog(interaction.client, next, staff, channel.id, "Aprovada", undefined, { name: state.name, birthDate: state.birthDate });
-  await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "confirmed") }); return true;
+  await interaction.editReply({ components: approvalConfirmationComponents(state.userId, "confirmed") });
+  deletePrivateReplyAfter(interaction);
+  return true;
 }
 
 async function reject(interaction: ModalSubmitInteraction, channel: TextChannel, state: State, staff: GuildMember): Promise<true> {

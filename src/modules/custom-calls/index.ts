@@ -4,6 +4,7 @@ import {
 } from "discord.js";
 import { config } from "../../config.js";
 import { aiPanelEmojis, customCallAddEmoji, customCallEmojiPickerEmoji, customCallTrashEmoji, detailsEmoji, lfgSoundEmoji, previousPageEmoji } from "../../emoji-manager.js";
+import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallByChannel, getCustomCallMembers, listCustomCalls, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
 
 const PREFIX = "custom-call:";
@@ -381,7 +382,7 @@ function deleteConfirmationPanel(panelOwner: GuildMember): APIContainerComponent
   return [
     welcomeContainer(panelOwner),
     confirmation,
-    backButtonContainer(),
+    backButtonContainer(`${PREFIX}cancel-delete`),
   ];
 }
 async function log(client: Client, event: string, call: Partial<CustomCall> & { guildId: string; ownerId: string }, targetUserId?: string): Promise<void> { const line = `[CUSTOM-CALL] ${event} guild=${call.guildId} owner=${call.ownerId} target=${targetUserId ?? "-"} channel=${call.voiceChannelId ?? "-"} role=${call.roleId ?? "-"} timestamp=${new Date().toISOString()}`; console.log(line); if (!config.customCalls.logChannelId) return; const channel = await client.channels.fetch(config.customCalls.logChannelId).catch(() => null); if (channel?.isSendable()) await channel.send({ content: `\`${event}\`・dono <@${call.ownerId}>${targetUserId ? `・alvo <@${targetUserId}>` : ""}\nCanal: ${call.voiceChannelId ? `<#${call.voiceChannelId}>` : "—"}・Cargo: ${call.roleId ? `<@&${call.roleId}>` : "—"}`, allowedMentions: { parse: [] } }).catch(() => undefined); }
@@ -530,7 +531,7 @@ export async function startCustomCallsModule(client: Client): Promise<void> {
   else await channel.send(payload);
   console.log(`[CUSTOM-CALL] Painel publicado no canal ${channel.id}.`);
 }
-export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) await interaction.deferUpdate(); if (interaction.isButton() && ["create", "manage", "back", "add", "remove", "delete", "confirm-delete"].includes(action)) await interaction.deferUpdate(); if (interaction.isButton() && action === "open") await interaction.deferReply({ flags: ["Ephemeral"] }); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso."); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+export async function handleCustomCallInteraction(interaction: Interaction): Promise<boolean> { if (!(interaction.isButton() || interaction.isUserSelectMenu() || interaction.isModalSubmit()) || !interaction.customId.startsWith(PREFIX)) return false; const action = interaction.customId.slice(PREFIX.length); if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) await interaction.deferUpdate(); if (interaction.isButton() && ["create", "manage", "back", "add", "remove", "delete", "confirm-delete", "cancel-delete"].includes(action)) await interaction.deferUpdate(); if (interaction.isButton() && action === "open") await interaction.deferReply({ flags: ["Ephemeral"] }); const member = await owner(interaction); if (!member) { const components = container("## 🫧 Calls Personalizadas\nVocê não possui acesso a este recurso."); if (interaction.replied || interaction.deferred) await interaction.editReply({ components, flags: ["IsComponentsV2"] }); else await interaction.reply({ components, flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (interaction.isButton() && action === "open") { await createCall(interaction, member); trackPrivateMessage(interaction, () => interaction.deleteReply()); return true; }
   if (interaction.isUserSelectMenu() && (action === "add-select" || action === "remove-select")) { await selection(interaction, action === "add-select" ? "add" : "remove", member); return true; }
   if (interaction.isModalSubmit() && action === "emoji-submit") { await changeEmoji(interaction, member); return true; }
@@ -561,6 +562,11 @@ export async function handleCustomCallInteraction(interaction: Interaction): Pro
     });
     return true;
   }
-  if (action === "confirm-delete") { const key = `${call.guildId}:${call.ownerId}`; if (locks.has(key)) return true; locks.add(key); try { const authorized = await getCustomCallMembers(call.id); const role = await member.guild.roles.fetch(call.roleId).catch(() => null); if (role) await Promise.all([member.id, ...authorized.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((target) => target.roles.remove(role, "Call personalizada excluída")).catch(() => undefined))); const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); await channel?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await role?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await deleteCustomCallRecord(call); await log(interaction.client, "CALL_DELETED", call); await interaction.editReply({ components: container("Sua call personalizada foi excluída com sucesso.") }); await new Promise((resolve) => setTimeout(resolve, 3000)); await clearPrivateMessages(call.guildId, call.ownerId); } finally { locks.delete(key); } return true; }
+  if (action === "cancel-delete") {
+    await interaction.editReply({ components: container("Exclusão cancelada. Sua call foi mantida.") });
+    deletePrivateReplyAfter(interaction);
+    return true;
+  }
+  if (action === "confirm-delete") { const key = `${call.guildId}:${call.ownerId}`; if (locks.has(key)) return true; locks.add(key); try { const authorized = await getCustomCallMembers(call.id); const role = await member.guild.roles.fetch(call.roleId).catch(() => null); if (role) await Promise.all([member.id, ...authorized.map((item) => item.userId)].map((id) => member.guild.members.fetch(id).then((target) => target.roles.remove(role, "Call personalizada excluída")).catch(() => undefined))); const channel = await member.guild.channels.fetch(call.voiceChannelId).catch(() => null); await channel?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await role?.delete("Call personalizada excluída pelo dono").catch(() => undefined); await deleteCustomCallRecord(call); await log(interaction.client, "CALL_DELETED", call); await interaction.editReply({ components: container("Sua call personalizada foi excluída com sucesso.") }); deletePrivateReplyAfter(interaction); setTimeout(() => { void clearPrivateMessages(call.guildId, call.ownerId); }, 5_000).unref(); } finally { locks.delete(key); } return true; }
   return true;
 }

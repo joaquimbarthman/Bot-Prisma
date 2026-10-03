@@ -1,4 +1,4 @@
-import { EmbedBuilder, type Client, type Interaction, type Message } from "discord.js";
+import { ComponentType, type APIContainerComponent, type Client, type Interaction, type Message } from "discord.js";
 import { config } from "./config.js";
 
 export type PublicFeature = "lfg" | "custom-calls" | "reports" | "verification" | "gallery" | "moderation" | "leveling" | "ai" | "system";
@@ -59,6 +59,54 @@ export function sanitizePublicError(error: unknown): string {
     .slice(0, 3_500);
 }
 
+function errorDateTime(timestamp = Date.now()): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp)).replace(",", " ・");
+}
+
+function safePublicUsername(value: string): string {
+  return value.replace(/@/g, "@\u200b").replace(/([`*_~|>])/g, "\\$1").slice(0, 32);
+}
+
+function publicErrorComponents(context: PublicErrorContext, error: unknown, userName?: string): APIContainerComponent[] {
+  const feature = featureNames[context.feature];
+  const action = context.action || "concluir uma ação desconhecida";
+  const channel = context.channelId ? `<#${context.channelId}>` : "Indisponível";
+  const user = context.userId ? `<@${context.userId}>` : "Indisponível";
+  const details = sanitizePublicError(error) || "Erro sem detalhes";
+
+  return [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.TextDisplay,
+        content: `## Erro • ${feature}\n-# Registrado em ${errorDateTime()}`,
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.TextDisplay,
+        content: `**Motivo**\nNão foi possível ${action}.\n\n**Canal**\n**${channel}**\n\n**Usuário**\n${user} ・ ${userName ? safePublicUsername(userName) : "Indisponível"}`,
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.TextDisplay,
+        content: `**Detalhes do erro**\n\`\`\`text\n${details}\n\`\`\``,
+      }],
+    },
+  ];
+}
+
 type PublicErrorContext = {
   feature: PublicFeature;
   action: string;
@@ -74,18 +122,8 @@ export async function reportPublicError(client: Client, context: PublicErrorCont
     console.error(`[ERRO-PUBLICO] Canal ${config.publicErrorChannelId} indisponível.`);
     return false;
   }
-  const embed = new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle(`Erro público • ${featureNames[context.feature]}`)
-    .addFields(
-      { name: "Ação", value: context.action || "Ação desconhecida" },
-      { name: "Canal", value: `\u2002${context.channelId ? `<#${context.channelId}>` : "Indisponível"}\u2002`, inline: true },
-      { name: "Usuário", value: `\u2002${context.userId ? `<@${context.userId}>` : "Indisponível"}\u2002`, inline: true },
-      { name: "Evento", value: `\u2002${context.eventId ? `\`${context.eventId}\`` : "Indisponível"}\u2002`, inline: true },
-      { name: "Erro", value: `\`\`\`\n${sanitizePublicError(error) || "Erro sem detalhes"}\n\`\`\`` },
-    )
-    .setTimestamp();
-  return channel.send({ embeds: [embed], allowedMentions: { parse: [] } }).then(() => true).catch((sendError) => {
+  const reportedUser = context.userId ? await client.users.fetch(context.userId).catch(() => null) : null;
+  return channel.send({ components: publicErrorComponents(context, error, reportedUser?.username), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } }).then(() => true).catch((sendError) => {
     console.error("[ERRO-PUBLICO] Falha ao enviar relatório:", sendError);
     return false;
   });

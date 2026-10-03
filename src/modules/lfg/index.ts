@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { config } from "../../config.js";
 import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgTrashEmoji, lfgWarningEmoji, previousPageEmoji } from "../../emoji-manager.js";
+import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { LFG_GAMES, type LfgGameKey } from "./config.js";
 import { mutate, sessions, type LfgSession } from "./store.js";
 
@@ -333,12 +334,12 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
     return true;
   }
   if (action === "delete") { if (!canManage(session, interaction)) { await interaction.reply({ content: "Somente quem criou a LFG pode apagá-la.", flags: ["Ephemeral"] }); return true; } const confirm = new ButtonBuilder().setCustomId(`${PREFIX}confirm-delete:${id}`).setLabel("Apagar").setEmoji(lfgTrashEmoji() ?? "🗑️").setStyle(ButtonStyle.Danger); const cancel = new ButtonBuilder().setCustomId(`${PREFIX}cancel-delete:${id}`).setLabel("Cancelar").setEmoji(lfgCloseEmoji() ?? "✖️").setStyle(ButtonStyle.Secondary); await interaction.reply({ components: [{ type: ComponentType.Container, components: [{ type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: "**Apagar LFG**\n-# Encerre o grupo e remova esta publicação." }], accessory: confirm.toJSON() }] }, { type: ComponentType.Container, components: [{ type: ComponentType.Section, components: [{ type: ComponentType.TextDisplay, content: "**Cancelar exclusão**\n-# Mantenha o grupo e volte à publicação." }], accessory: cancel.toJSON() }] }], flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
-  if (action === "cancel-delete") { await interaction.deferUpdate(); await interaction.deleteReply(); return true; }
+  if (action === "cancel-delete") { await interaction.update({ components: creationResultComponents("Exclusão cancelada. A LFG foi mantida.", false) }); deletePrivateReplyAfter(interaction); return true; }
   if (action === "confirm-delete") {
     if (!canManage(session, interaction)) { await interaction.editReply({ content: "Somente quem criou a LFG pode apagá-la.", components: [] }); return true; }
     await mutate((db) => { const value = db.sessions.find((item) => item.id === id); if (value) { value.status = "deleted"; value.updatedAt = new Date().toISOString(); } });
     if (session.messageId || session.roleMentionMessageId) { const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null); if (channel?.isTextBased()) await Promise.all([session.messageId, session.roleMentionMessageId].filter((messageId): messageId is string => !!messageId).map((messageId) => channel.messages.fetch(messageId).then((message) => message.delete()).catch(() => undefined))); }
-    await interaction.editReply({ components: creationResultComponents("LFG apagado e publicação removida.", true) }); return true;
+    await interaction.editReply({ components: creationResultComponents("LFG apagado e publicação removida.", true) }); deletePrivateReplyAfter(interaction); return true;
   }
   const saved = await mutate((db) => { const value = db.sessions.find((item) => item.id === id)!; if (action === "join") { if (value.status !== "open" || value.participants.length >= value.maxPlayers || value.participants.includes(interaction.user.id)) return value; value.participants.push(interaction.user.id); if (value.participants.length >= value.maxPlayers) value.status = "completed"; } else if (action === "leave") { value.participants = value.participants.filter((userId) => userId !== interaction.user.id); if (value.status === "completed") value.status = "open"; } value.updatedAt = new Date().toISOString(); return value; });
   await updateMessage(interaction.client, saved); await interaction.editReply({ content: action === "join" ? "Participação atualizada." : "Você saiu do grupo." }); return true;

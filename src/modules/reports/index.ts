@@ -1,5 +1,4 @@
 import {
-  ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
@@ -7,7 +6,6 @@ import {
   EmbedBuilder,
   PermissionFlagsBits,
   OverwriteType,
-  SeparatorSpacingSize,
   type APIContainerComponent,
   type ButtonInteraction,
   type Client,
@@ -93,15 +91,6 @@ async function blockReportApplicantMessages(channel: TextChannel, userId: string
   });
 }
 
-function staffButtons(status: ReportStatus): ActionRowBuilder<ButtonBuilder> {
-  const finished = status !== "pending";
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("report:resolved").setLabel(" Resolvido").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(finished),
-    new ButtonBuilder().setCustomId("report:unresolved").setLabel(" Não resolvido").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(finished),
-    new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar atendimento").setEmoji(lfgCloseEmoji() ?? "❌").setStyle(ButtonStyle.Secondary).setDisabled(finished),
-  );
-}
-
 function statusLabel(status: ReportStatus): string {
   if (status === "resolved") return "✅ Resolvido";
   if (status === "unresolved") return "🚫 Não resolvido";
@@ -121,23 +110,56 @@ function reportDateTime(timestamp: number): string {
   }).format(new Date(timestamp)).replace(",", " às");
 }
 
-function reportComponents(userId: string, status: ReportStatus): APIContainerComponent[] {
-  return [{
-    type: ComponentType.Container,
-    accent_color: status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : status === "closed" ? 0x99aab5 : 0xfee75c,
-    components: [
-      {
+function reportComponents(userId: string, status: ReportStatus, avatarUrl?: string): APIContainerComponent[] {
+  const finished = status !== "pending";
+  return [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{
+          type: ComponentType.TextDisplay,
+          content: `## Atendimento privado\n-# Olá, <@${userId}>. Descreva o ocorrido e envie provas, se houver.\n\n-# Somente você e a equipe de <@&${config.reports.staffRoleId}> podem acessar este canal.`,
+        }],
+        accessory: {
+          type: ComponentType.Thumbnail,
+          media: { url: avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
+          description: "Avatar da pessoa solicitante",
+        },
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
         type: ComponentType.TextDisplay,
-        content: `## Atendimento privado\nOlá, <@${userId}>. Explique como podemos ajudar, descreva o ocorrido com detalhes e envie provas, se houver.\n\n**Status**\n${statusLabel(status)}\n\n-# Somente você e a equipe de <@&${config.reports.staffRoleId}> podem acessar este canal.`,
-      },
-      {
-        type: ComponentType.Separator,
-        divider: true,
-        spacing: SeparatorSpacingSize.Small,
-      },
-      staffButtons(status).toJSON(),
-    ],
-  }];
+        content: `**Status**\n${statusLabel(status)}`,
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Marcar como resolvido**\n-# Finalize o atendimento com uma solução registrada." }],
+        accessory: new ButtonBuilder().setCustomId("report:resolved").setLabel("Resolvido").setEmoji(verificationCheckEmoji() ?? "✅").setStyle(ButtonStyle.Success).setDisabled(finished).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Marcar como não resolvido**\n-# Finalize quando não for possível solucionar o atendimento." }],
+        accessory: new ButtonBuilder().setCustomId("report:unresolved").setLabel("Não resolvido").setEmoji(verificationBlockEmoji() ?? "🚫").setStyle(ButtonStyle.Danger).setDisabled(finished).toJSON(),
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "**Encerrar atendimento**\n-# Feche o canal sem marcar uma resolução." }],
+        accessory: new ButtonBuilder().setCustomId("report:close").setLabel("Encerrar").setEmoji(lfgCloseEmoji() ?? "❌").setStyle(ButtonStyle.Secondary).setDisabled(finished).toJSON(),
+      }],
+    },
+  ];
 }
 
 function transcriptChunks(value: string): string[] {
@@ -173,30 +195,46 @@ async function reportTranscript(channel: TextChannel): Promise<string | null> {
   return entries.length ? entries.map((entry) => `${entry.name}: ${entry.content}`).join("\n\n") : null;
 }
 
-function reportLogComponents(userId: string, staffId: string, status: ReportStatus, createdAt: number, transcript: string | null): APIContainerComponent[] {
-  const accentColor = status === "resolved" ? 0x57f287 : status === "unresolved" ? 0xed4245 : 0x99aab5;
-  return [{
-    type: ComponentType.Container,
-    accent_color: accentColor,
-    components: [
-      { type: ComponentType.TextDisplay, content: `## Atendimento encerrado\n> ${statusLabel(status)}` },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      {
+function safeReportUsername(value: string): string {
+  return value.replace(/@/g, "@\u200b").replace(/([`*_~|>])/g, "\\$1").slice(0, 32);
+}
+
+function reportLogComponents(userId: string, userName: string, avatarUrl: string | undefined, staffId: string, staffName: string, status: ReportStatus, createdAt: number, transcript: string | null): APIContainerComponent[] {
+  const containers: APIContainerComponent[] = [
+    {
+      type: ComponentType.Container,
+      components: [{
+        type: ComponentType.Section,
+        components: [{
+          type: ComponentType.TextDisplay,
+          content: `## Atendimento encerrado\n-# ${statusLabel(status)}\n\n-# Aberto em ${reportDateTime(createdAt * 1000)} ・ Fechado em ${reportDateTime(Date.now())}`,
+        }],
+        accessory: {
+          type: ComponentType.Thumbnail,
+          media: { url: avatarUrl ?? "https://cdn.discordapp.com/embed/avatars/0.png" },
+          description: "Avatar da pessoa solicitante",
+        },
+      }],
+    },
+    {
+      type: ComponentType.Container,
+      components: [{
         type: ComponentType.TextDisplay,
-        content: `**Solicitante** ・ <@${userId}>\n**Encerrado por** ・ <@${staffId}>`,
-      },
-      ...(transcript ? [
-        { type: ComponentType.Separator as ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-        { type: ComponentType.TextDisplay as ComponentType.TextDisplay, content: "### Registro do chat" },
-        ...transcriptChunks(transcript).map((chunk) => ({
-          type: ComponentType.TextDisplay as ComponentType.TextDisplay,
-          content: `\`\`\`text\n${chunk}\n\`\`\``,
-        })),
-      ] : []),
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      { type: ComponentType.TextDisplay, content: `-# Aberto em ${reportDateTime(createdAt * 1000)} ・ Fechado em ${reportDateTime(Date.now())}` },
+          content: `**Solicitante**\n**<@${userId}>** ・ ${safeReportUsername(userName)}\n\n**Encerrado por**\n**<@${staffId}>** ・ ${safeReportUsername(staffName)}`,
+      }],
+    },
+  ];
+  if (transcript) containers.push({
+    type: ComponentType.Container,
+    components: [
+      { type: ComponentType.TextDisplay, content: "**Registro do chat**" },
+      ...transcriptChunks(transcript).map((chunk) => ({
+        type: ComponentType.TextDisplay as ComponentType.TextDisplay,
+        content: `\`\`\`text\n${chunk}\n\`\`\``,
+      })),
     ],
-  }];
+  });
+  return containers;
 }
 
 function isReportChannelName(name: string): boolean {
@@ -322,7 +360,7 @@ async function openReport(interaction: ButtonInteraction): Promise<void> {
     ],
   });
   await channel.send({
-    components: reportComponents(interaction.user.id, "pending"),
+    components: reportComponents(interaction.user.id, "pending", interaction.user.displayAvatarURL({ size: 256, forceStatic: true })),
     flags: ["IsComponentsV2"],
     allowedMentions: { users: [interaction.user.id], roles: [config.reports.staffRoleId] },
   });
@@ -339,31 +377,25 @@ async function handleStaffAction(interaction: ButtonInteraction, action: string)
     if (action !== "close") { await interaction.reply({ content: "Não foi possível identificar o solicitante. Use Encerrar atendimento para excluir este canal órfão.", flags: ["Ephemeral"] }); return; }
     await interaction.update({ components: [] });
     scheduleReportDeletion(channel, REPORT_DELETE_DELAY_MS, `Atendimento órfão encerrado por ${interaction.user.tag}`);
-    await channel.send("Este atendimento foi encerrado. O canal será excluído em 1 minuto.").catch(() => undefined);
-    await interaction.followUp({ content: "Atendimento órfão encerrado. Este canal será excluído em 1 minuto.", flags: ["Ephemeral"] });
+    await channel.send("Este atendimento foi encerrado. O canal será excluído em 60 segundos.").catch(() => undefined);
     return;
   }
   const state: ReportState = { userId, status: "pending" };
   const finalStatus: ReportStatus = action === "close" ? "closed" : action;
-  await interaction.update({ components: reportComponents(state.userId, finalStatus) });
+  const applicant = await interaction.guild!.members.fetch(state.userId).catch(() => null);
+  await interaction.update({ components: reportComponents(state.userId, finalStatus, applicant?.displayAvatarURL({ size: 256, forceStatic: true })) });
   const log = await interaction.guild!.channels.fetch(config.reports.logChannelId).catch(() => null);
   const createdAt = Math.floor(channel.createdTimestamp / 1000);
   const transcript = await reportTranscript(channel);
   if (log?.isSendable()) {
-    await log.send({ components: reportLogComponents(state.userId, interaction.user.id, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } })
+    await log.send({ components: reportLogComponents(state.userId, applicant?.user.username ?? "usuário", applicant?.displayAvatarURL({ size: 256, forceStatic: true }), interaction.user.id, interaction.user.username, finalStatus, createdAt, transcript), flags: ["IsComponentsV2"], allowedMentions: { parse: [] } })
       .catch((error) => console.error("[ATENDIMENTOS] Falha ao enviar registro; o canal ainda será excluído:", error));
   } else {
     console.error("[ATENDIMENTOS] Canal de registros indisponível; o atendimento ainda será excluído.");
   }
   scheduleReportDeletion(channel, REPORT_DELETE_DELAY_MS, `Atendimento ${finalStatus} encerrado por ${interaction.user.tag}`);
   await blockReportApplicantMessages(channel, userId);
-  await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 1 minuto.`, allowedMentions: { users: [userId] } }).catch(() => undefined);
-  await interaction.followUp({
-    content: log?.isSendable()
-      ? "Atendimento encerrado. Este canal será excluído em 1 minuto."
-      : "Atendimento encerrado. O registro não pôde ser enviado, mas este canal será excluído em 1 minuto.",
-    flags: ["Ephemeral"],
-  });
+  await channel.send({ content: `<@${userId}>, este atendimento foi encerrado. O canal será excluído em 60 segundos.`, allowedMentions: { users: [userId] } }).catch(() => undefined);
 }
 
 export async function handleReportInteraction(interaction: import("discord.js").Interaction): Promise<boolean> {
