@@ -44,7 +44,7 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const activeCall = currentCall(client, session);
   const callHeadingSpacing = "\u3000".repeat(12);
-  const callValueSpacing = "\u3000".repeat(6);
+  const callValueSpacing = "\u3000".repeat(8);
   const playersAndCall = activeCall
     ? `**Jogadores**${callHeadingSpacing}**Call atual**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.${callValueSpacing}**${activeCall}**`
     : `**Jogadores**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.`;
@@ -98,29 +98,7 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
     },
   ];
   return [header, ...description, ...information, ...actions];
-  /* Layout anterior preservado como referência da migração para Components V2.
-  return [{
-    type: ComponentType.Container,
-    accent_color: status === "open" ? 0x57f287 : status === "completed" ? 0x5865f2 : 0x99aab5,
-    components: [
-      {
-        type: ComponentType.Section,
-        components: [{
-          type: ComponentType.TextDisplay,
-          content: `### PRISMA • LFG\n## ${game.name}\n-# Criado por <@${session.creatorId}>${roleMention ? `　•　${roleMention}` : ""}\n\n${session.note || "Monte seu grupo e combine a partida com os participantes."}`,
-        }],
-        accessory: { type: ComponentType.Thumbnail, media: { url: game.img }, description: game.name },
-      },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      {
-        type: ComponentType.TextDisplay,
-        content: `**Jogadores**　　　　　  　　**Status**\n${session.participants.length}/${session.maxPlayers}　　　　　   　 　　　　${label(session, status)}\n\n**Call atual**\n${currentCall(client, session)}\n\n**Participantes**\n${participants}`,
-      },
-      { type: ComponentType.Separator, divider: true, spacing: SeparatorSpacingSize.Small },
-      row.toJSON(),
-    ],
-  }];
-  */
+  
 }
 function lfgPanelComponents(): APIContainerComponent[] {
   const header: APIContainerComponent = {
