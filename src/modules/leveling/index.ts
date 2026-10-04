@@ -13,6 +13,22 @@ const levelReplayGuilds = new Set<string>();
 const cache = new Map<string, { expiresAt: number; settings: Awaited<ReturnType<typeof getSettings>>; chat: Awaited<ReturnType<typeof getBlacklist>>; voice: Awaited<ReturnType<typeof getBlacklist>> }>();
 const CACHE_MS = 60_000;
 const LEVEL_REPLAY_INTERVAL_MS = 10 * 60_000;
+const rewardCopy: Record<number, [string, string, string]> = {
+  1: ["🪨", "Toda jornada começa com um pequeno fragmento", "Jornada iniciada"],
+  10: ["🧊", "Aos poucos, o brilho começa a surgir", "Estágio alcançado"],
+  20: ["🌙", "Uma nova energia começa a despertar", "Evolução conquistada"],
+  35: ["💧", "Sua presença já começa a deixar marcas", "Marco conquistado"],
+  50: ["🍀", "Metade da jornada, o brilho só aumenta", "Grande conquista"],
+  60: ["❄️", "Quanto mais alto, mais raro se torna", "Nova ascensão"],
+  75: ["🪻", "Poucos chegam tão longe em sua jornada", "Raro marco"],
+  90: ["💎", "O topo já pode ser visto daqui", "Quase lendário"],
+  100: ["🫧", "O brilho finalmente alcançou sua forma máxima", "Evolução máxima"],
+};
+
+function rewardWithCorrectedCopy(reward: LevelReward): LevelReward {
+  const copy = rewardCopy[reward.level];
+  return copy ? { ...reward, emoji: copy[0], title: copy[1], shortMessage: copy[2] } : reward;
+}
 
 async function guildConfig(guildId: string) { const found = cache.get(guildId); if (found && found.expiresAt > Date.now()) return found; const [settings, chat, voice] = await Promise.all([getSettings(guildId), getBlacklist(guildId, "chat"), getBlacklist(guildId, "voice")]); const value = { expiresAt: Date.now() + CACHE_MS, settings, chat, voice }; cache.set(guildId, value); return value; }
 function invalidate(guildId: string): void { cache.delete(guildId); }
@@ -88,6 +104,7 @@ function levelUpMessageComponents(member: GuildMember, reward: LevelReward) {
 }
 
 async function announce(member: GuildMember, reward: LevelReward, channelId: string): Promise<void> {
+  reward = rewardWithCorrectedCopy(reward);
   const channel = await member.guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
   try {
@@ -246,7 +263,6 @@ export async function handleLevelingVoiceState(oldState: VoiceState, newState: V
 
 function parseTarget(message: Message): { targetType: "channel" | "role"; targetId: string } | null { const channel = message.mentions.channels.first(); if (channel) return { targetType: "channel", targetId: channel.id }; const role = message.mentions.roles.first(); return role ? { targetType: "role", targetId: role.id } : null; }
 function staff(message: Message): boolean { return !!message.member?.roles.cache.has(config.leveling.staffRoleId); }
-const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda jornada comeca com um pequeno fragmento", "Jornada iniciada"], 10: ["🧊", "Aos poucos, o brilho comeca a surgir", "Estagio alcancado"], 20: ["🌙", "Uma nova energia comeca a despertar", "Evolucao conquistada"], 35: ["💧", "Sua presenca ja comeca a deixar marcas", "Marco conquistado"], 50: ["🍀", "Metade da jornada, o brilho so aumenta", "Grande conquista"], 60: ["❄️", "Quanto mais alto, mais raro se torna", "Nova ascensao"], 75: ["🪻", "Poucos chegam tao longe em sua jornada", "Raro marco"], 90: ["💎", "O topo ja pode ser visto daqui", "Quase lendario"], 100: ["🫧", "O brilho finalmente alcancou sua forma maxima", "Evolucao maxima"] };
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
@@ -313,7 +329,8 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
   if (command === "!testep" || command === "!testp") {
     const level = Number(input.match(/^!teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
     if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `!testep <nivel> [@membro]`."); return true; }
-    const reward = (await getRewards(message.guild.id)).find((item) => item.level === level);
+    const storedReward = (await getRewards(message.guild.id)).find((item) => item.level === level);
+    const reward = storedReward ? rewardWithCorrectedCopy(storedReward) : undefined;
     if (!reward) { await message.reply(`O nivel ${level} ainda nao possui cargo configurado.`); return true; }
     const member = message.mentions.members?.first() ?? message.member;
     try {
