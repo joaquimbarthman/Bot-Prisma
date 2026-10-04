@@ -43,7 +43,7 @@ export function levelUpCardSvg(values: {
   rewardShortMessage: string;
 }): string {
   const memberName = escapeXml(compact(values.memberName, 30));
-  const rewardSummary = escapeXml(compact(`${values.rewardShortMessage} • Lv. ${values.rewardLevel}`, 48));
+  const rewardSummary = escapeXml(compact(`${values.rewardShortMessage} • ${values.rewardRole}`, 48));
   const footerMessage = escapeXml(compact(values.rewardTitle, 84));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="770" height="245" viewBox="0 0 660 210">
   <defs>
