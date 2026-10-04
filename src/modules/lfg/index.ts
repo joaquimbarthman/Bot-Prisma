@@ -43,8 +43,10 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
   const participants = session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum";
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const activeCall = currentCall(client, session);
+  const callHeadingSpacing = "\u3000".repeat(12);
+  const callValueSpacing = "\u3000".repeat(6);
   const playersAndCall = activeCall
-    ? `**Jogadores**　　　　　　　　　　　　　　　　　**Call atual**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.　　**${activeCall}**`
+    ? `**Jogadores**${callHeadingSpacing}**Call atual**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.${callValueSpacing}**${activeCall}**`
     : `**Jogadores**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.`;
   const header: APIContainerComponent = {
     type: ComponentType.Container,
