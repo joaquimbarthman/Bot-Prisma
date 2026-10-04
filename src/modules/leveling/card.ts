@@ -43,7 +43,7 @@ export function levelUpCardSvg(values: {
   rewardShortMessage: string;
 }): string {
   const memberName = escapeXml(compact(values.memberName, 30));
-  const rewardSummary = escapeXml(compact(values.rewardRole, 48));
+  const rewardSummary = escapeXml(compact(values.rewardRole, 32));
   const footerMessage = escapeXml(compact(values.rewardTitle, 84));
   return `<svg xmlns="http://www.w3.org/2000/svg" width="770" height="245" viewBox="0 0 660 210">
   <defs>
@@ -75,7 +75,7 @@ export function levelUpCardSvg(values: {
   <circle cx="76" cy="74" r="48" fill="#342035" stroke="url(#pink)" stroke-width="2"/>
   <image x="32" y="30" width="88" height="88" href="${values.avatarDataUrl}" clip-path="url(#avatar)" preserveAspectRatio="xMidYMid slice"/>
   <text x="142" y="67" fill="#FFF1F8" font-family="Arial, sans-serif" font-size="25" font-weight="700">${memberName}</text>
-  <text x="142" y="97" fill="#E9C4D5" font-family="Arial, sans-serif" font-size="17">${rewardSummary}</text>
+  <text x="142" y="97" fill="#E9C4D5" font-family="Arial, sans-serif" font-size="17"><tspan font-weight="700">Cargo recebido:</tspan> ${rewardSummary}</text>
   <text x="550" y="43" text-anchor="middle" fill="#F8BEDA" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1">NÍVEL AUMENTADO</text>
   <text x="550" y="108" text-anchor="middle" fill="url(#pink)" font-family="Arial, sans-serif" font-size="62" font-weight="700">${values.rewardLevel}</text>
   <path d="M630 25h4v4h4v4h-4v4h-4v-4h-4v-4h4Z" fill="#FFD8EB" opacity=".65"/>
