@@ -1,6 +1,7 @@
-export const PRISMA_AI_VERSION = "v3.04";
+export const PRISMA_AI_VERSION = "v3.05";
 
 export const PRISMA_AI_LATEST_UPDATE = [
+  "A Prisma agora afirma claramente a própria identidade quando perguntam quem ou o que ela é.",
   "Memórias, contexto e aprendizado ficaram mais consistentes e evitam informações repetidas ou contraditórias.",
   "A Prisma entende melhor replies, mensagens curtas, abreviações, emoções e o tom de cada conversa.",
   "Relacionamentos e interações espontâneas evoluem de forma mais natural com cada pessoa.",
