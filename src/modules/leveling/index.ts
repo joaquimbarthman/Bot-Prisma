@@ -3,14 +3,16 @@ import { config } from "../../config.js";
 import { calculateLevel, calculateXpAward, getTotalXpRequired } from "./progression.js";
 import { clearLevelBenefitPermissions, syncLevelBenefitPermissions } from "./permissions.js";
 import { generateLevelUpCard, generateRankCard, generateTop10Card } from "./card.js";
-import { addBlacklist, awardXp, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
+import { addBlacklist, awardXp, getAllMemberLevels, getBlacklist, getLeaderboard, getMemberLevel, getRankPosition, getRewards, getSettings, removeBlacklist, removeMemberLevel, removeReward, setCurrentRewardRole, setReward, type LevelReward } from "./store.js";
 
 const chatCooldowns = new Map<string, number>();
 const voiceEligibleSince = new Map<string, number>();
 const voiceGuildsProcessing = new Set<string>();
 const pendingPrismaReplyBonuses = new Map<string, number>();
+const levelReplayGuilds = new Set<string>();
 const cache = new Map<string, { expiresAt: number; settings: Awaited<ReturnType<typeof getSettings>>; chat: Awaited<ReturnType<typeof getBlacklist>>; voice: Awaited<ReturnType<typeof getBlacklist>> }>();
 const CACHE_MS = 60_000;
+const LEVEL_REPLAY_INTERVAL_MS = 10 * 60_000;
 
 async function guildConfig(guildId: string) { const found = cache.get(guildId); if (found && found.expiresAt > Date.now()) return found; const [settings, chat, voice] = await Promise.all([getSettings(guildId), getBlacklist(guildId, "chat"), getBlacklist(guildId, "voice")]); const value = { expiresAt: Date.now() + CACHE_MS, settings, chat, voice }; cache.set(guildId, value); return value; }
 function invalidate(guildId: string): void { cache.delete(guildId); }
@@ -98,6 +100,39 @@ async function announce(member: GuildMember, reward: LevelReward, channelId: str
   } catch (error) {
     console.error(`[LEVELING] Falha ao gerar card de nível para ${member.id}:`, error);
     await channel.send({ components: levelUpMessageComponents(member, reward), flags: ["IsComponentsV2"], allowedMentions: { parse: [], users: [member.id] } });
+  }
+}
+
+function waitForNextLevelReplay(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, LEVEL_REPLAY_INTERVAL_MS));
+}
+
+async function replayExistingLevels(guild: Guild, channelId: string): Promise<number> {
+  if (levelReplayGuilds.has(guild.id)) return -1;
+  levelReplayGuilds.add(guild.id);
+  try {
+    const [records, rewards, fetchedMembers] = await Promise.all([
+      getAllMemberLevels(guild.id),
+      getRewards(guild.id),
+      guild.members.fetch(),
+    ]);
+    const orderedRewards = [...rewards].sort((a, b) => a.level - b.level);
+    const queue = records
+      .filter((record) => record.level >= 1)
+      .flatMap((record) => {
+        const member = fetchedMembers.get(record.userId);
+        const reward = [...orderedRewards].reverse().find((item) => item.level <= record.level);
+        return member && !member.user.bot && reward ? [{ member, reward, level: record.level, createdAt: record.createdAt }] : [];
+      })
+      .sort((a, b) => a.level - b.level || a.reward.level - b.reward.level || a.createdAt.localeCompare(b.createdAt) || a.member.id.localeCompare(b.member.id));
+
+    for (const [index, entry] of queue.entries()) {
+      await announce(entry.member, entry.reward, channelId);
+      if (index < queue.length - 1) await waitForNextLevelReplay();
+    }
+    return queue.length;
+  } finally {
+    levelReplayGuilds.delete(guild.id);
   }
 }
 
@@ -215,7 +250,7 @@ const rewardCopy: Record<number, [string, string, string]> = { 1: ["🪨", "Toda
 
 async function handlePrefixCommand(message: Message): Promise<boolean> {
   const input = message.content.trim(); const command = input.split(/\s+/, 1)[0]?.toLowerCase();
-  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!rank", "!top"].includes(command)) return false;
+  if (!["!addb", "!remb", "!add-chat", "!remove-chat", "!add-voice", "!remove-voice", "!listab", "!addl", "!removel", "!levels", "!testep", "!testp", "!disparar-levels", "!rank", "!top"].includes(command)) return false;
   if (!message.guild || !message.member) return true;
   const publicCommand = command === "!rank" || command === "!top";
   if (publicCommand && message.channelId !== config.leveling.publicCommandChannelId) {
@@ -262,6 +297,19 @@ async function handlePrefixCommand(message: Message): Promise<boolean> {
     return true;
   }
   if (!staff(message)) { await message.reply(`Somente <@&${config.leveling.staffRoleId}> pode usar este comando.`); return true; }
+  if (command === "!disparar-levels") {
+    if (!message.channel.isSendable()) return true;
+    if (levelReplayGuilds.has(message.guild.id)) {
+      await message.channel.send("A fila de cards de nível já está em andamento.");
+      return true;
+    }
+    const settings = await getSettings(message.guild.id);
+    await message.channel.send(`Fila de cards iniciada. Uma pessoa será publicada a cada 10 minutos em <#${settings.announcementChannelId}>.`);
+    void replayExistingLevels(message.guild, settings.announcementChannelId)
+      .then((total) => console.log(`[LEVELING] Fila de cards concluída em ${message.guild?.id}: ${total} pessoa(s).`))
+      .catch((error) => console.error(`[LEVELING] Falha na fila de cards existentes em ${message.guild?.id}:`, error));
+    return true;
+  }
   if (command === "!testep" || command === "!testp") {
     const level = Number(input.match(/^!teste?p\s+(\d{1,3})(?:\s|$)/i)?.[1]);
     if (!Number.isInteger(level) || level < 1 || level > 100) { await message.reply("Use `!testep <nivel> [@membro]`."); return true; }
