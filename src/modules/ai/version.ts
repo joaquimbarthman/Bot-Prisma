@@ -1,4 +1,4 @@
-export const PRISMA_AI_VERSION = "v3.02";
+export const PRISMA_AI_VERSION = "v3.04";
 
 export const PRISMA_AI_LATEST_UPDATE = [
   "Memórias, contexto e aprendizado ficaram mais consistentes e evitam informações repetidas ou contraditórias.",
@@ -6,7 +6,6 @@ export const PRISMA_AI_LATEST_UPDATE = [
   "Relacionamentos e interações espontâneas evoluem de forma mais natural com cada pessoa.",
   "Pesquisas atuais e consultas sobre músicas ficaram mais precisas.",
   "O painel pessoal foi reorganizado para gerenciar perfil, memórias, aniversário e privacidade.",
-  "Confirmações privadas agora são removidas automaticamente após a conclusão.",
 ] as const;
 
 export const PRISMA_AI_CAPABILITIES = [

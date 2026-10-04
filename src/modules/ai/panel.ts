@@ -17,6 +17,7 @@ import {
   type APIContainerComponent,
 } from "discord.js";
 import { config } from "../../config.js";
+import { panelDisplayFirstName } from "../../utils/panel-display-name.js";
 import { aiPanelEmojis, detailsEmoji, nextPageEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { accessLevel } from "./permissions.js";
@@ -128,9 +129,7 @@ export function shortAboutMe(value: string, maximum = 40): string {
 }
 
 export function panelFirstName(displayName: string): string {
-  const cleaned = displayName.replace(/[\r\n]/g, " ").trim() || "usuário";
-  const firstName = cleaned.split(/\s+/u)[0];
-  return firstName.length > 20 ? `${firstName.slice(0, 17)}...` : firstName;
+  return panelDisplayFirstName(displayName);
 }
 
 function userWelcomeContainer(user: PanelIdentity): APIContainerComponent {

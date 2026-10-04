@@ -3,6 +3,7 @@ import {
   type APIComponentInContainer, type APIContainerComponent, type APIMessageTopLevelComponent, type ButtonInteraction, type Client, type Collection, type Guild, type GuildMember, type Interaction, type ModalSubmitInteraction, type Snowflake, type UserSelectMenuInteraction, type VoiceChannel, type VoiceState,
 } from "discord.js";
 import { config } from "../../config.js";
+import { panelDisplayFirstName } from "../../utils/panel-display-name.js";
 import { aiPanelEmojis, customCallAddEmoji, customCallEmojiPickerEmoji, customCallTrashEmoji, detailsEmoji, lfgSoundEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
 import { addCustomCallMember, deleteCustomCallRecord, getCustomCall, getCustomCallAccess, getCustomCallByChannel, getCustomCallMembers, listCustomCalls, removeCustomCallMember, saveCustomCall, setCustomCallAccess, type CustomCall } from "./store.js";
@@ -101,8 +102,7 @@ export function parseCustomCallEmoji(value: string): string | null {
 }
 function cleanCustomCallUsername(username: string): string { return username.replace(/[\r\n]/g, " ").trim() || "usuario"; }
 export function customCallPanelFirstName(displayName: string): string {
-  const firstName = cleanCustomCallUsername(displayName).split(/\s+/u)[0];
-  return firstName.length > 20 ? `${firstName.slice(0, 17)}...` : firstName;
+  return panelDisplayFirstName(cleanCustomCallUsername(displayName), "usuario");
 }
 export function buildCustomCallName(username: string, emoji = DEFAULT_CALL_EMOJI): string { const prefix = parseCustomCallEmoji(emoji) ?? DEFAULT_CALL_EMOJI; return `${prefix}・call ${cleanCustomCallUsername(username).toLocaleLowerCase("pt-BR")}`.slice(0, 100); }
 export function buildCustomCallRoleName(username: string, emoji = DEFAULT_CALL_EMOJI): string { const prefix = parseCustomCallEmoji(emoji) ?? DEFAULT_CALL_EMOJI; return `${prefix}・Call ${cleanCustomCallUsername(username)}`.slice(0, 100); }

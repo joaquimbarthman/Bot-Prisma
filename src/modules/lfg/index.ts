@@ -6,6 +6,7 @@ import {
 import { config } from "../../config.js";
 import { lfgCheckEmoji, lfgCloseEmoji, lfgGamepadEmoji, lfgTrashEmoji, lfgWarningEmoji, previousPageEmoji } from "../../emoji-manager.js";
 import { deletePrivateReplyAfter } from "../../utils/private-reply.js";
+import { panelDisplayFirstName } from "../../utils/panel-display-name.js";
 import { LFG_GAMES, type LfgGameKey } from "./config.js";
 import { mutate, sessions, type LfgSession } from "./store.js";
 
@@ -158,10 +159,15 @@ function hasButtonWithCustomId(component: unknown, customId: string): boolean {
   return Array.isArray(candidate.components) && candidate.components.some((child) => hasButtonWithCustomId(child, customId));
 }
 
-function lfgPrivateWelcome(user: User): APIContainerComponent {
-  const cleanedName = user.displayName.replace(/[\r\n]/g, " ").trim() || "usuário";
-  const firstName = cleanedName.split(/\s+/u)[0];
-  const displayName = firstName.length > 20 ? `${firstName.slice(0, 17)}...` : firstName;
+function lfgPanelDisplayName(interaction: Interaction): string {
+  const member = interaction.inGuild() ? interaction.member : null;
+  if (member && "displayName" in member && typeof member.displayName === "string") return member.displayName;
+  if (member && "nick" in member && typeof member.nick === "string" && member.nick.trim()) return member.nick;
+  return interaction.user.displayName;
+}
+
+function lfgPrivateWelcome(user: User, preferredDisplayName = user.displayName): APIContainerComponent {
+  const displayName = panelDisplayFirstName(preferredDisplayName);
   return {
     type: ComponentType.Container,
     components: [{
@@ -183,7 +189,7 @@ function lfgPrivateWelcome(user: User): APIContainerComponent {
   };
 }
 
-function gameSelectionView(user: User): { components: APIContainerComponent[] } {
+function gameSelectionView(user: User, displayName?: string): { components: APIContainerComponent[] } {
   const games = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`${PREFIX}game`)
@@ -192,7 +198,7 @@ function gameSelectionView(user: User): { components: APIContainerComponent[] } 
   );
   return {
     components: [
-      lfgPrivateWelcome(user),
+      lfgPrivateWelcome(user, displayName),
       {
         type: ComponentType.Container,
         components: [
@@ -204,12 +210,12 @@ function gameSelectionView(user: User): { components: APIContainerComponent[] } 
   };
 }
 
-function draftView(draft: Draft, user: User): { components: APIContainerComponent[] } {
+function draftView(draft: Draft, user: User, displayName?: string): { components: APIContainerComponent[] } {
   const game = LFG_GAMES[draft.game];
   const slots = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}draft-slots`).setPlaceholder(`Vagas: ${draft.maxPlayers}`).addOptions([2, 3, 4, 5, 6, 8, 10, 12].map((value) => ({ label: `${value} jogadores`, value: String(value), default: value === draft.maxPlayers }))));
   return {
     components: [
-      lfgPrivateWelcome(user),
+      lfgPrivateWelcome(user, displayName),
       {
         type: ComponentType.Container,
         components: [{ type: ComponentType.TextDisplay, content: `**Jogo selecionado**\n-# ${game.name}` }],
@@ -271,7 +277,7 @@ export async function handleLfgMessageDelete(message: Message | PartialMessage):
 async function showCreate(interaction: ButtonInteraction): Promise<void> {
   await interaction.deferReply({ flags: ["Ephemeral"] });
   const last = createdCooldowns.get(interaction.user.id) ?? 0; if (Date.now() - last < config.lfg.createCooldownSeconds * 1000) { await interaction.editReply({ content: "Aguarde um instante antes de criar outro LFG." }); return; }
-  await interaction.editReply({ ...gameSelectionView(interaction.user), flags: ["IsComponentsV2"] });
+  await interaction.editReply({ ...gameSelectionView(interaction.user, lfgPanelDisplayName(interaction)), flags: ["IsComponentsV2"] });
 }
 async function submitCreate(interaction: ButtonInteraction, draft: Draft): Promise<void> {
   if (!interaction.inGuild()) return; const { game, maxPlayers } = draft;
@@ -317,12 +323,12 @@ export async function handleLfgInteraction(interaction: Interaction): Promise<bo
   const [,, id] = interaction.customId.split(":");
   if (interaction.isButton() && interaction.customId === `${PREFIX}create`) { await showCreate(interaction); return true; }
   if (interaction.isButton() && interaction.customId === `${PREFIX}open`) { const active = (await sessions()).filter((value) => value.guildId === interaction.guildId && value.status === "open" && lfgExpiresAt(value) > Date.now()); await interaction.reply({ content: active.length ? active.map((value) => `• **${LFG_GAMES[value.game].name}** — ${value.participants.length}/${value.maxPlayers} <#${value.channelId}>`).join("\n") : "Não há grupos abertos agora.", flags: ["Ephemeral"], allowedMentions: { parse: [] } }); return true; }
-  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}game`) { const game = interaction.values[0]; if (!isLfgGameKey(game)) { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "Esse jogo não está mais disponível. Abra a criação novamente para ver a lista atualizada." }] }] }); return true; } const draft: Draft = { game, maxPlayers: 4, note: "", expiresAt: Date.now() + 15 * 60_000 }; drafts.set(draftKey(interaction), draft); await interaction.update(draftView(draft, interaction.user)); return true; }
-  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}draft-slots`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.maxPlayers = Number(interaction.values[0]); await interaction.update(draftView(draft, interaction.user)); return true; }
-  if (interaction.isModalSubmit() && interaction.customId === `${PREFIX}draft-note-modal`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.note = interaction.fields.getTextInputValue("note").trim().replace(/@(?:everyone|here)|<@&?\d+>/g, "@").slice(0, 500); if (interaction.isFromMessage()) await interaction.update(draftView(draft, interaction.user)); else await interaction.reply({ ...draftView(draft, interaction.user), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
+  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}game`) { const game = interaction.values[0]; if (!isLfgGameKey(game)) { await interaction.update({ components: [{ type: ComponentType.Container, accent_color: 0xed4245, components: [{ type: ComponentType.TextDisplay, content: "Esse jogo não está mais disponível. Abra a criação novamente para ver a lista atualizada." }] }] }); return true; } const draft: Draft = { game, maxPlayers: 4, note: "", expiresAt: Date.now() + 15 * 60_000 }; drafts.set(draftKey(interaction), draft); await interaction.update(draftView(draft, interaction.user, lfgPanelDisplayName(interaction))); return true; }
+  if (interaction.isStringSelectMenu() && interaction.customId === `${PREFIX}draft-slots`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.maxPlayers = Number(interaction.values[0]); await interaction.update(draftView(draft, interaction.user, lfgPanelDisplayName(interaction))); return true; }
+  if (interaction.isModalSubmit() && interaction.customId === `${PREFIX}draft-note-modal`) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } draft.note = interaction.fields.getTextInputValue("note").trim().replace(/@(?:everyone|here)|<@&?\d+>/g, "@").slice(0, 500); if (interaction.isFromMessage()) await interaction.update(draftView(draft, interaction.user, lfgPanelDisplayName(interaction))); else await interaction.reply({ ...draftView(draft, interaction.user, lfgPanelDisplayName(interaction)), flags: ["Ephemeral", "IsComponentsV2"] }); return true; }
   if (!interaction.isButton()) return true;
   const action = interaction.customId.split(":")[1];
-  if (action.startsWith("draft-")) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } if (action === "draft-note") { await interaction.showModal({ customId: `${PREFIX}draft-note-modal`, title: "Observação do grupo", components: [new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("note").setLabel("Modo, rank ou objetivo (opcional)").setStyle(TextInputStyle.Paragraph).setValue(draft.note).setRequired(false).setMaxLength(500))] }); return true; } if (action === "draft-back") { drafts.delete(draftKey(interaction)); await interaction.update(gameSelectionView(interaction.user)); return true; } if (action === "draft-create") { await interaction.deferUpdate(); await submitCreate(interaction, draft); return true; } }
+  if (action.startsWith("draft-")) { const draft = drafts.get(draftKey(interaction)); if (!draft || draft.expiresAt < Date.now()) { await interaction.reply({ content: "Essa criação expirou. Comece novamente.", flags: ["Ephemeral"] }); return true; } if (action === "draft-note") { await interaction.showModal({ customId: `${PREFIX}draft-note-modal`, title: "Observação do grupo", components: [new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId("note").setLabel("Modo, rank ou objetivo (opcional)").setStyle(TextInputStyle.Paragraph).setValue(draft.note).setRequired(false).setMaxLength(500))] }); return true; } if (action === "draft-back") { drafts.delete(draftKey(interaction)); await interaction.update(gameSelectionView(interaction.user, lfgPanelDisplayName(interaction))); return true; } if (action === "draft-create") { await interaction.deferUpdate(); await submitCreate(interaction, draft); return true; } }
   const deferredReply = action === "join" || action === "leave";
   const deferredUpdate = action === "confirm-delete";
   if (deferredReply) await interaction.deferReply({ flags: ["Ephemeral"] });
