@@ -44,7 +44,7 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const activeCall = currentCall(client, session);
   const callHeadingSpacing = "\u3000".repeat(12);
-  const callValueSpacing = "\u3000".repeat(8);
+  const callValueSpacing = "\u3000".repeat(9);
   const playersAndCall = activeCall
     ? `**Jogadores**${callHeadingSpacing}**Call atual**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.${callValueSpacing}**${activeCall}**`
     : `**Jogadores**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.`;
