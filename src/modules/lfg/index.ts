@@ -43,6 +43,9 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
   const participants = session.participants.map((id) => `<@${id}>`).join(", ") || "Nenhum";
   const inactive = session.status !== "open" || session.participants.length >= session.maxPlayers;
   const activeCall = currentCall(client, session);
+  const playersAndCall = activeCall
+    ? `**Jogadores**                     **Call atual**\n-# ${session.participants.length} / ${session.maxPlayers}                              ${activeCall}`
+    : `**Jogadores**\n-# ${session.participants.length} / ${session.maxPlayers}`;
   const header: APIContainerComponent = {
     type: ComponentType.Container,
     components: [{
@@ -63,8 +66,7 @@ function publicationComponents(client: Client, session: LfgSession): APIContaine
     components: [{ type: ComponentType.TextDisplay, content: `**Descrição**\n-# ${session.note}` }],
   }] : [];
   const information: APIContainerComponent[] = [
-    { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: `**Jogadores**\n-# ${session.participants.length} de ${session.maxPlayers} vagas preenchidas.` }] },
-    ...(activeCall ? [{ type: ComponentType.Container as const, components: [{ type: ComponentType.TextDisplay as const, content: `**Call atual**\n-# ${activeCall}` }] }] : []),
+    { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: playersAndCall }] },
     { type: ComponentType.Container, components: [{ type: ComponentType.TextDisplay, content: `**Participantes**\n-# ${participants}` }] },
   ];
   const actions: APIContainerComponent[] = [
