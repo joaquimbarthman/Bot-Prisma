@@ -1,6 +1,9 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 
 export const commands = [
+  new SlashCommandBuilder().setName("ban").setDescription("Bane um usuário pelo ID e apaga as mensagens das últimas 48 horas")
+    .addStringOption((option) => option.setName("id").setDescription("ID do usuário que será banido").setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
   new SlashCommandBuilder().setName("avisos").setDescription("Mostra os avisos de um membro")
     .addUserOption((option) => option.setName("membro").setDescription("Membro consultado").setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),

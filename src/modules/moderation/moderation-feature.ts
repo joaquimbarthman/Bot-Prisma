@@ -1,4 +1,4 @@
-import { ButtonBuilder, ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits, type APIContainerComponent, type ButtonInteraction, type ChatInputCommandInteraction, type Client, type Message, type TextChannel } from "discord.js";
+import { ButtonBuilder, ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits, type APIContainerComponent, type ButtonInteraction, type ChatInputCommandInteraction, type Client, type Guild, type Message, type TextChannel, type User } from "discord.js";
 import { aiModeration } from "./ai.js";
 import { config } from "../../config.js";
 import { verificationBlockEmoji, verificationCheckEmoji } from "../../emoji-manager.js";
@@ -6,6 +6,18 @@ import { localModeration } from "./filter.js";
 import { hasCensorshipBypassRole } from "./exemptions.js";
 import { getModerationState, isAiMonitoringActive, recordWarning, resetModerationState } from "./state.js";
 import { forgiveMember, punishMember } from "./punishment-role.js";
+
+const BAN_DELETE_MESSAGE_SECONDS = 48 * 60 * 60;
+const DISCORD_USER_ID = /^\d{17,20}$/;
+
+async function banUser(guild: Guild, userId: string, moderator: User): Promise<User> {
+  const user = await guild.client.users.fetch(userId);
+  await guild.members.ban(userId, {
+    deleteMessageSeconds: BAN_DELETE_MESSAGE_SECONDS,
+    reason: `Banido pela moderação: ${moderator.tag} (${moderator.id})`,
+  });
+  return user;
+}
 
 function log(message: Message<true>, status: string): void {
   if (!config.logMonitoredMessages) return;
@@ -160,11 +172,8 @@ export async function handleModerationButton(interaction: ButtonInteraction): Pr
   try {
     if (action === "banir") {
       if (!member?.bannable) throw new Error("Membro não encontrado ou não pode ser banido.");
-      await member.ban({
-        deleteMessageSeconds: 24 * 60 * 60,
-        reason: `Banido pela moderação: ${interaction.user.tag}`,
-      });
-      await interaction.editReply(`${member.user.tag} foi banido do servidor e as mensagens das últimas 24 horas foram apagadas.`);
+      const user = await banUser(interaction.guild, userId, interaction.user);
+      await interaction.editReply(`${user.tag} foi banido do servidor e as mensagens das últimas 48 horas foram apagadas.`);
     } else if (action === "confiar") {
       await resetModerationState(interaction.guild.id, userId);
       if (member) { if (member.isCommunicationDisabled()) await member.timeout(null, `Confiança restaurada por ${interaction.user.tag}`); await forgiveMember(member); }
@@ -175,7 +184,38 @@ export async function handleModerationButton(interaction: ButtonInteraction): Pr
 }
 
 export async function handleModerationCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!interaction.guildId) return;
+  if (!interaction.guildId || !interaction.guild) return;
+  if (interaction.commandName === "ban") {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
+      await interaction.reply({ content: "Você precisa da permissão **Banir membros** para usar este comando.", flags: ["Ephemeral"] });
+      return;
+    }
+
+    const userId = interaction.options.getString("id", true).trim();
+    if (!DISCORD_USER_ID.test(userId)) {
+      await interaction.reply({ content: "Informe um ID de usuário válido do Discord.", flags: ["Ephemeral"] });
+      return;
+    }
+    if (userId === interaction.user.id) {
+      await interaction.reply({ content: "Você não pode banir a si mesmo.", flags: ["Ephemeral"] });
+      return;
+    }
+    if (userId === interaction.client.user.id) {
+      await interaction.reply({ content: "Eu não posso banir a mim mesma.", flags: ["Ephemeral"] });
+      return;
+    }
+
+    await interaction.deferReply({ flags: ["Ephemeral"] });
+    try {
+      const user = await banUser(interaction.guild, userId, interaction.user);
+      await interaction.editReply(`${user.tag} (${user.id}) foi banido do servidor e as mensagens das últimas 48 horas foram apagadas.`);
+    } catch (error) {
+      console.error(`[MODERADOR] Falha ao banir ${userId}:`, error);
+      await interaction.editReply("Não consegui banir esse usuário. Verifique o ID, minhas permissões e a hierarquia de cargos.");
+    }
+    return;
+  }
+
   const user = interaction.options.getUser("membro", true);
   if (interaction.commandName === "avisos") {
     const state = await getModerationState(interaction.guildId, user.id); const warnings = state.warningHistory; const reputation = state.trust;
